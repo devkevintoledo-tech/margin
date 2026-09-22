@@ -92,6 +92,8 @@ jobs:
       - name: Start full stack
         run: docker compose up --build -d
         timeout-minutes: 5
+        env:
+          GOOGLE_BOOKS_API_KEY: ${{ secrets.GOOGLE_BOOKS_API_KEY }}
 
       - name: Wait for backend health
         run: |
