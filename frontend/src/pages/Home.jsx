@@ -21,7 +21,7 @@ function Home() {
 
   const { data: genres } = useQuery({
     queryKey: ['genres'],
-    queryFn: () => client.get('/genres').then((r) => r.data),
+    queryFn: () => client.get('/genres/').then((r) => r.data),
     placeholderData: FALLBACK_GENRES,
   })
 
