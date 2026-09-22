@@ -27,7 +27,7 @@ function Navbar() {
 
         <form onSubmit={handleSearch} className="flex flex-1 max-w-sm">
           <input
-            type="text"
+            type="search"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search books..."
