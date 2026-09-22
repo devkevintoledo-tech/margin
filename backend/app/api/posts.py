@@ -7,8 +7,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.models.post import Post
 from app.models.user import User
-from app.schemas.thread import PostCreate, PostOut, post_out_from_orm
+from app.schemas.thread import PostCreate, PostOut, VoteIn, post_out_from_orm
 from app.services.auth import get_current_user
+from app.services.votes import set_vote
 
 router = APIRouter(prefix="/posts", tags=["posts"])
 
@@ -43,17 +44,17 @@ async def create_post(
     return post_out_from_orm(post)
 
 
-@router.post("/{id}/upvote", response_model=PostOut)
-async def upvote_post(
+@router.put("/{id}/vote", response_model=PostOut)
+async def vote_post(
     id: UUID,
+    payload: VoteIn,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> PostOut:
-    result = await db.execute(select(Post).where(Post.id == id))
-    post = result.scalar_one_or_none()
+    post = (await db.execute(select(Post).where(Post.id == id))).scalar_one_or_none()
     if post is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Post not found")
-    post.score += 1
-    await db.flush()
+
+    await set_vote(db, user_id=current_user.id, post_id=id, value=payload.value)
     await db.refresh(post)
-    return post_out_from_orm(post)
+    return post_out_from_orm(post, my_vote=payload.value)

@@ -228,3 +228,40 @@ async def test_old_upvote_endpoint_is_gone(client, auth_headers, voted_thread_id
         f"/api/threads/{voted_thread_id}/upvote", headers=auth_headers
     )
     assert resp.status_code == 404
+
+
+@pytest_asyncio.fixture
+async def voted_post_id(client, auth_headers, voted_thread_id):
+    resp = await client.post(
+        "/api/posts/",
+        json={"thread_id": voted_thread_id, "content": "A take."},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 201, resp.text
+    return resp.json()["id"]
+
+
+async def test_post_vote_sets_score(client, auth_headers, voted_post_id):
+    up = await client.put(
+        f"/api/posts/{voted_post_id}/vote", json={"value": 1}, headers=auth_headers
+    )
+    assert up.status_code == 200, up.text
+    assert up.json()["score"] == 1
+    assert up.json()["my_vote"] == 1
+
+    down = await client.put(
+        f"/api/posts/{voted_post_id}/vote", json={"value": -1}, headers=auth_headers
+    )
+    assert down.json()["score"] == -1
+
+
+async def test_post_vote_requires_auth(client, voted_post_id):
+    resp = await client.put(f"/api/posts/{voted_post_id}/vote", json={"value": 1})
+    assert resp.status_code in (401, 403)
+
+
+async def test_post_vote_unknown_id_is_404(client, auth_headers):
+    resp = await client.put(
+        f"/api/posts/{uuid.uuid4()}/vote", json={"value": 1}, headers=auth_headers
+    )
+    assert resp.status_code == 404
