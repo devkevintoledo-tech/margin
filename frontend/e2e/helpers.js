@@ -16,7 +16,9 @@ export async function registerViaUi(page, user = freshUser()) {
   await page.goto('/register')
   await page.getByRole('textbox').first().fill(user.email) // email
   await page.locator('input[type="text"]').fill(user.username)
-  await page.locator('input[type="password"]').fill(user.password)
+  const passwordFields = page.locator('input[type="password"]')
+  await passwordFields.nth(0).fill(user.password) // password
+  await passwordFields.nth(1).fill(user.password) // confirm password
   await page.getByRole('button', { name: /create account/i }).click()
   await expect(page.getByText(user.username)).toBeVisible()
   return user
