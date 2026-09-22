@@ -134,7 +134,7 @@ Read that before changing anything visual.
 ## Known remaining gaps
 
 - **No token revocation**: `POST /auth/logout` is a stateless no-op — the frontend just clears the persisted JWT, and a stolen token stays valid until expiry. A password reset does not invalidate existing sessions either. Anything relying on server-side session invalidation needs a refresh/denylist design first.
-- Content is immutable (no edit/delete for threads or posts) and upvotes only increment. See `ROADMAP.md` for the tracked list.
+- Content is immutable (no edit/delete for threads or posts). See `ROADMAP.md` for the tracked list.
 
 ## Environment
 

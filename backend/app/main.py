@@ -16,7 +16,7 @@ app = FastAPI(
         {"name": "books", "description": "Google Books search, book detail, shelf management."},
         {"name": "genres", "description": "Genre listing and genre-scoped book/thread lists."},
         {"name": "threads", "description": "Create and fetch discussion threads."},
-        {"name": "posts", "description": "Post and reply within a thread, upvote."},
+        {"name": "posts", "description": "Post and reply within a thread, vote."},
         {"name": "users", "description": "User profile and shelf views."},
     ],
 )

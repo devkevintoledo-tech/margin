@@ -2,7 +2,7 @@
 
 **Date:** 2026-09-22
 **Source brief:** [`new-instructions.md`](./new-instructions.md) (sections referenced below as §N)
-**Status:** Tier 1 implemented. Tiers 2–4 recorded, not built.
+**Status:** Tier 1 implemented; Tier 2 in progress (§24 done). Tiers 3–4 recorded, not built.
 
 The brief describes the product the code was already heading toward: dark,
 sharp-cornered, hairline-bordered, editorial. This record says what was adopted,
@@ -61,6 +61,9 @@ fill, breaks AA.
   react on the frame, never by dimming the art.
 - **§24 Voting de-emphasized.** Extracted `VoteControl` (`rail` + `inline`
   variants) from duplicated markup in `Post` and `ThreadCard`.
+- **§24 Downvotes and vote toggling.** One vote per user per item (±1), stored
+  in a `votes` table; `upvotes` became a signed `score`. Both arrows stay
+  muted at rest — only the arrow the reader cast lights up.
 - **§25 Component vocabulary.** `.btn-primary`, `.btn-secondary`, `.btn-ghost`,
   `.input`, `.label`, `.panel`, `.eyebrow`, `.rule`, `.alert-*` in an
   `@layer components` block; new `AuthLayout` shares the four credential screens.
@@ -92,7 +95,6 @@ These are product features, not styling. Tracked in `ROADMAP.md`.
 | 19 | Themes/moods taxonomy | Schema-significant: `Book.genre_id` is a single nullable FK; moods need many-to-many. |
 | 21, 22 | Profile as taste identity | Visual treatment landed (real shelf counts). Taste bars and "most discussed" need aggregate queries. |
 | 23 | Follows, notifications, activity feed | *Roadmap Phase 2.* Note "follow authors" is harder than it looks — `author` is a `String(500)` on `Book`, there is no author entity. |
-| 24 | Downvotes / vote toggling | `upvotes` is an increment-only `Integer`. Needs a `votes` table. *Roadmap Phase 1.* |
 | 27 | Mobile bottom nav, horizontal shelves | Depends on §8 nav existing first. |
 | 28 | Search across users/communities/discussions | Search is Google Books only. *Roadmap Phase 3 (Postgres FTS).* |
 
