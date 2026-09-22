@@ -1,5 +1,7 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useCreatePost } from '../api/threads'
+import { errorMessage } from '../api/errors'
 import useAuthStore from '../store/auth'
 
 function PostComposer({ threadId, parentId = null, onSuccess, placeholder = 'Write a reply...' }) {
@@ -9,8 +11,8 @@ function PostComposer({ threadId, parentId = null, onSuccess, placeholder = 'Wri
 
   if (!user) {
     return (
-      <p className="text-zinc-500 text-sm py-2">
-        <a href="/login" className="text-amber-500 hover:underline">Log in</a> to post.
+      <p className="text-ink-dim text-sm py-2">
+        <Link to="/login" className="text-accent-ink hover:underline">Log in</Link> to post.
       </p>
     )
   }
@@ -36,19 +38,15 @@ function PostComposer({ threadId, parentId = null, onSuccess, placeholder = 'Wri
         onChange={(e) => setContent(e.target.value)}
         placeholder={placeholder}
         rows={3}
-        className="bg-zinc-800 border border-zinc-700 text-zinc-100 placeholder-zinc-500 px-3 py-2 text-sm focus:outline-none focus:border-amber-700 resize-none w-full"
+        className="input resize-none"
       />
       <div className="flex justify-end">
-        <button
-          type="submit"
-          disabled={mutation.isPending || !content.trim()}
-          className="bg-amber-700 hover:bg-amber-600 disabled:opacity-50 disabled:cursor-not-allowed text-zinc-100 px-4 py-1.5 text-sm font-medium transition-colors"
-        >
+        <button type="submit" disabled={mutation.isPending || !content.trim()} className="btn-primary">
           {mutation.isPending ? 'Posting...' : 'Post'}
         </button>
       </div>
       {mutation.isError && (
-        <p className="text-red-400 text-xs">{mutation.error?.response?.data?.message || 'Failed to post.'}</p>
+        <p className="text-danger text-xs">{errorMessage(mutation.error, 'Failed to post.')}</p>
       )}
     </form>
   )

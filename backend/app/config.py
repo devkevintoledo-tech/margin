@@ -2,7 +2,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    APP_NAME: str = "Marginalia"
+    APP_NAME: str = "MARGIN"
     DATABASE_URL: str
     SECRET_KEY: str
     GOOGLE_CLIENT_ID: str = ""
@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     SMTP_USER: str = ""
     SMTP_PASSWORD: str = ""
     SMTP_USE_TLS: bool = True
-    MAIL_FROM: str = "no-reply@marginalia.app"
+    MAIL_FROM: str = "no-reply@margin.app"
     FRONTEND_BASE_URL: str = "http://localhost:5173"
     PASSWORD_RESET_TOKEN_TTL_MINUTES: int = 30
 

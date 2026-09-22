@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-Marginalia — a social reading platform (Reddit-style threaded book discussion + Goodreads-style catalog). FastAPI + PostgreSQL backend, React (Vite) frontend. `marginalia_spec.md` is the authoritative product/design spec. The code is a functionally complete v1 MVP with a test suite and CI, but the spec still describes intent ahead of the code in places (see Known gaps below and `ROADMAP.md`).
+MARGIN — a social reading platform (Reddit-style threaded book discussion + Goodreads-style catalog). FastAPI + PostgreSQL backend, React (Vite) frontend. `margin_spec.md` is the authoritative product/design spec. The code is a functionally complete v1 MVP with a test suite and CI, but the spec still describes intent ahead of the code in places (see Known gaps below and `ROADMAP.md`).
 
 ## Commands
 
@@ -36,12 +36,12 @@ npm run build      # production build
 
 A test pyramid exists; there is no linter/formatter configured yet. Always run tests before claiming they pass. `.github/workflows/ci.yml` runs backend + frontend unit tests on every push/PR and the e2e suite nightly.
 
-**Backend — pytest** (async, `asyncio_mode=auto`, httpx `ASGITransport`). Tests run against a **separate `marginalia_test` database** so they never touch dev data; the schema is built with `Base.metadata.create_all` (not Alembic) per test, and Google Books must be mocked (`respx`) — never hit the network. Email likewise never leaves the process: override `email_sender_dep` with a fake `EmailSender` to capture the reset URL (see `tests/test_password_reset.py`). From `backend/`:
+**Backend — pytest** (async, `asyncio_mode=auto`, httpx `ASGITransport`). Tests run against a **separate `margin_test` database** so they never touch dev data; the schema is built with `Base.metadata.create_all` (not Alembic) per test, and Google Books must be mocked (`respx`) — never hit the network. Email likewise never leaves the process: override `email_sender_dep` with a fake `EmailSender` to capture the reset URL (see `tests/test_password_reset.py`). From `backend/`:
 
 ```bash
 docker compose up -d db                                                   # Postgres must be running
-docker compose exec db psql -U marginalia -c "CREATE DATABASE marginalia_test;"   # one-time
-DATABASE_URL=postgresql+asyncpg://marginalia:marginalia@localhost:5432/marginalia_test pytest
+docker compose exec db psql -U margin -c "CREATE DATABASE margin_test;"   # one-time
+DATABASE_URL=postgresql+asyncpg://margin:margin@localhost:5432/margin_test pytest
 ```
 
 **Frontend unit — Vitest + React Testing Library** (jsdom). From `frontend/`:
@@ -86,9 +86,43 @@ Auth flow: register/login issue a JWT (`sub` = user id); protected routes depend
 ### Frontend (`frontend/src/`)
 Vite + React 18 + React Router + Tailwind.
 - **`api/`** — axios-based API hooks. All requests go through `api/client.js`, whose axios instance has `baseURL: '/api'`, injects the bearer token from the Zustand auth store, and clears that store on any 401 response (it does not redirect — routes/components decide what to render). `api/errors.js` exports `errorMessage()`, which normalizes both FastAPI error shapes (`detail` as a string, or a 422 array of `{msg}`) into one display string — use it instead of hand-reading `error.response.data`.
-- **`store/auth.js`** — Zustand client-state store (token + user), wrapped in `persist` (localStorage key `marginalia-auth`). `App.jsx` calls `useMe()` on mount to revalidate the persisted token against `/auth/me` and refresh stale user data.
+- **`store/auth.js`** — Zustand client-state store (token + user), wrapped in `persist` (localStorage key `margin-auth`). `App.jsx` calls `useMe()` on mount to revalidate the persisted token against `/auth/me` and refresh stale user data.
 - React Query is the server-state layer — the `api/` modules expose `useQuery`/`useMutation` hooks; components should consume those rather than calling `client` directly.
 - `vite.config.js` proxies `/api` → `http://localhost:8000` in dev.
+
+### Design system (`frontend/src/index.css` + `frontend/tailwind.config.js`)
+
+MARGIN's visual identity is dark, editorial, and deliberately not Goodreads. The
+brief is `docs/new-instructions.md`; the decisions taken from it (and the ones
+rejected) are recorded in [`docs/visual-identity.md`](docs/visual-identity.md).
+Read that before changing anything visual.
+
+- **Tokens are the only source of color.** Values live as raw `R G B` channels on
+  `:root` in `index.css` and map to semantic Tailwind utilities in
+  `tailwind.config.js` (so `/opacity` modifiers still work). **Never write a raw
+  `zinc-*`, hex, or arbitrary color in a component** — add a token instead.
+  Surfaces: `bg` → `surface` → `raised`; borders: `line`, `line-strong`; text:
+  `ink`, `ink-dim`, `ink-muted`.
+- **Three accents, three jobs.** `accent` fills only; `accent-hover` fill hover
+  only; `accent-ink` is accent-colored *text* on dark and is **never** a fill.
+  Swapping them breaks WCAG AA. `ink-muted` (3.3:1) is decorative text only —
+  never body copy.
+- **Serif is reserved for works.** Book titles and thread titles are Playfair
+  Display. Everything structural — nav, section headings, genre names, metadata,
+  buttons, page headlines — is Space Grotesk.
+- **Reuse the component classes** in the `@layer components` block (`.btn-primary`,
+  `.btn-secondary`, `.btn-ghost`, `.input`, `.label`, `.panel`, `.eyebrow`,
+  `.rule`, `.alert-danger`, `.alert-muted`) rather than re-deriving them. Shared
+  shells live in `components/` (`AuthLayout`, `VoteControl`).
+- **No new border radii, shadows, font sizes, or durations.** Corners are square
+  by design; motion is `duration-fast` (120ms) or `duration-base` (180ms).
+- **Layout**: dense but organized — grids, rules and dividers over floating
+  cards. Book covers carry the color, so keep them large and never dim the art.
+- **Before calling a screen done**, run the §36 test: if it looks like Goodreads,
+  a generic SaaS dashboard, or recolored Reddit, redesign it. Book content stays
+  visually dominant; voting never does.
+- **No star ratings or user reviews.** This is a product decision, not an
+  oversight — see `docs/visual-identity.md` §1 and `margin_spec.md`.
 
 ## Conventions & gotchas
 

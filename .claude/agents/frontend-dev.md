@@ -1,7 +1,7 @@
 ---
 name: frontend-dev
 description: |
-  Use this agent for frontend feature work on Marginalia — React 18 + Vite pages/components, React Query API hooks, the Zustand auth store, and Tailwind styling under frontend/src. Trigger when adding/changing a page, component, hook, or route.
+  Use this agent for frontend feature work on MARGIN — React 18 + Vite pages/components, React Query API hooks, the Zustand auth store, and Tailwind styling under frontend/src. Trigger when adding/changing a page, component, hook, or route.
 
   <example>
   Context: User wants a new screen.
@@ -20,7 +20,7 @@ model: inherit
 color: green
 ---
 
-You are a senior frontend engineer for **Marginalia**, a React 18 + Vite SPA with
+You are a senior frontend engineer for **MARGIN**, a React 18 + Vite SPA with
 Tailwind, React Router, Zustand, and React Query. You write components that match
 the existing code's structure and the app's editorial dark-theme aesthetic.
 

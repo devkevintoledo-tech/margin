@@ -2,15 +2,106 @@
 @tailwind components;
 @tailwind utilities;
 
+/**
+ * Design tokens. Single source of truth for color — `tailwind.config.js` maps
+ * each of these to a semantic utility. Values are raw `R G B` channels so
+ * Tailwind opacity modifiers (`bg-surface/50`) keep working.
+ */
 @layer base {
+  :root {
+    --color-bg: 13 13 13; /* #0D0D0D */
+    --color-surface: 21 21 21; /* #151515 */
+    --color-raised: 28 28 28; /* #1C1C1C */
+    --color-line: 41 41 41; /* #292929 */
+    --color-line-strong: 58 58 58; /* #3A3A3A */
+
+    --color-ink: 232 229 223; /* #E8E5DF */
+    --color-ink-dim: 150 146 140; /* #96928C */
+    --color-ink-muted: 102 99 95; /* #66635F */
+
+    --color-accent: 43 95 227; /* #2B5FE3 — fills */
+    --color-accent-hover: 58 109 240; /* #3A6DF0 — fill hover */
+    --color-accent-ink: 110 155 255; /* #6E9BFF — accent text on dark */
+
+    --color-success: 63 185 80; /* #3FB950 */
+    --color-warning: 210 153 34; /* #D29922 */
+    --color-danger: 240 82 82; /* #F05252 */
+  }
+
   body {
-    font-family: 'Inter', system-ui, sans-serif;
+    font-family: 'Space Grotesk', system-ui, sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
 
   ::selection {
-    background-color: #B45309;
-    color: #fafafa;
+    background-color: rgb(var(--color-accent));
+    color: #fff;
+  }
+
+  /* Keyboard focus is always visible and always the accent. */
+  :focus-visible {
+    outline: 2px solid rgb(var(--color-accent-ink));
+    outline-offset: 2px;
+  }
+}
+
+/**
+ * The shared component vocabulary (§25/§35). Anything repeated on more than one
+ * screen lives here so buttons, inputs and panels can't drift apart.
+ */
+@layer components {
+  /* Small uppercase label that sits above a headline. */
+  .eyebrow {
+    @apply text-xs uppercase tracking-eyebrow text-accent-ink font-medium;
+  }
+
+  /* Section heading: a short accent rule, then a serif title. */
+  .rule {
+    @apply w-0.5 h-5 bg-accent shrink-0;
+  }
+
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium
+           transition-colors duration-fast disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  .btn-primary {
+    @apply btn bg-accent text-white hover:bg-accent-hover;
+  }
+
+  /* Uppercase, wide-tracked variant for page-level calls to action. */
+  .btn-primary-lg {
+    @apply btn-primary px-8 py-4 text-xs font-semibold uppercase tracking-widest;
+  }
+
+  .btn-secondary {
+    @apply btn bg-raised border border-line-strong text-ink-dim hover:border-accent hover:text-ink;
+  }
+
+  .btn-ghost {
+    @apply btn text-ink-dim hover:text-ink;
+  }
+
+  .input {
+    @apply w-full bg-surface border border-line text-ink placeholder-ink-muted px-3 py-2 text-sm
+           focus:outline-none focus:border-accent transition-colors duration-fast;
+  }
+
+  .label {
+    @apply block text-xs font-medium text-ink-dim uppercase tracking-widest mb-1.5;
+  }
+
+  /* A bordered block. Used sparingly — §7 prefers rules and grids over cards. */
+  .panel {
+    @apply bg-surface border border-line;
+  }
+
+  .alert-danger {
+    @apply border border-danger/50 bg-danger/10 text-danger px-4 py-3 text-sm;
+  }
+
+  .alert-muted {
+    @apply border border-line bg-surface text-ink-dim px-4 py-3 text-sm;
   }
 }

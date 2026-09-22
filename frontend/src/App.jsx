@@ -21,9 +21,9 @@ function App() {
   useMe()
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100">
+    <div className="min-h-screen bg-bg text-ink">
       <Navbar />
-      <Suspense fallback={<div className="flex items-center justify-center h-64 text-zinc-500">Loading...</div>}>
+      <Suspense fallback={<div className="flex items-center justify-center h-64 text-ink-muted">Loading...</div>}>
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/books/:id" element={<Book />} />

@@ -9,51 +9,42 @@ function Search() {
 
   return (
     <main className="max-w-5xl mx-auto px-6 py-10 flex flex-col gap-8">
-      <div className="border-b border-zinc-800 pb-4">
-        <h1 className="font-serif text-3xl text-zinc-100">
-          {q ? (
-            <>Results for <span className="text-amber-500">"{q}"</span></>
-          ) : (
-            'Search'
-          )}
+      <div className="border-b border-line pb-5 flex flex-col gap-2">
+        <p className="eyebrow">Search</p>
+        <h1 className="text-display-sm font-bold uppercase text-ink">
+          {q ? <>&ldquo;{q}&rdquo;</> : 'Find a book'}
         </h1>
         {books && (
-          <p className="text-zinc-500 text-sm mt-1">{books.length} {books.length === 1 ? 'book' : 'books'} found</p>
+          <p className="text-ink-muted text-xs uppercase tracking-wider">
+            {books.length} {books.length === 1 ? 'book' : 'books'} found
+          </p>
         )}
       </div>
 
-      {!q && (
-        <p className="text-zinc-500">Enter a search term to find books.</p>
-      )}
+      {!q && <p className="text-ink-dim">Enter a search term to find books.</p>}
 
       {q.length <= 1 && q.length > 0 && (
-        <p className="text-zinc-500">Type at least 2 characters to search.</p>
+        <p className="text-ink-dim">Type at least 2 characters to search.</p>
       )}
 
       {isLoading && q.length > 1 && (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-5">
           {Array.from({ length: 10 }).map((_, i) => (
-            <div key={i} className="bg-zinc-900 border border-zinc-800 animate-pulse">
-              <div className="aspect-[2/3] bg-zinc-800" />
-              <div className="p-3 flex flex-col gap-2">
-                <div className="h-3 bg-zinc-800 w-3/4" />
-                <div className="h-3 bg-zinc-800 w-1/2" />
-              </div>
+            <div key={i} className="animate-pulse flex flex-col gap-3">
+              <div className="aspect-[2/3] bg-surface border border-line" />
+              <div className="h-3 bg-surface w-3/4" />
+              <div className="h-3 bg-surface w-1/2" />
             </div>
           ))}
         </div>
       )}
 
-      {isError && (
-        <p className="text-red-400 text-sm">Failed to load results. Please try again.</p>
-      )}
+      {isError && <p className="text-danger text-sm">Failed to load results. Please try again.</p>}
 
-      {books && books.length === 0 && (
-        <p className="text-zinc-500">No books found for "{q}".</p>
-      )}
+      {books && books.length === 0 && <p className="text-ink-dim">No books found for &ldquo;{q}&rdquo;.</p>}
 
       {books && books.length > 0 && (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-5">
           {books.map((book) => (
             <BookCard key={book.id} book={book} />
           ))}

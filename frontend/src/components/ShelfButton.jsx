@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
+import { Link } from 'react-router-dom'
 import { useAddToShelf, useUpdateShelf, useRemoveFromShelf } from '../api/books'
 import useAuthStore from '../store/auth'
 
@@ -28,12 +29,9 @@ function ShelfButton({ bookId, currentStatus }) {
 
   if (!user) {
     return (
-      <a
-        href="/login"
-        className="bg-zinc-800 border border-zinc-700 text-zinc-300 px-4 py-2 text-sm hover:border-amber-700 transition-colors"
-      >
+      <Link to="/login" className="btn-secondary self-start">
         Log in to add to shelf
-      </a>
+      </Link>
     )
   }
 
@@ -48,31 +46,28 @@ function ShelfButton({ bookId, currentStatus }) {
     }
   }
 
-  const label = currentStatus ? SHELF_LABELS[currentStatus] : 'Add to Shelf'
+  const label = currentStatus ? SHELF_LABELS[currentStatus] : 'Add to Library'
 
   return (
-    <div className="relative inline-block" ref={ref}>
+    <div className="relative inline-block self-start" ref={ref}>
       <button
         onClick={() => setOpen((v) => !v)}
         disabled={isPending}
-        className={`flex items-center gap-2 px-4 py-2 text-sm font-medium border transition-colors disabled:opacity-50 ${
-          currentStatus
-            ? 'bg-amber-700 border-amber-700 text-zinc-100 hover:bg-amber-600'
-            : 'bg-zinc-800 border-zinc-700 text-zinc-300 hover:border-amber-700'
-        }`}
+        aria-expanded={open}
+        className={currentStatus ? 'btn-primary uppercase tracking-wider text-xs' : 'btn-secondary uppercase tracking-wider text-xs'}
       >
         {isPending ? 'Saving...' : label}
-        <span className="text-xs">{open ? '▲' : '▼'}</span>
+        <span className="text-[0.6rem]">{open ? '▲' : '▼'}</span>
       </button>
 
       {open && (
-        <div className="absolute top-full left-0 mt-0.5 z-20 bg-zinc-900 border border-zinc-700 min-w-full">
+        <div className="absolute top-full left-0 mt-0.5 z-20 bg-raised border border-line-strong min-w-full">
           {Object.entries(SHELF_LABELS).map(([status, lbl]) => (
             <button
               key={status}
               onClick={() => handleSelect(status)}
-              className={`block w-full text-left px-4 py-2 text-sm hover:bg-zinc-800 transition-colors ${
-                currentStatus === status ? 'text-amber-500' : 'text-zinc-300'
+              className={`block w-full text-left px-4 py-2 text-sm hover:bg-line transition-colors duration-fast ${
+                currentStatus === status ? 'text-accent-ink' : 'text-ink-dim'
               }`}
             >
               {lbl}
@@ -81,9 +76,9 @@ function ShelfButton({ bookId, currentStatus }) {
           {currentStatus && (
             <button
               onClick={() => handleSelect(null)}
-              className="block w-full text-left px-4 py-2 text-sm text-red-400 hover:bg-zinc-800 transition-colors border-t border-zinc-800"
+              className="block w-full text-left px-4 py-2 text-sm text-danger hover:bg-line transition-colors duration-fast border-t border-line"
             >
-              Remove from Shelf
+              Remove from Library
             </button>
           )}
         </div>

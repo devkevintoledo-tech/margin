@@ -1,8 +1,8 @@
-# Marginalia Roadmap
+# MARGIN Roadmap
 
-A phased feature plan for Marginalia — a social reading platform (Reddit-style
+A phased feature plan for MARGIN — a social reading platform (Reddit-style
 threaded book discussion + Goodreads-style catalog). The authoritative product
-spec is [`marginalia_spec.md`](./marginalia_spec.md); this file tracks **what
+spec is [`margin_spec.md`](./margin_spec.md); this file tracks **what
 exists, what's next, and in what order**.
 
 **Status legend:** ✅ done · 🟡 partial / stubbed · ⬜ not started

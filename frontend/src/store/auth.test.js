@@ -10,7 +10,7 @@ describe('auth store persistence', () => {
   it('writes user and token to localStorage on setAuth', () => {
     useAuthStore.getState().setAuth({ id: '1', username: 'ada' }, 'tok-123')
 
-    const persisted = JSON.parse(localStorage.getItem('marginalia-auth'))
+    const persisted = JSON.parse(localStorage.getItem('margin-auth'))
     expect(persisted.state.token).toBe('tok-123')
     expect(persisted.state.user).toEqual({ id: '1', username: 'ada' })
   })
@@ -19,7 +19,7 @@ describe('auth store persistence', () => {
     useAuthStore.getState().setAuth({ id: '1', username: 'ada' }, 'tok-123')
     useAuthStore.getState().logout()
 
-    const persisted = JSON.parse(localStorage.getItem('marginalia-auth'))
+    const persisted = JSON.parse(localStorage.getItem('margin-auth'))
     expect(persisted.state.token).toBeNull()
     expect(persisted.state.user).toBeNull()
   })

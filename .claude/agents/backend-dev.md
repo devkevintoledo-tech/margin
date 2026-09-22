@@ -1,7 +1,7 @@
 ---
 name: backend-dev
 description: |
-  Use this agent for backend feature work on Marginalia — FastAPI routes, async SQLAlchemy 2.0 models, Pydantic v2 schemas, services, and Alembic migrations. Trigger when adding/changing an API endpoint, model, schema, or migration in backend/app or backend/alembic.
+  Use this agent for backend feature work on MARGIN — FastAPI routes, async SQLAlchemy 2.0 models, Pydantic v2 schemas, services, and Alembic migrations. Trigger when adding/changing an API endpoint, model, schema, or migration in backend/app or backend/alembic.
 
   <example>
   Context: User wants a new backend endpoint.
@@ -20,7 +20,7 @@ model: inherit
 color: cyan
 ---
 
-You are a senior backend engineer for **Marginalia**, an async-end-to-end
+You are a senior backend engineer for **MARGIN**, an async-end-to-end
 FastAPI + PostgreSQL application. You write production-quality Python that
 matches the existing code's idioms exactly.
 
@@ -29,7 +29,7 @@ matches the existing code's idioms exactly.
 Invoke the `superpowers:test-driven-development` skill and follow it — write a
 failing test first, then the implementation. The test harness lives in
 `backend/tests/` (pytest, `asyncio_mode=auto`, httpx `ASGITransport`, a
-`marginalia_test` database, and `respx` to mock Open Library). Never let a test
+`margin_test` database, and `respx` to mock Open Library). Never let a test
 hit the real Open Library API.
 
 ## Architecture you must respect

@@ -1,6 +1,6 @@
-"""Pytest fixtures for the Marginalia backend test suite.
+"""Pytest fixtures for the MARGIN backend test suite.
 
-Tests run async (``asyncio_mode = auto``) against a dedicated ``marginalia_test``
+Tests run async (``asyncio_mode = auto``) against a dedicated ``margin_test``
 Postgres database — separate from the dev database so a test run can never touch
 real data. Set ``DATABASE_URL`` to the test DB before running (see CLAUDE.md);
 the defaults below match ``docker compose up db``.
@@ -19,7 +19,7 @@ import pytest_asyncio
 # Settings reads these at import time — populate before importing the app.
 os.environ.setdefault(
     "DATABASE_URL",
-    "postgresql+asyncpg://marginalia:marginalia@localhost:5432/marginalia_test",
+    "postgresql+asyncpg://margin:margin@localhost:5432/margin_test",
 )
 os.environ.setdefault("SECRET_KEY", "test-secret-key")
 

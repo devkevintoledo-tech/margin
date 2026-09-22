@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useBook, useBookThreads } from '../api/books'
 import { useCreateThread } from '../api/threads'
+import { errorMessage } from '../api/errors'
 import ShelfButton from '../components/ShelfButton'
 import ThreadCard from '../components/ThreadCard'
 import useAuthStore from '../store/auth'
@@ -26,11 +27,13 @@ function CreateThreadModal({ bookId, onClose }) {
   }
 
   return (
-    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-      <div className="bg-zinc-900 border border-zinc-700 w-full max-w-lg flex flex-col gap-4 p-6">
+    <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+      <div className="panel border-line-strong w-full max-w-lg flex flex-col gap-5 p-6">
         <div className="flex items-center justify-between">
-          <h2 className="font-serif text-xl text-zinc-100">Start a Thread</h2>
-          <button onClick={onClose} className="text-zinc-500 hover:text-zinc-300 text-lg">✕</button>
+          <h2 className="text-sm font-semibold uppercase tracking-eyebrow text-ink">Start a Thread</h2>
+          <button onClick={onClose} aria-label="Close" className="text-ink-muted hover:text-ink text-lg">
+            ✕
+          </button>
         </div>
         <form onSubmit={handleSubmit} className="flex flex-col gap-3">
           <input
@@ -39,27 +42,23 @@ function CreateThreadModal({ bookId, onClose }) {
             onChange={(e) => setTitle(e.target.value)}
             placeholder="Thread title"
             required
-            className="bg-zinc-800 border border-zinc-700 text-zinc-100 placeholder-zinc-500 px-3 py-2 text-sm focus:outline-none focus:border-amber-700"
+            className="input bg-raised"
           />
           <textarea
             value={body}
             onChange={(e) => setBody(e.target.value)}
             placeholder="Opening post (optional)"
             rows={4}
-            className="bg-zinc-800 border border-zinc-700 text-zinc-100 placeholder-zinc-500 px-3 py-2 text-sm focus:outline-none focus:border-amber-700 resize-none"
+            className="input bg-raised resize-none"
           />
           {mutation.isError && (
-            <p className="text-red-400 text-xs">{mutation.error?.response?.data?.message || 'Failed to create thread.'}</p>
+            <p className="text-danger text-xs">{errorMessage(mutation.error, 'Failed to create thread.')}</p>
           )}
           <div className="flex justify-end gap-2">
-            <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-zinc-400 hover:text-zinc-200 transition-colors">
+            <button type="button" onClick={onClose} className="btn-ghost">
               Cancel
             </button>
-            <button
-              type="submit"
-              disabled={mutation.isPending || !title.trim()}
-              className="bg-amber-700 hover:bg-amber-600 disabled:opacity-50 text-zinc-100 px-4 py-2 text-sm font-medium transition-colors"
-            >
+            <button type="submit" disabled={mutation.isPending || !title.trim()} className="btn-primary">
               {mutation.isPending ? 'Creating...' : 'Create Thread'}
             </button>
           </div>
@@ -80,14 +79,12 @@ function Book() {
   if (bookLoading) {
     return (
       <main className="max-w-5xl mx-auto px-6 py-10">
-        <div className="animate-pulse flex flex-col gap-6">
-          <div className="flex gap-8">
-            <div className="w-40 aspect-[2/3] bg-zinc-800 shrink-0" />
-            <div className="flex flex-col gap-3 flex-1">
-              <div className="h-8 bg-zinc-800 w-2/3" />
-              <div className="h-4 bg-zinc-800 w-1/3" />
-              <div className="h-20 bg-zinc-800 w-full mt-4" />
-            </div>
+        <div className="animate-pulse flex gap-8">
+          <div className="w-44 aspect-[2/3] bg-surface shrink-0" />
+          <div className="flex flex-col gap-3 flex-1">
+            <div className="h-10 bg-surface w-2/3" />
+            <div className="h-4 bg-surface w-1/3" />
+            <div className="h-20 bg-surface w-full mt-4" />
           </div>
         </div>
       </main>
@@ -97,62 +94,74 @@ function Book() {
   if (bookError || !book) {
     return (
       <main className="max-w-5xl mx-auto px-6 py-10">
-        <p className="text-red-400">Failed to load book.</p>
+        <p className="text-danger">Failed to load book.</p>
       </main>
     )
   }
 
+  const threadCount = threads?.length ?? 0
+
   return (
-    <main className="max-w-5xl mx-auto px-6 py-10 flex flex-col gap-10">
-      {/* Book info */}
+    <main className="max-w-5xl mx-auto px-6 py-10 flex flex-col gap-12">
+      {/* Book hero — the cover is the visual anchor of the page (§13). */}
       <section className="flex flex-col sm:flex-row gap-8">
-        <div className="shrink-0 w-36 sm:w-44">
+        <div className="shrink-0 w-44 sm:w-56">
           {book.cover_url ? (
-            <img src={book.cover_url} alt={book.title} className="w-full border border-zinc-800" />
+            <img src={book.cover_url} alt={book.title} className="w-full border border-line" />
           ) : (
-            <div className="w-full aspect-[2/3] bg-zinc-800 border border-zinc-800 flex items-center justify-center text-zinc-600 text-xs">
+            <div className="w-full aspect-[2/3] bg-surface border border-line flex items-center justify-center text-ink-muted text-xs">
               No Cover
             </div>
           )}
         </div>
 
-        <div className="flex flex-col gap-4 flex-1 min-w-0">
-          <div>
-            <h1 className="font-serif text-4xl text-zinc-100 leading-tight">{book.title}</h1>
-            {book.subtitle && <p className="text-zinc-500 text-base mt-0.5 italic">{book.subtitle}</p>}
-            <p className="text-zinc-400 text-lg mt-1">{book.author}</p>
-            {book.published_year && (
-              <p className="text-zinc-600 text-sm mt-0.5">{book.published_year}</p>
-            )}
-            <p className="text-zinc-500 text-sm mt-1 flex flex-wrap gap-x-3">
-              {book.publisher && <span>{book.publisher}</span>}
-              {book.page_count && <span>{book.page_count} pp</span>}
-              {book.average_rating && (
-                <span>★ {book.average_rating} ({book.ratings_count ?? 0})</span>
-              )}
-            </p>
-            {book.categories?.length > 0 && (
-              <p className="text-zinc-600 text-xs mt-1">{book.categories.join(' · ')}</p>
-            )}
+        <div className="flex flex-col gap-5 flex-1 min-w-0">
+          <div className="flex flex-col gap-1">
+            <h1 className="font-serif text-4xl md:text-5xl text-ink leading-tight">{book.title}</h1>
+            {book.subtitle && <p className="font-serif italic text-ink-dim text-lg">{book.subtitle}</p>}
+            <p className="text-ink-dim text-base uppercase tracking-widest mt-1">{book.author}</p>
           </div>
 
+          {/* Metadata rail — dense, technical, no star rating (see docs/visual-identity.md). */}
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs uppercase tracking-wider text-ink-muted">
+            {book.published_year && <span>{book.published_year}</span>}
+            {book.publisher && <span>{book.publisher}</span>}
+            {book.page_count && <span>{book.page_count} pp</span>}
+            <span className="text-accent-ink">
+              {threadCount} {threadCount === 1 ? 'discussion' : 'discussions'}
+            </span>
+          </div>
+
+          {book.categories?.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {book.categories.map((category) => (
+                <span
+                  key={category}
+                  className="border border-line text-ink-dim text-xs px-2 py-1 uppercase tracking-wider"
+                >
+                  {category}
+                </span>
+              ))}
+            </div>
+          )}
+
           {book.description && (
-            <p className="text-zinc-300 text-sm leading-relaxed max-w-2xl">{book.description}</p>
+            <p className="text-ink-dim text-sm leading-relaxed max-w-2xl">{book.description}</p>
           )}
 
           <ShelfButton bookId={id} currentStatus={book.shelf_status} />
         </div>
       </section>
 
-      {/* Threads */}
-      <section className="flex flex-col gap-4">
-        <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
-          <h2 className="font-serif text-2xl text-zinc-100">Discussions</h2>
+      {/* Discussions */}
+      <section className="flex flex-col gap-5">
+        <div className="flex items-center justify-between border-b border-line pb-3">
+          <div className="flex items-baseline gap-4">
+            <span className="rule" />
+            <h2 className="text-sm font-semibold uppercase tracking-eyebrow text-ink">Discussions</h2>
+          </div>
           {user && (
-            <button
-              onClick={() => setShowModal(true)}
-              className="bg-amber-700 hover:bg-amber-600 text-zinc-100 px-4 py-2 text-sm font-medium transition-colors"
-            >
+            <button onClick={() => setShowModal(true)} className="btn-primary text-xs uppercase tracking-wider">
               Start a Thread
             </button>
           )}
@@ -161,16 +170,25 @@ function Book() {
         {threadsLoading && (
           <div className="flex flex-col gap-2">
             {[1, 2, 3].map((i) => (
-              <div key={i} className="h-16 bg-zinc-900 border border-zinc-800 animate-pulse" />
+              <div key={i} className="h-16 border border-line bg-surface animate-pulse" />
             ))}
           </div>
         )}
 
-        {!threadsLoading && threads && threads.length === 0 && (
-          <p className="text-zinc-500 text-sm py-4">No discussions yet. {user ? 'Start the first one.' : <a href="/login" className="text-amber-500 hover:underline">Log in</a>}</p>
+        {!threadsLoading && threadCount === 0 && (
+          <p className="text-ink-dim text-sm py-4">
+            No discussions yet.{' '}
+            {user ? (
+              'Start the first one.'
+            ) : (
+              <a href="/login" className="text-accent-ink hover:underline">
+                Log in
+              </a>
+            )}
+          </p>
         )}
 
-        {threads && threads.length > 0 && (
+        {threadCount > 0 && (
           <div className="flex flex-col gap-2">
             {threads.map((thread) => (
               <ThreadCard key={thread.id} thread={{ ...thread, book_id: id }} />
@@ -179,9 +197,7 @@ function Book() {
         )}
       </section>
 
-      {showModal && (
-        <CreateThreadModal bookId={id} onClose={() => setShowModal(false)} />
-      )}
+      {showModal && <CreateThreadModal bookId={id} onClose={() => setShowModal(false)} />}
     </main>
   )
 }

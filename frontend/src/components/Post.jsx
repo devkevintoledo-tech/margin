@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useUpvotePost } from '../api/threads'
 import useAuthStore from '../store/auth'
 import PostComposer from './PostComposer'
+import VoteControl from './VoteControl'
 
 function formatDate(dateStr) {
   if (!dateStr) return ''
@@ -20,30 +21,27 @@ function Post({ post, threadId, depth = 0 }) {
   }
 
   return (
-    <div className={depth > 0 ? 'border-l border-zinc-800 pl-5 ml-3' : ''}>
+    <div className={depth > 0 ? 'border-l border-line pl-5 ml-3' : ''}>
       <div className="py-4">
         <div className="flex items-start gap-3">
-          <button
-            onClick={handleUpvote}
-            disabled={!user || upvoteMutation.isPending}
-            className="flex flex-col items-center gap-0.5 shrink-0 group/up pt-0.5 w-8"
-            title={user ? 'Upvote' : 'Sign in to upvote'}
-          >
-            <span className="text-zinc-700 group-hover/up:text-amber-500 transition-colors text-xs leading-none">↑</span>
-            <span className="text-amber-500 font-mono text-xs font-semibold leading-none">{upvotes}</span>
-          </button>
+          <VoteControl
+            count={upvotes}
+            onVote={handleUpvote}
+            disabled={!user}
+            pending={upvoteMutation.isPending}
+          />
 
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-2">
-              <span className="text-amber-600 text-xs font-semibold tracking-wide">{author}</span>
-              <span className="text-zinc-700 text-xs">{formatDate(created_at)}</span>
+              <span className="text-accent-ink text-xs font-semibold uppercase tracking-wider">{author}</span>
+              <span className="text-ink-muted text-xs">{formatDate(created_at)}</span>
             </div>
-            <p className="text-zinc-300 text-sm leading-relaxed whitespace-pre-wrap">{content}</p>
+            <p className="text-ink text-sm leading-relaxed whitespace-pre-wrap">{content}</p>
 
             {user && (
               <button
                 onClick={() => setShowReply((v) => !v)}
-                className="mt-3 text-xs text-zinc-600 hover:text-zinc-400 transition-colors uppercase tracking-widest"
+                className="mt-3 text-xs text-ink-muted hover:text-ink-dim transition-colors duration-fast uppercase tracking-widest"
               >
                 {showReply ? '↩ Cancel' : '↩ Reply'}
               </button>
