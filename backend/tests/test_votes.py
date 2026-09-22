@@ -265,3 +265,70 @@ async def test_post_vote_unknown_id_is_404(client, auth_headers):
         f"/api/posts/{uuid.uuid4()}/vote", json={"value": 1}, headers=auth_headers
     )
     assert resp.status_code == 404
+
+
+async def test_thread_read_reports_my_vote(client, auth_headers, voted_thread_id):
+    await client.put(
+        f"/api/threads/{voted_thread_id}/vote", json={"value": 1}, headers=auth_headers
+    )
+    post = await client.post(
+        "/api/posts/",
+        json={"thread_id": voted_thread_id, "content": "Mine."},
+        headers=auth_headers,
+    )
+    post_id = post.json()["id"]
+    await client.put(
+        f"/api/posts/{post_id}/vote", json={"value": -1}, headers=auth_headers
+    )
+
+    got = await client.get(f"/api/threads/{voted_thread_id}", headers=auth_headers)
+    assert got.json()["my_vote"] == 1
+    assert got.json()["posts"][0]["my_vote"] == -1
+
+
+async def test_thread_read_my_vote_is_zero_when_anonymous(
+    client, auth_headers, voted_thread_id
+):
+    await client.put(
+        f"/api/threads/{voted_thread_id}/vote", json={"value": 1}, headers=auth_headers
+    )
+    await client.post(
+        "/api/posts/",
+        json={"thread_id": voted_thread_id, "content": "Mine."},
+        headers=auth_headers,
+    )
+
+    got = await client.get(f"/api/threads/{voted_thread_id}")
+    assert got.json()["score"] == 1
+    assert got.json()["my_vote"] == 0
+    assert got.json()["posts"][0]["my_vote"] == 0
+
+
+async def test_book_thread_list_carries_my_vote_and_orders_by_score(
+    client, auth_headers, book
+):
+    low = await client.post(
+        "/api/threads/",
+        json={"title": "Low", "book_id": str(book.id)},
+        headers=auth_headers,
+    )
+    high = await client.post(
+        "/api/threads/",
+        json={"title": "High", "book_id": str(book.id)},
+        headers=auth_headers,
+    )
+    await client.put(
+        f"/api/threads/{high.json()['id']}/vote", json={"value": 1}, headers=auth_headers
+    )
+    await client.put(
+        f"/api/threads/{low.json()['id']}/vote", json={"value": -1}, headers=auth_headers
+    )
+
+    listed = await client.get(f"/api/books/{book.id}/threads", headers=auth_headers)
+    rows = listed.json()
+    assert [r["title"] for r in rows] == ["High", "Low"]
+    assert rows[0]["my_vote"] == 1
+    assert rows[1]["my_vote"] == -1
+
+    anon = await client.get(f"/api/books/{book.id}/threads")
+    assert all(r["my_vote"] == 0 for r in anon.json())

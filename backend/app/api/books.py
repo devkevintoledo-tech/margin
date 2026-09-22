@@ -4,7 +4,7 @@ from uuid import UUID
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import func, select
+from sqlalchemy import func, literal, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
@@ -24,6 +24,7 @@ from app.models.post import Post  # type: ignore[import]
 from app.models.shelf import Shelf  # type: ignore[import]
 from app.models.thread import Thread  # type: ignore[import]
 from app.models.user import User  # type: ignore[import]
+from app.models.vote import Vote  # type: ignore[import]
 
 router = APIRouter(prefix="/books", tags=["books"])
 
@@ -129,13 +130,28 @@ async def get_book_threads(
     db: AsyncSession = Depends(get_db),
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
+    current_user=Depends(get_current_user_optional),
 ):
     await _get_book_or_404(book_id, db)
+    if current_user is None:
+        my_vote = literal(0).label("my_vote")
+    else:
+        # A correlated scalar subquery, not a LEFT JOIN: this query already
+        # GROUP BYs to produce post_count, and a join would have to be folded
+        # into that grouping.
+        my_vote = func.coalesce(
+            select(Vote.value)
+            .where(Vote.thread_id == Thread.id, Vote.user_id == current_user.id)
+            .scalar_subquery(),
+            0,
+        ).label("my_vote")
+
     stmt = (
         select(
             Thread.id,
             Thread.title,
             Thread.score,
+            my_vote,
             Thread.book_id,
             User.username.label("author"),
             Genre.slug.label("genre_slug"),
