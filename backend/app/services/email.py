@@ -34,9 +34,9 @@ class SmtpEmailSender(EmailSender):
         msg = EmailMessage()
         msg["From"] = settings.MAIL_FROM
         msg["To"] = to_email
-        msg["Subject"] = "Reset your Marginalia password"
+        msg["Subject"] = "Reset your MARGIN password"
         msg.set_content(
-            "We received a request to reset your Marginalia password.\n\n"
+            "We received a request to reset your MARGIN password.\n\n"
             f"Use this link to choose a new password:\n{reset_url}\n\n"
             "If you didn't request this, you can safely ignore this email."
         )

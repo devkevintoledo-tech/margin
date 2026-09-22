@@ -3,15 +3,15 @@ services:
     image: postgres:16
     restart: unless-stopped
     environment:
-      POSTGRES_USER: marginalia
-      POSTGRES_PASSWORD: marginalia
-      POSTGRES_DB: marginalia
+      POSTGRES_USER: margin
+      POSTGRES_PASSWORD: margin
+      POSTGRES_DB: margin
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U marginalia"]
+      test: ["CMD-SHELL", "pg_isready -U margin"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -23,8 +23,8 @@ services:
       db:
         condition: service_healthy
     environment:
-      APP_NAME: Marginalia
-      DATABASE_URL: postgresql+asyncpg://marginalia:marginalia@db:5432/marginalia
+      APP_NAME: MARGIN
+      DATABASE_URL: postgresql+asyncpg://margin:margin@db:5432/margin
       SECRET_KEY: change-me-in-production
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}

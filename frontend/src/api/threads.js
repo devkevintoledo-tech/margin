@@ -12,7 +12,7 @@ export function useThread(id) {
 export function useCreateThread() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (payload) => client.post('/threads', payload).then((r) => r.data),
+    mutationFn: (payload) => client.post('/threads/', payload).then((r) => r.data),
     onSuccess: (data) => {
       if (data.book_id) {
         queryClient.invalidateQueries({ queryKey: ['books', String(data.book_id), 'threads'] })
@@ -37,7 +37,7 @@ export function useUpvoteThread() {
 export function useCreatePost() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (payload) => client.post('/posts', payload).then((r) => r.data),
+    mutationFn: (payload) => client.post('/posts/', payload).then((r) => r.data),
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['threads', String(data.thread_id)] })
     },

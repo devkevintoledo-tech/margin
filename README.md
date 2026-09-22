@@ -1,10 +1,10 @@
-# Marginalia
+# MARGIN
 
 A social reading platform for serious book discussion — Reddit-style threaded debate meets a Goodreads-style catalog, with a design closer to Letterboxd. No inflated reviews, no sanitized book clubs: just honest, threaded conversation anchored to specific books and genres.
 
 **Target user:** opinionated readers who currently split their time between Goodreads (catalog) and Reddit (discussion) because nothing does both well.
 
-> `marginalia_spec.md` is the authoritative product/design spec. The code is a functionally complete v1 MVP with a test suite and CI, but the spec still runs ahead of it in places (see [Known gaps](#known-gaps) and [`ROADMAP.md`](ROADMAP.md)).
+> `margin_spec.md` is the authoritative product/design spec. The code is a functionally complete v1 MVP with a test suite and CI, but the spec still runs ahead of it in places (see [Known gaps](#known-gaps) and [`ROADMAP.md`](ROADMAP.md)).
 
 ## Tech stack
 
@@ -74,11 +74,11 @@ The backend is **async end-to-end** — routes, services, and DB access all use 
 
 ### Core data models
 
-`User`, `Book`, `Genre`, `Shelf` (a user's book with `want_to_read` / `reading` / `read` status, unique per user/book), `Thread` (anchored to exactly one of a book or a genre), `Post` (threaded replies), and `PasswordResetToken` (SHA-256 hash of the emailed token, plus `expires_at` / `used_at`). See `marginalia_spec.md` for full field definitions.
+`User`, `Book`, `Genre`, `Shelf` (a user's book with `want_to_read` / `reading` / `read` status, unique per user/book), `Thread` (anchored to exactly one of a book or a genre), `Post` (threaded replies), and `PasswordResetToken` (SHA-256 hash of the emailed token, plus `expires_at` / `used_at`). See `margin_spec.md` for full field definitions.
 
 ### Auth & sessions
 
-Register and login return a JWT (`sub` = user id); protected routes depend on `get_current_user`. The frontend persists `{ user, token }` to `localStorage` under `marginalia-auth` and revalidates it against `GET /api/auth/me` on load — a 401 from any request clears the store via an axios response interceptor. Logout is a client-side clear (the server endpoint is a stateless no-op; there is no refresh or revocation).
+Register and login return a JWT (`sub` = user id); protected routes depend on `get_current_user`. The frontend persists `{ user, token }` to `localStorage` under `margin-auth` and revalidates it against `GET /api/auth/me` on load — a 401 from any request clears the store via an axios response interceptor. Logout is a client-side clear (the server endpoint is a stateless no-op; there is no refresh or revocation).
 
 Password reset: `POST /auth/forgot-password` always returns the same message regardless of whether the account exists (anti-enumeration), and only issues a token for email-auth accounts. Only the token's SHA-256 hash is stored; the raw token travels in the emailed link and is single-use and time-limited (`PASSWORD_RESET_TOKEN_TTL_MINUTES`, default 30). With no `SMTP_HOST` configured, the reset link is logged to the backend console instead of emailed — that's the intended local-dev path.
 
@@ -102,12 +102,12 @@ GET    /api/users/{username}
 
 Backend and frontend unit tests run in CI (`.github/workflows/ci.yml`) on every push and PR; e2e runs nightly. There is no linter/formatter configured yet. Always run tests before claiming they pass.
 
-**Backend — pytest** (async, httpx `ASGITransport`). Tests run against a separate `marginalia_test` database, build the schema with `Base.metadata.create_all`, and mock Google Books with `respx` (never hit the network). Email is exercised through a fake `EmailSender` installed via `app.dependency_overrides`. From `backend/`:
+**Backend — pytest** (async, httpx `ASGITransport`). Tests run against a separate `margin_test` database, build the schema with `Base.metadata.create_all`, and mock Google Books with `respx` (never hit the network). Email is exercised through a fake `EmailSender` installed via `app.dependency_overrides`. From `backend/`:
 
 ```bash
 docker compose up -d db
-docker compose exec db psql -U marginalia -c "CREATE DATABASE marginalia_test;"   # one-time
-DATABASE_URL=postgresql+asyncpg://marginalia:marginalia@localhost:5432/marginalia_test pytest
+docker compose exec db psql -U margin -c "CREATE DATABASE margin_test;"   # one-time
+DATABASE_URL=postgresql+asyncpg://margin:margin@localhost:5432/margin_test pytest
 ```
 
 **Frontend unit — Vitest + React Testing Library** (jsdom). From `frontend/`:

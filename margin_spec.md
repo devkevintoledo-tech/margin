@@ -1,5 +1,5 @@
-# Marginalia — Project Spec
-> APP_NAME=Marginalia (placeholder — rename globally to swap)
+# MARGIN — Project Spec
+> APP_NAME=MARGIN (placeholder — rename globally to swap)
 
 ## Concept
 A social reading platform for serious book discussion. Think Reddit's debate culture meets Goodreads' catalog, with a modern design closer to Letterboxd. No inflated reviews, no sanitized book clubs — just honest, threaded conversation anchored to specific books and genres.
@@ -189,7 +189,7 @@ GET  /users/{username}       — public profile + shelves
 ## Project Structure
 
 ```
-marginalia/
+margin/
 ├── backend/
 │   ├── app/
 │   │   ├── main.py
@@ -305,7 +305,7 @@ When running Claude Code, split into these parallel workstreams:
 
 ## Environment Variables (.env)
 ```
-APP_NAME=Marginalia
+APP_NAME=MARGIN
 DATABASE_URL=postgresql://...
 SECRET_KEY=...
 GOOGLE_CLIENT_ID=...

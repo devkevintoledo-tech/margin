@@ -10,7 +10,7 @@ const useAuthStore = create(
       logout: () => set({ user: null, token: null }),
     }),
     {
-      name: 'marginalia-auth',
+      name: 'margin-auth',
       partialize: (state) => ({ user: state.user, token: state.token }),
     },
   ),

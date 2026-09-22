@@ -17,13 +17,13 @@ jobs:
       postgres:
         image: postgres:15
         env:
-          POSTGRES_USER: marginalia
-          POSTGRES_PASSWORD: marginalia
-          POSTGRES_DB: marginalia_test
+          POSTGRES_USER: margin
+          POSTGRES_PASSWORD: margin
+          POSTGRES_DB: margin_test
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U marginalia"
+          --health-cmd "pg_isready -U margin"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
@@ -46,7 +46,7 @@ jobs:
 
       - name: Run pytest
         env:
-          DATABASE_URL: postgresql+asyncpg://marginalia:marginalia@localhost:5432/marginalia_test
+          DATABASE_URL: postgresql+asyncpg://margin:margin@localhost:5432/margin_test
           SECRET_KEY: ci-test-secret
         run: python -m pytest -v
 
@@ -85,9 +85,15 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
       - name: Start full stack
         run: docker compose up --build -d
         timeout-minutes: 5
+        env:
+          GOOGLE_BOOKS_API_KEY: ${{ secrets.GOOGLE_BOOKS_API_KEY }}
 
       - name: Wait for backend health
         run: |
@@ -96,10 +102,6 @@ jobs:
           done
           echo "Backend did not become healthy in time" >&2
           exit 1
-
-      - name: Install frontend dependencies
-        working-directory: frontend
-        run: npm ci
 
       - name: Install Playwright browsers
         working-directory: frontend

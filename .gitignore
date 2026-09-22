@@ -14,6 +14,10 @@ node_modules/
 dist/
 *.log
 
+# Playwright
+test-results/
+playwright-report/
+
 # Editor / OS
 .DS_Store
 .idea/

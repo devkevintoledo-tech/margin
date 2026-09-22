@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import client from '../api/client'
 import { useCreateThread } from '../api/threads'
+import { errorMessage } from '../api/errors'
 import BookCard from '../components/BookCard'
 import ThreadCard from '../components/ThreadCard'
 import useAuthStore from '../store/auth'
@@ -51,8 +52,8 @@ function Genre() {
     return (
       <main className="max-w-5xl mx-auto px-6 py-10">
         <div className="animate-pulse flex flex-col gap-6">
-          <div className="h-10 bg-zinc-800 w-1/3" />
-          <div className="h-4 bg-zinc-800 w-2/3" />
+          <div className="h-12 bg-surface w-1/3" />
+          <div className="h-4 bg-surface w-2/3" />
         </div>
       </main>
     )
@@ -61,26 +62,28 @@ function Genre() {
   if (isError || !genre) {
     return (
       <main className="max-w-5xl mx-auto px-6 py-10">
-        <p className="text-red-400">Genre not found.</p>
+        <p className="text-danger">Genre not found.</p>
       </main>
     )
   }
 
   return (
-    <main className="max-w-5xl mx-auto px-6 py-10 flex flex-col gap-12">
+    <main className="max-w-5xl mx-auto px-6 py-10 flex flex-col gap-14">
       {/* Header */}
-      <div className="border-b border-zinc-800 pb-6">
-        <h1 className="font-serif text-5xl text-zinc-100">{genre.name}</h1>
-        {genre.description && (
-          <p className="text-zinc-400 mt-3 max-w-2xl">{genre.description}</p>
-        )}
+      <div className="border-b border-line pb-6 flex flex-col gap-3">
+        <p className="eyebrow">Genre</p>
+        <h1 className="text-display-sm md:text-display font-bold uppercase text-ink">{genre.name}</h1>
+        {genre.description && <p className="text-ink-dim max-w-2xl leading-relaxed">{genre.description}</p>}
       </div>
 
       {/* Books */}
       {books && books.length > 0 && (
-        <section className="flex flex-col gap-4">
-          <h2 className="font-serif text-2xl text-zinc-100 border-b border-zinc-800 pb-3">Notable Books</h2>
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+        <section className="flex flex-col gap-5">
+          <div className="flex items-baseline gap-4 border-b border-line pb-3">
+            <span className="rule" />
+            <h2 className="text-sm font-semibold uppercase tracking-eyebrow text-ink">Notable Books</h2>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-5">
             {books.map((book) => (
               <BookCard key={book.id} book={book} />
             ))}
@@ -89,21 +92,21 @@ function Genre() {
       )}
 
       {/* Threads */}
-      <section className="flex flex-col gap-4">
-        <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
-          <h2 className="font-serif text-2xl text-zinc-100">Discussions</h2>
+      <section className="flex flex-col gap-5">
+        <div className="flex items-center justify-between border-b border-line pb-3">
+          <div className="flex items-baseline gap-4">
+            <span className="rule" />
+            <h2 className="text-sm font-semibold uppercase tracking-eyebrow text-ink">Discussions</h2>
+          </div>
           {user && (
-            <button
-              onClick={() => setShowModal(true)}
-              className="bg-amber-700 hover:bg-amber-600 text-zinc-100 px-4 py-2 text-sm font-medium transition-colors"
-            >
+            <button onClick={() => setShowModal(true)} className="btn-primary text-xs uppercase tracking-wider">
               Start a Discussion
             </button>
           )}
         </div>
 
         {!threads || threads.length === 0 ? (
-          <p className="text-zinc-500 text-sm py-4">No discussions yet.</p>
+          <p className="text-ink-dim text-sm py-4">No discussions yet.</p>
         ) : (
           <div className="flex flex-col gap-2">
             {threads.map((thread) => (
@@ -115,11 +118,17 @@ function Genre() {
 
       {/* Create Thread Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-          <div className="bg-zinc-900 border border-zinc-700 w-full max-w-lg p-6 flex flex-col gap-4">
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+          <div className="panel border-line-strong w-full max-w-lg p-6 flex flex-col gap-5">
             <div className="flex items-center justify-between">
-              <h2 className="font-serif text-xl text-zinc-100">Start a Discussion</h2>
-              <button onClick={() => setShowModal(false)} className="text-zinc-500 hover:text-zinc-300 text-lg">✕</button>
+              <h2 className="text-sm font-semibold uppercase tracking-eyebrow text-ink">Start a Discussion</h2>
+              <button
+                onClick={() => setShowModal(false)}
+                aria-label="Close"
+                className="text-ink-muted hover:text-ink text-lg"
+              >
+                ✕
+              </button>
             </div>
             <form onSubmit={handleCreateThread} className="flex flex-col gap-3">
               <input
@@ -128,26 +137,26 @@ function Genre() {
                 onChange={(e) => setThreadTitle(e.target.value)}
                 placeholder="Discussion title"
                 required
-                className="bg-zinc-800 border border-zinc-700 text-zinc-100 placeholder-zinc-500 px-3 py-2 text-sm focus:outline-none focus:border-amber-700"
+                className="input bg-raised"
               />
               <textarea
                 value={threadBody}
                 onChange={(e) => setThreadBody(e.target.value)}
                 placeholder="Opening post (optional)"
                 rows={4}
-                className="bg-zinc-800 border border-zinc-700 text-zinc-100 placeholder-zinc-500 px-3 py-2 text-sm focus:outline-none focus:border-amber-700 resize-none"
+                className="input bg-raised resize-none"
               />
               {createThread.isError && (
-                <p className="text-red-400 text-xs">{createThread.error?.response?.data?.message || 'Failed to create.'}</p>
+                <p className="text-danger text-xs">{errorMessage(createThread.error, 'Failed to create.')}</p>
               )}
               <div className="flex justify-end gap-2">
-                <button type="button" onClick={() => setShowModal(false)} className="px-4 py-2 text-sm text-zinc-400 hover:text-zinc-200">
+                <button type="button" onClick={() => setShowModal(false)} className="btn-ghost">
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={createThread.isPending || !threadTitle.trim()}
-                  className="bg-amber-700 hover:bg-amber-600 disabled:opacity-50 text-zinc-100 px-4 py-2 text-sm font-medium transition-colors"
+                  className="btn-primary"
                 >
                   {createThread.isPending ? 'Creating...' : 'Create'}
                 </button>

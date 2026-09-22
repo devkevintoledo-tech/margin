@@ -17,7 +17,7 @@ test.describe('replies', () => {
 
     // The composer at the bottom of the thread posts a top-level message.
     const answer = `My answer ${Date.now()}`
-    await page.getByPlaceholder('Write a reply...').fill(answer)
+    await page.getByPlaceholder('Join the discussion...').fill(answer)
     await page.getByRole('button', { name: 'Post' }).click()
 
     await expect(page.getByText(answer)).toBeVisible()
