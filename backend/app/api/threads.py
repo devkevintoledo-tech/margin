@@ -9,8 +9,9 @@ from app.models.genre import Genre
 from app.models.thread import Thread
 from app.models.post import Post
 from app.models.user import User
-from app.schemas.thread import PostOut, ThreadCreate, ThreadOut, post_out_from_orm
+from app.schemas.thread import PostOut, ThreadCreate, ThreadOut, VoteIn, post_out_from_orm
 from app.services.auth import get_current_user
+from app.services.votes import set_vote
 
 router = APIRouter(prefix="/threads", tags=["threads"])
 
@@ -95,17 +96,30 @@ async def get_thread(
     )
 
 
-@router.post("/{id}/upvote", response_model=ThreadOut)
-async def upvote_thread(
+@router.put("/{id}/vote", response_model=ThreadOut)
+async def vote_thread(
     id: UUID,
+    payload: VoteIn,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> ThreadOut:
-    result = await db.execute(select(Thread).where(Thread.id == id))
-    thread = result.scalar_one_or_none()
+    thread = (
+        await db.execute(select(Thread).where(Thread.id == id))
+    ).scalar_one_or_none()
     if thread is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Thread not found")
-    thread.score += 1
-    await db.flush()
+
+    score = await set_vote(
+        db, user_id=current_user.id, thread_id=id, value=payload.value
+    )
     await db.refresh(thread)
-    return ThreadOut.model_validate(thread)
+    return ThreadOut(
+        id=thread.id,
+        title=thread.title,
+        user_id=thread.user_id,
+        book_id=thread.book_id,
+        genre_id=thread.genre_id,
+        score=score,
+        my_vote=payload.value,
+        created_at=thread.created_at,
+    )

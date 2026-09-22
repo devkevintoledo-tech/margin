@@ -3,6 +3,7 @@
 import uuid
 
 import pytest
+import pytest_asyncio
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
@@ -164,3 +165,66 @@ async def test_deleting_a_thread_cascades_its_votes(db_session, book):
 
     remaining = (await db_session.execute(select(Vote))).scalars().all()
     assert remaining == []
+
+
+@pytest_asyncio.fixture
+async def voted_thread_id(client, auth_headers, book):
+    resp = await client.post(
+        "/api/threads/",
+        json={"title": "Votable", "book_id": str(book.id)},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 201, resp.text
+    return resp.json()["id"]
+
+
+async def test_thread_vote_down_and_toggle_off(client, auth_headers, voted_thread_id):
+    down = await client.put(
+        f"/api/threads/{voted_thread_id}/vote", json={"value": -1}, headers=auth_headers
+    )
+    assert down.json()["score"] == -1
+    assert down.json()["my_vote"] == -1
+
+    cleared = await client.put(
+        f"/api/threads/{voted_thread_id}/vote", json={"value": 0}, headers=auth_headers
+    )
+    assert cleared.json()["score"] == 0
+    assert cleared.json()["my_vote"] == 0
+
+
+async def test_thread_vote_is_idempotent_over_http(client, auth_headers, voted_thread_id):
+    await client.put(
+        f"/api/threads/{voted_thread_id}/vote", json={"value": 1}, headers=auth_headers
+    )
+    again = await client.put(
+        f"/api/threads/{voted_thread_id}/vote", json={"value": 1}, headers=auth_headers
+    )
+    assert again.json()["score"] == 1
+
+
+async def test_thread_vote_rejects_out_of_range_value(client, auth_headers, voted_thread_id):
+    resp = await client.put(
+        f"/api/threads/{voted_thread_id}/vote", json={"value": 2}, headers=auth_headers
+    )
+    assert resp.status_code == 422
+
+
+async def test_thread_vote_requires_auth(client, voted_thread_id):
+    resp = await client.put(f"/api/threads/{voted_thread_id}/vote", json={"value": 1})
+    assert resp.status_code in (401, 403)
+
+
+async def test_thread_vote_unknown_id_is_404(client, auth_headers):
+    resp = await client.put(
+        f"/api/threads/{uuid.uuid4()}/vote", json={"value": 1}, headers=auth_headers
+    )
+    assert resp.status_code == 404
+
+
+async def test_old_upvote_endpoint_is_gone(client, auth_headers, voted_thread_id):
+    # No route matches that path any more, so Starlette 404s (405 would mean
+    # the path still exists under another method).
+    resp = await client.post(
+        f"/api/threads/{voted_thread_id}/upvote", headers=auth_headers
+    )
+    assert resp.status_code == 404
