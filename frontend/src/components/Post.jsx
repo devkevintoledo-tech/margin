@@ -11,7 +11,7 @@ function formatDate(dateStr) {
 }
 
 function Post({ post, threadId, depth = 0 }) {
-  const { id, content, upvotes = 0, author, created_at, replies = [] } = post
+  const { id, content, score = 0, author, created_at, replies = [] } = post
   const [showReply, setShowReply] = useState(false)
   const user = useAuthStore((s) => s.user)
   const upvoteMutation = useUpvotePost()
@@ -25,7 +25,7 @@ function Post({ post, threadId, depth = 0 }) {
       <div className="py-4">
         <div className="flex items-start gap-3">
           <VoteControl
-            count={upvotes}
+            count={score}
             onVote={handleUpvote}
             disabled={!user}
             pending={upvoteMutation.isPending}

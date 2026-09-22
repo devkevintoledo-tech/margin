@@ -66,7 +66,7 @@ async def get_genre_threads(
         select(
             Thread.id,
             Thread.title,
-            Thread.upvotes,
+            Thread.score,
             Thread.book_id,
             User.username.label("author"),
             Genre.slug.label("genre_slug"),
@@ -77,7 +77,7 @@ async def get_genre_threads(
         .outerjoin(Post, Post.thread_id == Thread.id)
         .where(Thread.genre_id == genre.id)
         .group_by(Thread.id, User.username, Genre.slug)
-        .order_by(Thread.upvotes.desc())
+        .order_by(Thread.score.desc())
         .limit(limit)
         .offset(offset)
     )

@@ -4,7 +4,7 @@ import useAuthStore from '../store/auth'
 import VoteControl from './VoteControl'
 
 function ThreadCard({ thread }) {
-  const { id, title, upvotes = 0, post_count = 0, book_id, genre_slug, author } = thread
+  const { id, title, score = 0, post_count = 0, book_id, genre_slug, author } = thread
   const upvoteMutation = useUpvoteThread()
   const user = useAuthStore((s) => s.user)
 
@@ -23,7 +23,7 @@ function ThreadCard({ thread }) {
     <div className="group flex border border-line hover:border-line-strong bg-bg hover:bg-surface transition-colors duration-fast">
       <VoteControl
         variant="rail"
-        count={upvotes}
+        count={score}
         onVote={handleUpvote}
         disabled={!user}
         pending={upvoteMutation.isPending}

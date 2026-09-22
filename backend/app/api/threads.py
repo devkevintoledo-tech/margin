@@ -89,7 +89,7 @@ async def get_thread(
         user_id=thread.user_id,
         book_id=thread.book_id,
         genre_id=thread.genre_id,
-        upvotes=thread.upvotes,
+        score=thread.score,
         created_at=thread.created_at,
         posts=roots,
     )
@@ -105,7 +105,7 @@ async def upvote_thread(
     thread = result.scalar_one_or_none()
     if thread is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Thread not found")
-    thread.upvotes += 1
+    thread.score += 1
     await db.flush()
     await db.refresh(thread)
     return ThreadOut.model_validate(thread)

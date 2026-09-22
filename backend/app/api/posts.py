@@ -53,7 +53,7 @@ async def upvote_post(
     post = result.scalar_one_or_none()
     if post is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Post not found")
-    post.upvotes += 1
+    post.score += 1
     await db.flush()
     await db.refresh(post)
     return post_out_from_orm(post)

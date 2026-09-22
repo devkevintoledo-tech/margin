@@ -25,7 +25,7 @@ class Post(Base):
         ForeignKey("posts.id", ondelete="SET NULL"), nullable=True, index=True
     )
     content: Mapped[str] = mapped_column(Text, nullable=False)
-    upvotes: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"), nullable=False)
+    score: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=datetime.utcnow,
@@ -45,3 +45,4 @@ class Post(Base):
     user: Mapped["User"] = relationship("User", back_populates="posts")  # noqa: F821
     parent: Mapped["Post | None"] = relationship("Post", remote_side="Post.id", back_populates="replies")
     replies: Mapped[list["Post"]] = relationship("Post", back_populates="parent")
+    votes: Mapped[list["Vote"]] = relationship("Vote", back_populates="post", cascade="all, delete-orphan")  # noqa: F821

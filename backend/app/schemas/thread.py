@@ -36,7 +36,7 @@ class ThreadOut(BaseModel):
     user_id: UUID
     book_id: UUID | None
     genre_id: UUID | None
-    upvotes: int
+    score: int
     created_at: datetime
 
 
@@ -47,7 +47,7 @@ class ThreadSummary(BaseModel):
 
     id: UUID
     title: str
-    upvotes: int
+    score: int
     post_count: int
     author: str
     genre_slug: str | None = None
@@ -68,7 +68,7 @@ class PostOut(BaseModel):
     user_id: UUID
     parent_id: UUID | None
     content: str
-    upvotes: int
+    score: int
     created_at: datetime
     updated_at: datetime
     replies: list["PostOut"] = []
@@ -90,7 +90,7 @@ def post_out_from_orm(post) -> "PostOut":
         user_id=post.user_id,
         parent_id=post.parent_id,
         content=post.content,
-        upvotes=post.upvotes,
+        score=post.score,
         created_at=post.created_at,
         updated_at=post.updated_at,
         replies=[],

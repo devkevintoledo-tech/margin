@@ -25,7 +25,7 @@ class Thread(Base):
     genre_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("genres.id", ondelete="CASCADE"), nullable=True, index=True
     )
-    upvotes: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default=text("0"))
+    score: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default=text("0"))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=datetime.utcnow,
@@ -38,3 +38,4 @@ class Thread(Base):
     book: Mapped["Book | None"] = relationship("Book", back_populates="threads")  # noqa: F821
     genre: Mapped["Genre | None"] = relationship("Genre", back_populates="threads")  # noqa: F821
     posts: Mapped[list["Post"]] = relationship("Post", back_populates="thread", cascade="all, delete-orphan")  # noqa: F821
+    votes: Mapped[list["Vote"]] = relationship("Vote", back_populates="thread", cascade="all, delete-orphan")  # noqa: F821
