@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useUpvotePost } from '../api/threads'
+import { useVotePost } from '../api/threads'
 import useAuthStore from '../store/auth'
 import PostComposer from './PostComposer'
 import VoteControl from './VoteControl'
@@ -11,13 +11,13 @@ function formatDate(dateStr) {
 }
 
 function Post({ post, threadId, depth = 0 }) {
-  const { id, content, score = 0, author, created_at, replies = [] } = post
+  const { id, content, score = 0, my_vote = 0, author, created_at, replies = [] } = post
   const [showReply, setShowReply] = useState(false)
   const user = useAuthStore((s) => s.user)
-  const upvoteMutation = useUpvotePost()
+  const voteMutation = useVotePost()
 
-  const handleUpvote = () => {
-    if (user) upvoteMutation.mutate({ id, threadId })
+  const handleVote = (value) => {
+    if (user) voteMutation.mutate({ id, value, threadId })
   }
 
   return (
@@ -25,10 +25,11 @@ function Post({ post, threadId, depth = 0 }) {
       <div className="py-4">
         <div className="flex items-start gap-3">
           <VoteControl
-            count={score}
-            onVote={handleUpvote}
+            score={score}
+            myVote={my_vote}
+            onVote={handleVote}
             disabled={!user}
-            pending={upvoteMutation.isPending}
+            pending={voteMutation.isPending}
           />
 
           <div className="flex-1 min-w-0">

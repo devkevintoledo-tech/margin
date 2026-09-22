@@ -24,12 +24,21 @@ export function useCreateThread() {
   })
 }
 
-export function useUpvoteThread() {
+export function useVoteThread() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: ({ id }) => client.post(`/threads/${id}/upvote`).then((r) => r.data),
-    onSuccess: (_, { id }) => {
+    mutationFn: ({ id, value }) =>
+      client.put(`/threads/${id}/vote`, { value }).then((r) => r.data),
+    // Voting from a list has to refresh that list, or the score the reader
+    // just changed stays stale on screen.
+    onSuccess: (_, { id, bookId, genreSlug }) => {
       queryClient.invalidateQueries({ queryKey: ['threads', String(id)] })
+      if (bookId) {
+        queryClient.invalidateQueries({ queryKey: ['books', String(bookId), 'threads'] })
+      }
+      if (genreSlug) {
+        queryClient.invalidateQueries({ queryKey: ['genres', genreSlug, 'threads'] })
+      }
     },
   })
 }
@@ -44,10 +53,11 @@ export function useCreatePost() {
   })
 }
 
-export function useUpvotePost() {
+export function useVotePost() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: ({ id, threadId }) => client.post(`/posts/${id}/upvote`).then((r) => r.data),
+    mutationFn: ({ id, value }) =>
+      client.put(`/posts/${id}/vote`, { value }).then((r) => r.data),
     onSuccess: (_, { threadId }) => {
       if (threadId) {
         queryClient.invalidateQueries({ queryKey: ['threads', String(threadId)] })
