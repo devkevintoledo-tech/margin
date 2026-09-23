@@ -273,8 +273,8 @@ middle-click, keyboard and screen readers, and asserted by `e2e/helpers.js:31`.
   absolutely-positioned `.panel-title` with `bg-bg` sitting on the top border.
   This renders `┌─ DISCUSSIONS ──┐` responsively; literal characters would break
   at every viewport width.
-- `.float` — the `DiagnosticFloat` base, also reused by `ShelfButton`'s dropdown
-  and the thread modal.
+- `.float` — the `DiagnosticFloat` base, also reused by `ShelfButton`'s dropdown.
+  The thread modal uses `.panel` instead, for its title notch.
 - `.eyebrow`, `.rule`, `.label`, `.alert-*` — retained, retokenised.
 - Blinking caret on the search prompt, disabled under `prefers-reduced-motion`.
   No new durations; `duration-fast` (120ms) and `duration-base` (180ms) still
@@ -327,7 +327,7 @@ still does not dominate (`visual-identity.md` §24 holds).
 
 Both pages carry a **duplicated `CreateThreadModal`** (`Book.jsx:10` and
 `Genre.jsx:118` are near-identical). Since both are rewritten anyway, they
-collapse into one `ThreadModal` styled as a centred float. This is the only
+collapse into one `ThreadModal` styled as a centred panel. This is the only
 refactor folded in — it is code the redesign is already touching.
 
 ### `Home`
