@@ -1,6 +1,7 @@
 import React, { Suspense } from 'react'
 import { Routes, Route } from 'react-router-dom'
 import Navbar from './components/Navbar'
+import StatusBar from './components/StatusBar'
 import { useMe } from './api/auth'
 
 const Home = React.lazy(() => import('./pages/Home'))
@@ -23,7 +24,7 @@ function App() {
   return (
     <div className="min-h-screen bg-bg text-ink">
       <Navbar />
-      <Suspense fallback={<div className="flex items-center justify-center h-64 text-ink-muted">Loading...</div>}>
+      <Suspense fallback={<div className="flex items-center justify-center h-64 text-ink-dim">Loading...</div>}>
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/books/:id" element={<Book />} />
@@ -38,6 +39,7 @@ function App() {
           <Route path="*" element={<NotFound />} />
         </Routes>
       </Suspense>
+      <StatusBar />
     </div>
   )
 }
