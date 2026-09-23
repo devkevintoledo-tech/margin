@@ -34,6 +34,25 @@ class VoteIn(BaseModel):
     value: int = Field(ge=-1, le=1)
 
 
+class ThreadBookRef(BaseModel):
+    """Just enough of a book to render a link and a path segment."""
+
+    model_config = {"from_attributes": True}
+
+    id: UUID
+    title: str
+
+
+class ThreadGenreRef(BaseModel):
+    """Just enough of a genre to render a link and a path segment."""
+
+    model_config = {"from_attributes": True}
+
+    id: UUID
+    name: str
+    slug: str
+
+
 class ThreadOut(BaseModel):
     model_config = {"from_attributes": True}
 
@@ -45,6 +64,10 @@ class ThreadOut(BaseModel):
     score: int
     my_vote: int = 0
     created_at: datetime
+    # The author's username, resolved by the route. Deliberately NOT named after
+    # the `Thread.user` relationship, and defaulted, so `model_validate` on an
+    # ORM object never triggers a lazy load (MissingGreenlet).
+    author: str | None = None
 
 
 class ThreadSummary(BaseModel):
@@ -80,18 +103,21 @@ class PostOut(BaseModel):
     my_vote: int = 0
     created_at: datetime
     updated_at: datetime
+    # See ThreadOut.author — same reasoning, resolved by the route.
+    author: str | None = None
     replies: list["PostOut"] = []
 
 
 PostOut.model_rebuild()
 
 
-def post_out_from_orm(post, my_vote: int = 0) -> "PostOut":
+def post_out_from_orm(post, my_vote: int = 0, author: str | None = None) -> "PostOut":
     """Build a PostOut from a Post ORM object using scalar columns only.
 
     Avoids `PostOut.model_validate(post)`, which would read the lazy
     `replies` relationship and trigger async IO outside the greenlet
-    (MissingGreenlet). Callers assemble the reply tree themselves.
+    (MissingGreenlet). Callers assemble the reply tree themselves, and resolve
+    `author` themselves for the same reason.
     """
     return PostOut(
         id=post.id,
@@ -103,5 +129,6 @@ def post_out_from_orm(post, my_vote: int = 0) -> "PostOut":
         my_vote=my_vote,
         created_at=post.created_at,
         updated_at=post.updated_at,
+        author=author,
         replies=[],
     )

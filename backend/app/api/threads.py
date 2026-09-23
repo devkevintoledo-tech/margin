@@ -10,7 +10,16 @@ from app.models.thread import Thread
 from app.models.post import Post
 from app.models.user import User
 from app.models.vote import Vote
-from app.schemas.thread import PostOut, ThreadCreate, ThreadOut, VoteIn, post_out_from_orm
+from app.models.book import Book
+from app.schemas.thread import (
+    PostOut,
+    ThreadBookRef,
+    ThreadCreate,
+    ThreadGenreRef,
+    ThreadOut,
+    VoteIn,
+    post_out_from_orm,
+)
 from app.services.auth import get_current_user, get_current_user_optional
 from app.services.votes import set_vote
 
@@ -50,11 +59,27 @@ async def create_thread(
         await db.flush()
 
     await db.refresh(thread)
-    return ThreadOut.model_validate(thread)
+    return ThreadOut(
+        id=thread.id,
+        title=thread.title,
+        user_id=thread.user_id,
+        book_id=thread.book_id,
+        genre_id=thread.genre_id,
+        score=thread.score,
+        my_vote=0,
+        created_at=thread.created_at,
+        author=current_user.username,
+    )
 
 
 class ThreadWithPosts(ThreadOut):
+    # The book/genre a thread hangs off, so the client can render a link and a
+    # path segment without a second round trip. These live here rather than on
+    # ThreadOut because their names collide with the `Thread.book`/`.genre`
+    # relationships, and ThreadOut is built by model_validate elsewhere.
     posts: list[PostOut] = []
+    book: ThreadBookRef | None = None
+    genre: ThreadGenreRef | None = None
 
 
 @router.get("/{id}", response_model=ThreadWithPosts)
@@ -99,8 +124,41 @@ async def get_thread(
             ).all()
             post_votes = {row.post_id: row.value for row in rows}
 
+    # Every username the page needs — the thread's author and each post's — in
+    # one IN query. Reading `post.user.username` instead would lazy-load per
+    # post, outside the greenlet.
+    author_ids = {thread.user_id} | {p.user_id for p in all_posts}
+    usernames = {
+        row.id: row.username
+        for row in (
+            await db.execute(select(User.id, User.username).where(User.id.in_(author_ids)))
+        ).all()
+    }
+
+    book_ref = None
+    if thread.book_id is not None:
+        book = (
+            await db.execute(select(Book.id, Book.title).where(Book.id == thread.book_id))
+        ).first()
+        if book is not None:
+            book_ref = ThreadBookRef(id=book.id, title=book.title)
+
+    genre_ref = None
+    if thread.genre_id is not None:
+        genre = (
+            await db.execute(
+                select(Genre.id, Genre.name, Genre.slug).where(Genre.id == thread.genre_id)
+            )
+        ).first()
+        if genre is not None:
+            genre_ref = ThreadGenreRef(id=genre.id, name=genre.name, slug=genre.slug)
+
     nodes = {
-        post.id: post_out_from_orm(post, my_vote=post_votes.get(post.id, 0))
+        post.id: post_out_from_orm(
+            post,
+            my_vote=post_votes.get(post.id, 0),
+            author=usernames.get(post.user_id),
+        )
         for post in all_posts
     }
     roots: list[PostOut] = []
@@ -121,7 +179,10 @@ async def get_thread(
         score=thread.score,
         my_vote=my_vote,
         created_at=thread.created_at,
+        author=usernames.get(thread.user_id),
         posts=roots,
+        book=book_ref,
+        genre=genre_ref,
     )
 
 
@@ -151,4 +212,7 @@ async def vote_thread(
         score=score,
         my_vote=payload.value,
         created_at=thread.created_at,
+        author=(
+            await db.execute(select(User.username).where(User.id == thread.user_id))
+        ).scalar_one_or_none(),
     )

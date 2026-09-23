@@ -41,7 +41,7 @@ async def create_post(
     db.add(post)
     await db.flush()
     await db.refresh(post)
-    return post_out_from_orm(post)
+    return post_out_from_orm(post, author=current_user.username)
 
 
 @router.put("/{id}/vote", response_model=PostOut)
@@ -57,4 +57,8 @@ async def vote_post(
 
     await set_vote(db, user_id=current_user.id, post_id=id, value=payload.value)
     await db.refresh(post)
-    return post_out_from_orm(post, my_vote=payload.value)
+    # The voter is not necessarily the author, so resolve the author explicitly.
+    author = (
+        await db.execute(select(User.username).where(User.id == post.user_id))
+    ).scalar_one_or_none()
+    return post_out_from_orm(post, my_vote=payload.value, author=author)

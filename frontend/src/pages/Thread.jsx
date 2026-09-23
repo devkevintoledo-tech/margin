@@ -60,7 +60,9 @@ function Thread() {
     segments.push({ label: 'genres', to: '/' })
     segments.push({ label: thread.genre.name, to: `/genres/${thread.genre.slug}` })
   }
-  segments.push({ label: `thread ${resolvedId}` })
+  // The title, not the id: a path segment should say where you are, and a
+  // truncated UUID says nothing.
+  segments.push({ label: thread.title })
 
   return (
     <main className="max-w-shell mx-auto px-4 py-6 flex flex-col gap-6">
