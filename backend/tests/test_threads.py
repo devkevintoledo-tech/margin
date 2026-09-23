@@ -1,16 +1,16 @@
-"""Thread creation (book XOR genre target), fetch, and upvote."""
+"""Thread creation (work XOR genre target), fetch, and upvote."""
 
 
-async def test_create_book_thread_and_fetch(client, auth_headers, book):
+async def test_create_work_thread_and_fetch(client, auth_headers, work):
     resp = await client.post(
         "/api/threads/",
-        json={"title": "What did you make of the ending?", "book_id": str(book.id)},
+        json={"title": "What did you make of the ending?", "work_id": str(work.id)},
         headers=auth_headers,
     )
     assert resp.status_code == 201, resp.text
     thread = resp.json()
     assert thread["title"] == "What did you make of the ending?"
-    assert thread["book_id"] == str(book.id)
+    assert thread["work_id"] == str(work.id)
     assert thread["score"] == 0
 
     got = await client.get(f"/api/threads/{thread['id']}")
@@ -19,10 +19,10 @@ async def test_create_book_thread_and_fetch(client, auth_headers, book):
     assert got.json()["posts"] == []
 
 
-async def test_create_thread_with_opening_post(client, auth_headers, book):
+async def test_create_thread_with_opening_post(client, auth_headers, work):
     resp = await client.post(
         "/api/threads/",
-        json={"title": "Chapter 3 discussion", "book_id": str(book.id), "content": "Opening thoughts."},
+        json={"title": "Chapter 3 discussion", "work_id": str(work.id), "content": "Opening thoughts."},
         headers=auth_headers,
     )
     assert resp.status_code == 201, resp.text
@@ -35,7 +35,7 @@ async def test_create_thread_with_opening_post(client, auth_headers, book):
     assert posts[0]["content"] == "Opening thoughts."
 
 
-async def test_thread_requires_exactly_one_target(client, auth_headers, book):
+async def test_thread_requires_exactly_one_target(client, auth_headers, work):
     # Neither target → validation error.
     neither = await client.post(
         "/api/threads/", json={"title": "No target"}, headers=auth_headers
@@ -45,23 +45,23 @@ async def test_thread_requires_exactly_one_target(client, auth_headers, book):
     # Both targets → validation error.
     both = await client.post(
         "/api/threads/",
-        json={"title": "Two targets", "book_id": str(book.id), "genre_slug": "fantasy"},
+        json={"title": "Two targets", "work_id": str(work.id), "genre_slug": "fantasy"},
         headers=auth_headers,
     )
     assert both.status_code == 422
 
 
-async def test_create_thread_requires_auth(client, book):
+async def test_create_thread_requires_auth(client, work):
     resp = await client.post(
-        "/api/threads/", json={"title": "Anon thread", "book_id": str(book.id)}
+        "/api/threads/", json={"title": "Anon thread", "work_id": str(work.id)}
     )
     assert resp.status_code in (401, 403)
 
 
-async def test_thread_vote_sets_score(client, auth_headers, book):
+async def test_thread_vote_sets_score(client, auth_headers, work):
     created = await client.post(
         "/api/threads/",
-        json={"title": "Vote me", "book_id": str(book.id)},
+        json={"title": "Vote me", "work_id": str(work.id)},
         headers=auth_headers,
     )
     thread_id = created.json()["id"]
@@ -74,8 +74,8 @@ async def test_thread_vote_sets_score(client, auth_headers, book):
     assert up.json()["my_vote"] == 1
 
 
-async def test_thread_detail_names_authors_and_anchor(client, auth_headers, book):
-    """The detail response carries usernames and the book it hangs off.
+async def test_thread_detail_names_authors_and_anchor(client, auth_headers, work):
+    """The detail response carries usernames and the work it hangs off.
 
     The frontend colours people and renders a filesystem path from these, and
     both are resolved with explicit queries rather than ORM relationships, so a
@@ -87,7 +87,7 @@ async def test_thread_detail_names_authors_and_anchor(client, auth_headers, book
         "/api/threads/",
         json={
             "title": "Is Anarres a utopia?",
-            "book_id": str(book.id),
+            "work_id": str(work.id),
             "content": "Opening argument.",
         },
         headers=auth_headers,
@@ -108,7 +108,7 @@ async def test_thread_detail_names_authors_and_anchor(client, auth_headers, book
 
     detail = (await client.get(f"/api/threads/{thread_id}")).json()
     assert detail["author"] == me["username"]
-    assert detail["book"] == {"id": str(book.id), "title": book.title}
+    assert detail["work"] == {"id": str(work.id), "title": work.title}
     assert detail["genre"] is None
 
     root = detail["posts"][0]
@@ -140,7 +140,7 @@ async def test_genre_thread_detail_carries_its_genre(client, auth_headers, db_se
         "name": genre.name,
         "slug": genre.slug,
     }
-    assert detail["book"] is None
+    assert detail["work"] is None
 
 
 async def _other_user(client):
@@ -160,17 +160,17 @@ async def _other_user(client):
 
 
 async def test_thread_listing_carries_created_at_for_the_age_column(
-    client, auth_headers, book
+    client, auth_headers, work
 ):
-    """The book/genre listings render a thread's age, so they must date it."""
+    """The work/genre listings render a thread's age, so they must date it."""
     created = await client.post(
         "/api/threads/",
-        json={"title": "Dated thread", "book_id": str(book.id)},
+        json={"title": "Dated thread", "work_id": str(work.id)},
         headers=auth_headers,
     )
     assert created.status_code == 201, created.text
 
-    rows = (await client.get(f"/api/books/{book.id}/threads")).json()
+    rows = (await client.get(f"/api/works/{work.id}/threads")).json()
     row = next(r for r in rows if r["id"] == created.json()["id"])
     assert row["created_at"] == created.json()["created_at"]
     assert row["author"]
