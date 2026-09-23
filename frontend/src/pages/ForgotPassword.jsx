@@ -2,10 +2,13 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useForgotPassword } from '../api/auth'
 import AuthLayout from '../components/AuthLayout'
+import { useStatusBar } from '../store/status'
 
 const CONFIRMATION = 'If an account with that email exists, a reset link has been sent.'
 
 function ForgotPassword() {
+  useStatusBar({ mode: 'AUTH', path: '~/forgot-password', facts: [] })
+
   const [email, setEmail] = useState('')
   const { mutate: forgotPassword, isPending, isSuccess } = useForgotPassword()
 

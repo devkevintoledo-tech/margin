@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { freshUser, registerViaUi } from './helpers'
+import { freshUser, registerViaUi, signedInAs } from './helpers'
 
 // Login / registration is the foundational journey — no external API needed.
 test.describe('auth', () => {
@@ -7,7 +7,7 @@ test.describe('auth', () => {
     const user = await registerViaUi(page)
 
     // Logged in: navbar shows the username and a logout control.
-    await expect(page.getByText(user.username)).toBeVisible()
+    await expect(signedInAs(page, user)).toBeVisible()
     await page.getByRole('button', { name: 'Out' }).click()
     await expect(page.getByRole('link', { name: 'Sign in' })).toBeVisible()
 
@@ -16,7 +16,7 @@ test.describe('auth', () => {
     await page.getByRole('textbox').first().fill(user.email)
     await page.locator('input[type="password"]').fill(user.password)
     await page.getByRole('button', { name: /sign in/i }).click()
-    await expect(page.getByText(user.username)).toBeVisible()
+    await expect(signedInAs(page, user)).toBeVisible()
   })
 
   test('rejects a wrong password', async ({ page }) => {

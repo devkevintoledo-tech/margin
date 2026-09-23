@@ -157,3 +157,20 @@ async def _other_user(client):
     )
     assert resp.status_code == 201, resp.text
     return {"Authorization": f"Bearer {resp.json()['token']}"}
+
+
+async def test_thread_listing_carries_created_at_for_the_age_column(
+    client, auth_headers, book
+):
+    """The book/genre listings render a thread's age, so they must date it."""
+    created = await client.post(
+        "/api/threads/",
+        json={"title": "Dated thread", "book_id": str(book.id)},
+        headers=auth_headers,
+    )
+    assert created.status_code == 201, created.text
+
+    rows = (await client.get(f"/api/books/{book.id}/threads")).json()
+    row = next(r for r in rows if r["id"] == created.json()["id"])
+    assert row["created_at"] == created.json()["created_at"]
+    assert row["author"]

@@ -3,8 +3,11 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useRegister } from '../api/auth'
 import { errorMessage } from '../api/errors'
 import AuthLayout from '../components/AuthLayout'
+import { useStatusBar } from '../store/status'
 
 function Register() {
+  useStatusBar({ mode: 'AUTH', path: '~/register', facts: [] })
+
   const [email, setEmail] = useState('')
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')

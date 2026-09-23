@@ -85,6 +85,7 @@ async def get_genre_threads(
             Thread.score,
             my_vote,
             Thread.book_id,
+            Thread.created_at,
             User.username.label("author"),
             Genre.slug.label("genre_slug"),
             func.count(Post.id).label("post_count"),

@@ -3,10 +3,13 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useLogin } from '../api/auth'
 import { errorMessage } from '../api/errors'
 import AuthLayout from '../components/AuthLayout'
+import { useStatusBar } from '../store/status'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 function Login() {
+  useStatusBar({ mode: 'AUTH', path: '~/login', facts: [] })
+
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [formError, setFormError] = useState('')

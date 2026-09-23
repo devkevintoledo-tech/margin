@@ -20,8 +20,14 @@ export async function registerViaUi(page, user = freshUser()) {
   await passwordFields.nth(0).fill(user.password) // password
   await passwordFields.nth(1).fill(user.password) // confirm password
   await page.getByRole('button', { name: /create account/i }).click()
-  await expect(page.getByText(user.username)).toBeVisible()
+  await expect(signedInAs(page, user)).toBeVisible()
   return user
+}
+
+// The navbar's profile link is the signed-in signal. Matching the bare username
+// text is ambiguous: the pinned status bar shows it too.
+export function signedInAs(page, user) {
+  return page.locator(`a[href="/profile/${user.username}"]`)
 }
 
 // Opens the first book returned by a search and waits for the book detail page.

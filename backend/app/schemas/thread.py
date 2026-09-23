@@ -81,6 +81,8 @@ class ThreadSummary(BaseModel):
     my_vote: int = 0
     post_count: int
     author: str
+    # The listing renders an age column; without this it had no date to format.
+    created_at: datetime
     genre_slug: str | None = None
     book_id: UUID | None = None
 
