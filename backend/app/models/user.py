@@ -39,3 +39,4 @@ class User(Base):
     shelves: Mapped[list["Shelf"]] = relationship("Shelf", back_populates="user", cascade="all, delete-orphan")  # noqa: F821
     threads: Mapped[list["Thread"]] = relationship("Thread", back_populates="user", cascade="all, delete-orphan")  # noqa: F821
     posts: Mapped[list["Post"]] = relationship("Post", back_populates="user", cascade="all, delete-orphan")  # noqa: F821
+    votes: Mapped[list["Vote"]] = relationship("Vote", back_populates="user", cascade="all, delete-orphan")  # noqa: F821

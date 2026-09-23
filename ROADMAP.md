@@ -40,7 +40,7 @@ Round out the spec'd v1 behaviors that are schema-ready but not exposed.
 | ✅ | Google Books search + book cache, genre pages, shelves | `backend/app/api/{books,genres,users}.py`, `backend/app/services/google_books.py` |
 | ✅ | Threads (book XOR genre), 2-level posts/replies, upvotes | `backend/app/api/{threads,posts}.py`, `frontend/src/pages/Thread.jsx` |
 | ⬜ | **Edit/delete threads & posts** — no endpoints today; content is immutable. | `backend/app/api/{threads,posts}.py`, `frontend/src/components/Post.jsx` |
-| ⬜ | **Vote toggling / downvotes** — upvote only increments; add un-vote and per-user vote tracking (new `votes` table). | `backend/app/api/{threads,posts}.py`, new model |
+| ✅ | **Vote toggling / downvotes** — `votes` table (one row per user per thread/post, ±1), idempotent `PUT /threads/{id}/vote` and `PUT /posts/{id}/vote`; `upvotes` is now a signed `score`. | `backend/app/models/vote.py`, `backend/app/services/votes.py`, `backend/app/api/{threads,posts}.py` |
 | ⬜ | **Profile editing** — `User` has only `avatar_url`; add bio + edit endpoint/page. | `backend/app/models/user.py`, `backend/app/api/users.py`, `frontend/src/pages/Profile.jsx` |
 | ✅ | **Book metadata enrichment** — Google Books search now caches description, ISBN-13, publisher, page count, ratings, language, categories, and links; the book page surfaces them. Categories auto-map to a seeded genre. | `backend/app/api/books.py`, `backend/app/services/google_books.py`, `frontend/src/pages/Book.jsx` |
 | ✅ | **Duplicate search results** — service-layer dedup collapses duplicate editions by normalized `(title, first author)`, keeping the richest-metadata edition wholesale at the first-seen position; relevance order preserved. | `backend/app/services/google_books.py` |

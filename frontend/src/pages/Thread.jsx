@@ -56,7 +56,7 @@ function Thread() {
         <h1 className="font-serif text-3xl md:text-4xl text-ink leading-tight">{thread.title}</h1>
         <div className="flex items-center gap-4 text-ink-muted text-xs uppercase tracking-wider">
           {thread.author && <span>by {thread.author}</span>}
-          <span className="text-accent-ink">{thread.upvotes ?? 0} upvotes</span>
+          <span className="text-accent-ink">{thread.score ?? 0} points</span>
           <span>{posts.length} posts</span>
         </div>
       </div>

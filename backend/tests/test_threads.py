@@ -11,7 +11,7 @@ async def test_create_book_thread_and_fetch(client, auth_headers, book):
     thread = resp.json()
     assert thread["title"] == "What did you make of the ending?"
     assert thread["book_id"] == str(book.id)
-    assert thread["upvotes"] == 0
+    assert thread["score"] == 0
 
     got = await client.get(f"/api/threads/{thread['id']}")
     assert got.status_code == 200
@@ -58,14 +58,17 @@ async def test_create_thread_requires_auth(client, book):
     assert resp.status_code in (401, 403)
 
 
-async def test_upvote_thread_increments(client, auth_headers, book):
+async def test_thread_vote_sets_score(client, auth_headers, book):
     created = await client.post(
         "/api/threads/",
-        json={"title": "Upvote me", "book_id": str(book.id)},
+        json={"title": "Vote me", "book_id": str(book.id)},
         headers=auth_headers,
     )
     thread_id = created.json()["id"]
 
-    up = await client.post(f"/api/threads/{thread_id}/upvote", headers=auth_headers)
-    assert up.status_code == 200
-    assert up.json()["upvotes"] == 1
+    up = await client.put(
+        f"/api/threads/{thread_id}/vote", json={"value": 1}, headers=auth_headers
+    )
+    assert up.status_code == 200, up.text
+    assert up.json()["score"] == 1
+    assert up.json()["my_vote"] == 1

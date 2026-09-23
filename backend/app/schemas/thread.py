@@ -28,6 +28,12 @@ class ThreadCreate(BaseModel):
         return self
 
 
+class VoteIn(BaseModel):
+    """A vote to set: 1 up, -1 down, 0 clears it."""
+
+    value: int = Field(ge=-1, le=1)
+
+
 class ThreadOut(BaseModel):
     model_config = {"from_attributes": True}
 
@@ -36,7 +42,8 @@ class ThreadOut(BaseModel):
     user_id: UUID
     book_id: UUID | None
     genre_id: UUID | None
-    upvotes: int
+    score: int
+    my_vote: int = 0
     created_at: datetime
 
 
@@ -47,7 +54,8 @@ class ThreadSummary(BaseModel):
 
     id: UUID
     title: str
-    upvotes: int
+    score: int
+    my_vote: int = 0
     post_count: int
     author: str
     genre_slug: str | None = None
@@ -68,7 +76,8 @@ class PostOut(BaseModel):
     user_id: UUID
     parent_id: UUID | None
     content: str
-    upvotes: int
+    score: int
+    my_vote: int = 0
     created_at: datetime
     updated_at: datetime
     replies: list["PostOut"] = []
@@ -77,7 +86,7 @@ class PostOut(BaseModel):
 PostOut.model_rebuild()
 
 
-def post_out_from_orm(post) -> "PostOut":
+def post_out_from_orm(post, my_vote: int = 0) -> "PostOut":
     """Build a PostOut from a Post ORM object using scalar columns only.
 
     Avoids `PostOut.model_validate(post)`, which would read the lazy
@@ -90,7 +99,8 @@ def post_out_from_orm(post) -> "PostOut":
         user_id=post.user_id,
         parent_id=post.parent_id,
         content=post.content,
-        upvotes=post.upvotes,
+        score=post.score,
+        my_vote=my_vote,
         created_at=post.created_at,
         updated_at=post.updated_at,
         replies=[],
