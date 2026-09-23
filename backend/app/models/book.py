@@ -53,6 +53,9 @@ class Book(Base):
     genre_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("genres.id", ondelete="SET NULL"), nullable=True, index=True
     )
+    work_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("works.id", ondelete="CASCADE"), nullable=True, index=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=datetime.utcnow,
@@ -62,5 +65,8 @@ class Book(Base):
 
     # Relationships
     genre: Mapped["Genre | None"] = relationship("Genre", back_populates="books")  # noqa: F821
+    work: Mapped["Work | None"] = relationship(  # noqa: F821
+        "Work", back_populates="editions", foreign_keys=[work_id]
+    )
     shelves: Mapped[list["Shelf"]] = relationship("Shelf", back_populates="book", cascade="all, delete-orphan")  # noqa: F821
     threads: Mapped[list["Thread"]] = relationship("Thread", back_populates="book")  # noqa: F821

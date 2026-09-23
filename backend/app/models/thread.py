@@ -22,6 +22,9 @@ class Thread(Base):
     book_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("books.id", ondelete="CASCADE"), nullable=True, index=True
     )
+    work_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("works.id", ondelete="CASCADE"), nullable=True, index=True
+    )
     genre_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("genres.id", ondelete="CASCADE"), nullable=True, index=True
     )
@@ -36,6 +39,7 @@ class Thread(Base):
     # Relationships
     user: Mapped["User"] = relationship("User", back_populates="threads")  # noqa: F821
     book: Mapped["Book | None"] = relationship("Book", back_populates="threads")  # noqa: F821
+    work: Mapped["Work | None"] = relationship("Work", back_populates="threads")  # noqa: F821
     genre: Mapped["Genre | None"] = relationship("Genre", back_populates="threads")  # noqa: F821
     posts: Mapped[list["Post"]] = relationship("Post", back_populates="thread", cascade="all, delete-orphan")  # noqa: F821
     votes: Mapped[list["Vote"]] = relationship("Vote", back_populates="thread", cascade="all, delete-orphan")  # noqa: F821
