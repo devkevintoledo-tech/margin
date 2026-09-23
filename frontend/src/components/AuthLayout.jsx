@@ -6,7 +6,7 @@ import { Link } from 'react-router-dom'
  */
 function AuthLayout({ title, subtitle, children, footer }) {
   return (
-    <div className="min-h-[calc(100vh-51px)] bg-bg flex items-center justify-center px-4 py-16">
+    <div className="min-h-[calc(100vh-var(--shell-nav-h))] bg-bg flex items-center justify-center px-4 py-16">
       <div className="w-full max-w-sm">
         <div className="text-center mb-10">
           <Link
