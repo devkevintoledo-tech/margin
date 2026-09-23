@@ -92,28 +92,40 @@ Vite + React 18 + React Router + Tailwind.
 
 ### Design system (`frontend/src/index.css` + `frontend/tailwind.config.js`)
 
-MARGIN's visual identity is dark, editorial, and deliberately not Goodreads. The
-brief is `docs/new-instructions.md`; the decisions taken from it (and the ones
-rejected) are recorded in [`docs/visual-identity.md`](docs/visual-identity.md).
-Read that before changing anything visual.
+MARGIN's visual identity is a terminal: dark, monospaced, character-gridded, and
+colorized by meaning. The decisions are recorded in
+[`docs/visual-identity.md`](docs/visual-identity.md) and specified in
+[`docs/superpowers/specs/2026-09-23-terminal-ui-design.md`](docs/superpowers/specs/2026-09-23-terminal-ui-design.md).
+Read those before changing anything visual.
 
 - **Tokens are the only source of color.** Values live as raw `R G B` channels on
   `:root` in `index.css` and map to semantic Tailwind utilities in
   `tailwind.config.js` (so `/opacity` modifiers still work). **Never write a raw
   `zinc-*`, hex, or arbitrary color in a component** — add a token instead.
-  Surfaces: `bg` → `surface` → `raised`; borders: `line`, `line-strong`; text:
-  `ink`, `ink-dim`, `ink-muted`.
-- **Three accents, three jobs.** `accent` fills only; `accent-hover` fill hover
-  only; `accent-ink` is accent-colored *text* on dark and is **never** a fill.
-  Swapping them breaks WCAG AA. `ink-muted` (3.3:1) is decorative text only —
-  never body copy.
-- **Serif is reserved for works.** Book titles and thread titles are Playfair
-  Display. Everything structural — nav, section headings, genre names, metadata,
-  buttons, page headlines — is Space Grotesk.
+  Surfaces: `bg` → `panel` → `highlight`; borders: `line`, `line-strong`; text:
+  `ink`, `ink-dim`, `ink-muted`, `ink-faint`.
+- **Text tiers are a contrast contract, asserted in `src/design/tokens.test.js`.**
+  `ink` (10.59:1) body · `ink-dim` (8.10:1) secondary, metadata, timestamps ·
+  `ink-muted` (4.10:1) **control borders and decoration only — never
+  informational text** · `ink-faint` (2.76:1) **`aria-hidden` glyphs only**.
+- **Fills invert.** A filled control is `bg-accent text-bg`. White on the accent
+  is 2.52:1 and fails AA, so the conventional filled button does not exist here.
+- **Color means one thing each.** `accent` interactive · `path` routes and
+  references · `user` people · `ok` positive · `danger` negative · `warning`
+  mutated state. Nothing means anything by color alone.
+- **Serif is reserved for book titles.** Everything else — including thread
+  titles — is JetBrains Mono.
 - **Reuse the component classes** in the `@layer components` block (`.btn-primary`,
-  `.btn-secondary`, `.btn-ghost`, `.input`, `.label`, `.panel`, `.eyebrow`,
-  `.rule`, `.alert-danger`, `.alert-muted`) rather than re-deriving them. Shared
-  shells live in `components/` (`AuthLayout`, `VoteControl`).
+  `.btn-secondary`, `.btn-ghost`, `.input`, `.label`, `.panel`, `.panel-title`,
+  `.float`, `.prompt`, `.caret`, `.eyebrow`, `.rule`, `.alert-danger`,
+  `.alert-muted`) rather than re-deriving them. Shared shells live in
+  `components/` (`AuthLayout`, `VoteControl`, `PathHeader`, `StatusBar`,
+  `DiagnosticFloat`, `DataTable`, `ThreadModal`).
+- **Box-drawing frames and rails are CSS borders, not characters.** Only tree
+  elbows (`├─`, `└─`), sort carets (`▾`/`▴`) and the float marker (`■`) are
+  literal glyphs, and every one is `aria-hidden`.
+- **Measure in `ch`**: `max-w-prose` (72ch), `max-w-table` (96ch),
+  `max-w-shell` (120ch). In a monospaced layout that is the grid.
 - **No new border radii, shadows, font sizes, or durations.** Corners are square
   by design; motion is `duration-fast` (120ms) or `duration-base` (180ms).
 - **Layout**: dense but organized — grids, rules and dividers over floating

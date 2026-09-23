@@ -119,3 +119,24 @@ serif). Two remain and are **not** decided here:
 1. **§11** — the Takes interaction model (AGREE/DISAGREE vs. up/down voting).
 2. **§14** — the review reaction system. Moot while §14 is rejected; revisit only
    if the no-ratings decision is reversed.
+
+---
+
+## 6. Superseded by the terminal redesign (2026-09-23)
+
+Spec: [`docs/superpowers/specs/2026-09-23-terminal-ui-design.md`](superpowers/specs/2026-09-23-terminal-ui-design.md)
+
+§1's accent, UI sans and three-blue split are **superseded**. What replaced them,
+and why the original reasoning no longer applies:
+
+| §1 decision | Superseded by | Why |
+| --- | --- | --- |
+| Cobalt `#2B5FE3` accent | Tokyo Night blue `#7AA2F7` | The blue lineage is kept deliberately — the identity evolves rather than snaps — but the palette is now an established terminal scheme, which supplies a coherent semantic set (path/user/ok/danger/warning) that a single hand-picked accent could not. |
+| Space Grotesk UI sans | JetBrains Mono | The whole UI is monospaced. Space Grotesk has no role left. |
+| Three-blue fill/text split (`accent`/`accent-hover`/`accent-ink`) | One `accent` plus inversion | White on `#7AA2F7` is 2.52:1, so filled buttons take `text-bg` instead. Inversion is what a terminal does for selected text, and it collapses three tokens to one. |
+| Playfair for book **and** thread titles | Playfair for book titles only | A thread is structure, not a work. The single serif moment is what keeps the UI from reading as a recolored hacker toy. |
+| `ink-muted` at 3.3:1 for metadata | `ink-dim` at 8.10:1 for metadata | The muted tier splits three ways so no informational text sits below AA. Stricter than what this record originally allowed. |
+
+**Unchanged and still binding:** no star ratings or reviews (§1), covers stay
+large and undimmed (§2 §13), voting stays de-emphasised (§24), square corners,
+and the §36 "does it look like Goodreads" test.

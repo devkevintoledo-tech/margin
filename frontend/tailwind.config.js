@@ -39,13 +39,6 @@ export default {
         ok: token('ok'),
         danger: token('danger'),
         warning: token('warning'),
-
-        // Migration aliases. Unconverted pages still reference these; the final
-        // task deletes them along with their last consumer.
-        surface: token('panel'),
-        raised: token('highlight'),
-        'accent-ink': token('accent'),
-        success: token('ok'),
       },
       fontFamily: {
         // Mono carries the whole UI. Serif is reserved for BOOK titles only —
