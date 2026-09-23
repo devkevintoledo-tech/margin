@@ -1,90 +1,44 @@
 import { useState } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useBook, useBookThreads } from '../api/books'
-import { useCreateThread } from '../api/threads'
-import { errorMessage } from '../api/errors'
+import { useVoteThread } from '../api/threads'
 import ShelfButton from '../components/ShelfButton'
-import ThreadCard from '../components/ThreadCard'
+import PathHeader from '../components/PathHeader'
+import DataTable from '../components/DataTable'
+import ThreadModal from '../components/ThreadModal'
+import VoteControl from '../components/VoteControl'
+import { relativeTime } from '../components/Post'
+import { useStatusBar } from '../store/status'
+import { slug } from '../lib/slug'
 import useAuthStore from '../store/auth'
-
-function CreateThreadModal({ bookId, onClose }) {
-  const [title, setTitle] = useState('')
-  const [body, setBody] = useState('')
-  const mutation = useCreateThread()
-  const navigate = useNavigate()
-
-  const handleSubmit = (e) => {
-    e.preventDefault()
-    if (!title.trim()) return
-    mutation.mutate(
-      { book_id: bookId, title: title.trim(), content: body.trim() },
-      {
-        onSuccess: (data) => {
-          navigate(`/books/${bookId}/threads/${data.id}`)
-        },
-      }
-    )
-  }
-
-  return (
-    <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
-      <div className="panel border-line-strong w-full max-w-lg flex flex-col gap-5 p-6">
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold uppercase tracking-eyebrow text-ink">Start a Thread</h2>
-          <button onClick={onClose} aria-label="Close" className="text-ink-muted hover:text-ink text-lg">
-            ✕
-          </button>
-        </div>
-        <form onSubmit={handleSubmit} className="flex flex-col gap-3">
-          <input
-            type="text"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="Thread title"
-            required
-            className="input bg-raised"
-          />
-          <textarea
-            value={body}
-            onChange={(e) => setBody(e.target.value)}
-            placeholder="Opening post (optional)"
-            rows={4}
-            className="input bg-raised resize-none"
-          />
-          {mutation.isError && (
-            <p className="text-danger text-xs">{errorMessage(mutation.error, 'Failed to create thread.')}</p>
-          )}
-          <div className="flex justify-end gap-2">
-            <button type="button" onClick={onClose} className="btn-ghost">
-              Cancel
-            </button>
-            <button type="submit" disabled={mutation.isPending || !title.trim()} className="btn-primary">
-              {mutation.isPending ? 'Creating...' : 'Create Thread'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  )
-}
 
 function Book() {
   const { id } = useParams()
+  const navigate = useNavigate()
   const [showModal, setShowModal] = useState(false)
   const user = useAuthStore((s) => s.user)
+  const voteMutation = useVoteThread()
 
   const { data: book, isLoading: bookLoading, isError: bookError } = useBook(id)
   const { data: threads, isLoading: threadsLoading } = useBookThreads(id)
 
+  const threadCount = threads?.length ?? 0
+
+  useStatusBar({
+    mode: 'BOOK',
+    path: book ? `~/books/${slug(book.title)}` : '~/books',
+    facts: [`${threadCount} ${threadCount === 1 ? 'thread' : 'threads'}`],
+  })
+
   if (bookLoading) {
     return (
-      <main className="max-w-5xl mx-auto px-6 py-10">
+      <main className="max-w-shell mx-auto px-4 py-8">
         <div className="animate-pulse flex gap-8">
-          <div className="w-44 aspect-[2/3] bg-surface shrink-0" />
+          <div className="w-44 aspect-[2/3] bg-panel shrink-0" />
           <div className="flex flex-col gap-3 flex-1">
-            <div className="h-10 bg-surface w-2/3" />
-            <div className="h-4 bg-surface w-1/3" />
-            <div className="h-20 bg-surface w-full mt-4" />
+            <div className="h-10 bg-panel w-2/3" />
+            <div className="h-4 bg-panel w-1/3" />
+            <div className="h-20 bg-panel w-full mt-4" />
           </div>
         </div>
       </main>
@@ -93,111 +47,167 @@ function Book() {
 
   if (bookError || !book) {
     return (
-      <main className="max-w-5xl mx-auto px-6 py-10">
-        <p className="text-danger">Failed to load book.</p>
+      <main className="max-w-shell mx-auto px-4 py-8">
+        <p className="alert-danger">Failed to load book.</p>
       </main>
     )
   }
 
-  const threadCount = threads?.length ?? 0
+  const columns = [
+    {
+      key: 'score',
+      label: 'Score',
+      align: 'right',
+      width: 8,
+      render: (row) => (
+        <VoteControl
+          variant="row"
+          score={row.score ?? 0}
+          myVote={row.my_vote ?? 0}
+          onVote={(value) => user && voteMutation.mutate({ id: row.id, value, bookId: id })}
+          disabled={!user}
+          pending={voteMutation.isPending}
+        />
+      ),
+    },
+    {
+      key: 'title',
+      label: 'Thread',
+      render: (row) => (
+        <Link
+          to={`/books/${id}/threads/${row.id}`}
+          className="text-ink hover:text-accent transition-colors duration-fast"
+        >
+          {row.title}
+        </Link>
+      ),
+    },
+    {
+      key: 'author',
+      label: 'By',
+      width: 16,
+      render: (row) => <span className="text-user">{row.author}</span>,
+    },
+    {
+      key: 'post_count',
+      label: 'Repl',
+      align: 'right',
+      width: 6,
+      render: (row) => <span className="text-ink-dim tabular-nums">{row.post_count ?? 0}</span>,
+    },
+    {
+      key: 'created_at',
+      label: 'Age',
+      align: 'right',
+      width: 6,
+      render: (row) => <span className="text-ink-dim tabular-nums">{relativeTime(row.created_at)}</span>,
+    },
+  ]
 
   return (
-    <main className="max-w-5xl mx-auto px-6 py-10 flex flex-col gap-12">
-      {/* Book hero — the cover is the visual anchor of the page (§13). */}
+    <main className="max-w-shell mx-auto px-4 py-6 flex flex-col gap-10">
+      <PathHeader
+        segments={[{ label: 'books', to: '/' }, { label: book.title }]}
+      />
+
+      {/* The cover is the only saturated thing on the page and stays that way —
+          large, full colour, never dimmed. */}
       <section className="flex flex-col sm:flex-row gap-8">
         <div className="shrink-0 w-44 sm:w-56">
           {book.cover_url ? (
             <img src={book.cover_url} alt={book.title} className="w-full border border-line" />
           ) : (
-            <div className="w-full aspect-[2/3] bg-surface border border-line flex items-center justify-center text-ink-muted text-xs">
+            <div className="w-full aspect-[2/3] bg-panel border border-line flex items-center justify-center text-ink-dim text-xs">
               No Cover
             </div>
           )}
         </div>
 
-        <div className="flex flex-col gap-5 flex-1 min-w-0">
+        <div className="flex flex-col gap-4 flex-1 min-w-0">
           <div className="flex flex-col gap-1">
-            <h1 className="font-serif text-4xl md:text-5xl text-ink leading-tight">{book.title}</h1>
-            {book.subtitle && <p className="font-serif italic text-ink-dim text-lg">{book.subtitle}</p>}
-            <p className="text-ink-dim text-base uppercase tracking-widest mt-1">{book.author}</p>
+            {/* Serif is reserved for works — this is the one place it appears. */}
+            <h1 className="font-serif text-3xl md:text-4xl text-ink leading-tight">{book.title}</h1>
+            {book.subtitle && <p className="text-ink-dim text-sm">{book.subtitle}</p>}
+            <p className="text-user text-sm lowercase tracking-eyebrow mt-1">{book.author}</p>
           </div>
 
-          {/* Metadata rail — dense, technical, no star rating (see docs/visual-identity.md). */}
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs uppercase tracking-wider text-ink-muted">
-            {book.published_year && <span>{book.published_year}</span>}
-            {book.publisher && <span>{book.publisher}</span>}
-            {book.page_count && <span>{book.page_count} pp</span>}
-            <span className="text-accent-ink">
-              {threadCount} {threadCount === 1 ? 'discussion' : 'discussions'}
-            </span>
-          </div>
+          <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-0.5 text-xs max-w-sm">
+            {book.published_year && (
+              <>
+                <dt className="text-ink-dim">year</dt>
+                <dd className="text-ink tabular-nums">{book.published_year}</dd>
+              </>
+            )}
+            {book.publisher && (
+              <>
+                <dt className="text-ink-dim">publisher</dt>
+                <dd className="text-ink truncate">{book.publisher}</dd>
+              </>
+            )}
+            {book.page_count && (
+              <>
+                <dt className="text-ink-dim">pages</dt>
+                <dd className="text-ink tabular-nums">{book.page_count}</dd>
+              </>
+            )}
+            <dt className="text-ink-dim">threads</dt>
+            <dd className="text-path tabular-nums">{threadCount}</dd>
+          </dl>
 
           {book.categories?.length > 0 && (
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs">
               {book.categories.map((category) => (
-                <span
-                  key={category}
-                  className="border border-line text-ink-dim text-xs px-2 py-1 uppercase tracking-wider"
-                >
-                  {category}
+                <span key={category} className="text-ink-dim">
+                  <span aria-hidden="true" className="text-ink-faint">[</span>
+                  {category.toLowerCase()}
+                  <span aria-hidden="true" className="text-ink-faint">]</span>
                 </span>
               ))}
             </div>
           )}
 
           {book.description && (
-            <p className="text-ink-dim text-sm leading-relaxed max-w-2xl">{book.description}</p>
+            <p className="text-ink-dim text-sm leading-relaxed max-w-prose">{book.description}</p>
           )}
 
           <ShelfButton bookId={id} currentStatus={book.shelf_status} />
         </div>
       </section>
 
-      {/* Discussions */}
-      <section className="flex flex-col gap-5">
-        <div className="flex items-center justify-between border-b border-line pb-3">
-          <div className="flex items-baseline gap-4">
-            <span className="rule" />
-            <h2 className="text-sm font-semibold uppercase tracking-eyebrow text-ink">Discussions</h2>
-          </div>
+      <section className="panel p-5 pt-6">
+        <h2 className="panel-title">Discussions</h2>
+
+        <div className="flex justify-end mb-3">
           {user && (
-            <button onClick={() => setShowModal(true)} className="btn-primary text-xs uppercase tracking-wider">
+            <button onClick={() => setShowModal(true)} className="btn-secondary text-xs">
               Start a Thread
             </button>
           )}
         </div>
 
-        {threadsLoading && (
+        {threadsLoading ? (
           <div className="flex flex-col gap-2">
             {[1, 2, 3].map((i) => (
-              <div key={i} className="h-16 border border-line bg-surface animate-pulse" />
+              <div key={i} className="h-8 border border-line bg-panel animate-pulse" />
             ))}
           </div>
-        )}
-
-        {!threadsLoading && threadCount === 0 && (
-          <p className="text-ink-dim text-sm py-4">
-            No discussions yet.{' '}
-            {user ? (
-              'Start the first one.'
-            ) : (
-              <a href="/login" className="text-accent-ink hover:underline">
-                Log in
-              </a>
-            )}
-          </p>
-        )}
-
-        {threadCount > 0 && (
-          <div className="flex flex-col gap-2">
-            {threads.map((thread) => (
-              <ThreadCard key={thread.id} thread={{ ...thread, book_id: id }} />
-            ))}
-          </div>
+        ) : (
+          <DataTable
+            columns={columns}
+            rows={threads || []}
+            caption={`Discussions about ${book.title}`}
+            emptyMessage={user ? 'No discussions yet. Start the first one.' : 'No discussions yet.'}
+          />
         )}
       </section>
 
-      {showModal && <CreateThreadModal bookId={id} onClose={() => setShowModal(false)} />}
+      {showModal && (
+        <ThreadModal
+          target={{ book_id: id }}
+          onClose={() => setShowModal(false)}
+          onCreated={(thread) => navigate(`/books/${id}/threads/${thread.id}`)}
+        />
+      )}
     </main>
   )
 }
