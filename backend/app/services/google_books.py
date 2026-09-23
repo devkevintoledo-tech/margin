@@ -41,60 +41,6 @@ def normalize(text: str | None) -> str:
     return re.sub(r"\s+", " ", no_punct).strip()
 
 
-def _dedup_key(volume: dict[str, Any]) -> str | None:
-    """Group key for duplicate editions: normalized title + first author.
-
-    Returns None when there is no title — such volumes are never grouped.
-    """
-    title = volume.get("title")
-    if not title:
-        return None
-    first_author = (volume.get("author") or "").split(",")[0]
-    return f"{normalize(title)}\x1f{normalize(first_author)}"
-
-
-def _completeness_score(volume: dict[str, Any]) -> int:
-    """Higher = richer, more useful result card. Cover is weighted highest."""
-    score = 0
-    if volume.get("cover_url"):
-        score += 4
-    if volume.get("description"):
-        score += 1
-    if volume.get("isbn_13"):
-        score += 1
-    if volume.get("page_count"):
-        score += 1
-    if volume.get("ratings_count"):  # truthy ⇒ > 0
-        score += 1
-    return score
-
-
-def _dedup_volumes(volumes: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Collapse duplicate editions to the richest representative per group.
-
-    Order is preserved: each surviving volume keeps the output position of its
-    group's first member. Title-less volumes are never grouped. On a score tie
-    the earlier (more relevant) volume is kept.
-    """
-    out: list[dict[str, Any]] = []
-    positions: dict[str, int] = {}  # key -> index in `out`
-    for volume in volumes:
-        key = _dedup_key(volume)
-        if key is None or key not in positions:
-            if key is not None:
-                positions[key] = len(out)
-            out.append(volume)
-            continue
-        idx = positions[key]
-        if _completeness_score(volume) > _completeness_score(out[idx]):
-            # Replace the representative wholesale: the richer edition is a real,
-            # distinct Google volume, so its external_id and metadata must stay
-            # together (the route upserts/links Book rows by external_id). We only
-            # keep the *position* of the group's first member to preserve order.
-            out[idx] = volume
-    return out
-
-
 def _category_to_slug(categories: list[str] | None) -> str | None:
     if not categories:
         return None
@@ -219,18 +165,22 @@ async def search_books(query: str) -> list[dict[str, Any]]:
     contents), which buries the actual book under works that merely discuss it.
     Searching ``intitle:`` first surfaces the real title; we only fall back to a
     broad pass when the title search is too thin (e.g. author/topic queries).
+
+    Duplicate editions are no longer collapsed here — work grouping
+    (``services/works.py``) does that persistently and by identity, so a second
+    string-keyed pass would only disagree with it at the seams.
     """
     async with httpx.AsyncClient(timeout=15.0) as client:
         title_results = await _query_volumes(client, f"intitle:{query}")
         if len(title_results) >= _MIN_TITLE_RESULTS:
-            return _dedup_volumes(title_results)
+            return title_results
 
         broad_results = await _query_volumes(client, query)
 
     seen = {r["external_id"] for r in title_results}
     merged = list(title_results)
     merged.extend(r for r in broad_results if r["external_id"] not in seen)
-    return _dedup_volumes(merged)
+    return merged
 
 
 async def get_book(volume_id: str) -> dict[str, Any]:

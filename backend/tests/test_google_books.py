@@ -272,119 +272,10 @@ def test_normalize_handles_empty():
     assert gb.normalize("") == ""
     assert gb.normalize(None) == ""
 
-
 # ---------------------------------------------------------------------------
-# _dedup_key() helper for edition grouping.
-# ---------------------------------------------------------------------------
-
-
-def test_dedup_key_combines_title_and_first_author():
-    vol = {"title": "The Hobbit", "author": "J.R.R. Tolkien"}
-    assert gb._dedup_key(vol) == "the hobbit\x1fj r r tolkien"
-
-
-def test_dedup_key_uses_only_first_author():
-    vol = {"title": "Good Omens", "author": "Terry Pratchett, Neil Gaiman"}
-    assert gb._dedup_key(vol) == "good omens\x1fterry pratchett"
-
-
-def test_dedup_key_none_when_title_missing():
-    assert gb._dedup_key({"title": "", "author": "Anyone"}) is None
-    assert gb._dedup_key({"title": None, "author": "Anyone"}) is None
-
-
-# ---------------------------------------------------------------------------
-# _completeness_score() helper for representative selection.
-# ---------------------------------------------------------------------------
-
-
-def test_completeness_score_weights_cover_highest():
-    with_cover = {"cover_url": "https://x/c.jpg"}
-    without = {"description": "d", "isbn_13": "9", "page_count": 1}
-    # cover alone (+4) beats three other fields (+3)
-    assert gb._completeness_score(with_cover) > gb._completeness_score(without)
-
-
-def test_completeness_score_sums_fields():
-    vol = {
-        "cover_url": "https://x/c.jpg",
-        "description": "d",
-        "isbn_13": "9781585675340",
-        "page_count": 200,
-        "ratings_count": 10,
-    }
-    assert gb._completeness_score(vol) == 8  # 4 + 1 + 1 + 1 + 1
-
-
-def test_completeness_score_ignores_zero_ratings():
-    assert gb._completeness_score({"ratings_count": 0}) == 0
-
-
-def test_completeness_score_empty_volume_is_zero():
-    assert gb._completeness_score({}) == 0
-
-
-# ---------------------------------------------------------------------------
-# _dedup_volumes() — order-preserving collapse of duplicate editions.
-# ---------------------------------------------------------------------------
-
-
-def _vol(ext_id, title, author, **extra):
-    return {"external_id": ext_id, "title": title, "author": author, **extra}
-
-
-def test_dedup_keeps_richer_of_two_editions():
-    thin = _vol("a", "The Hobbit", "J.R.R. Tolkien")
-    rich = _vol("b", "The Hobbit", "J.R.R. Tolkien", cover_url="https://x/c.jpg")
-    out = gb._dedup_volumes([thin, rich])
-    # The richer edition wins wholesale (its own external_id + metadata), kept at
-    # the first member's position.
-    assert [v["external_id"] for v in out] == ["b"]
-    assert out[0]["cover_url"] == "https://x/c.jpg"
-
-
-def test_dedup_collapses_accent_and_case_variants():
-    a = _vol("a", "Les Misérables", "Victor Hugo")
-    b = _vol("b", "les miserables", "victor hugo", cover_url="https://x/c.jpg")
-    out = gb._dedup_volumes([a, b])
-    assert len(out) == 1
-
-
-def test_dedup_keeps_different_authors_separate():
-    a = _vol("a", "Ulysses", "James Joyce")
-    b = _vol("b", "Ulysses", "Alfred Tennyson")
-    out = gb._dedup_volumes([a, b])
-    assert {v["external_id"] for v in out} == {"a", "b"}
-
-
-def test_dedup_passes_through_title_less_volumes():
-    a = _vol("a", "", "Nobody")
-    b = _vol("b", None, "Nobody")
-    out = gb._dedup_volumes([a, b])
-    assert [v["external_id"] for v in out] == ["a", "b"]
-
-
-def test_dedup_preserves_relevance_order_and_position():
-    first = _vol("a", "Dune", "Frank Herbert")  # thin, but appears first
-    middle = _vol("b", "Hyperion", "Dan Simmons")
-    dup = _vol("c", "Dune", "Frank Herbert", cover_url="https://x/c.jpg")  # richer, later
-    out = gb._dedup_volumes([first, middle, dup])
-    # Dune's richer edition (c) surfaces at the earlier (first-seen) Dune slot,
-    # ahead of Hyperion — work-level relevance order is preserved.
-    assert [v["external_id"] for v in out] == ["c", "b"]
-    assert out[0]["cover_url"] == "https://x/c.jpg"
-
-
-def test_dedup_tie_keeps_earlier_volume():
-    a = _vol("a", "1984", "George Orwell", cover_url="https://x/a.jpg")
-    b = _vol("b", "1984", "George Orwell", cover_url="https://x/b.jpg")
-    out = gb._dedup_volumes([a, b])
-    assert [v["external_id"] for v in out] == ["a"]
-    assert out[0]["cover_url"] == "https://x/a.jpg"  # tie ⇒ earlier kept
-
-
-# ---------------------------------------------------------------------------
-# search_books() dedup integration.
+# search_books() two-pass merge. Duplicate editions are NOT collapsed here any
+# more — work grouping (services/works.py) owns that, by identity rather than
+# by string key.
 # ---------------------------------------------------------------------------
 
 
@@ -397,7 +288,7 @@ def _api_volume(ext_id, title, author, *, cover=False):
 
 @respx.mock
 @pytest.mark.asyncio
-async def test_search_books_dedups_editions():
+async def test_search_books_merges_both_passes_keeping_every_edition():
     base = gb.settings.GOOGLE_BOOKS_BASE_URL
     title_payload = {
         "items": [
@@ -415,22 +306,19 @@ async def test_search_books_dedups_editions():
     ]
 
     results = await gb.search_books("the hobbit")
-    ids = [r["external_id"] for r in results]
-    # a and b are duplicate editions; the richer one (b, has cover) wins wholesale
-    # at the first-seen position; c is a different work and is kept.
-    assert ids == ["b", "c"]
-    assert results[0]["cover_url"] is not None  # richer edition's data won
+    # a and b are duplicate editions and both survive: collapsing them is the
+    # work layer's job, and it needs every edition to do it.
+    assert [r["external_id"] for r in results] == ["a", "b", "c"]
 
 
 @respx.mock
 @pytest.mark.asyncio
-async def test_search_books_dedups_on_title_only_path():
-    """The early return (enough title hits, no broad pass) also dedups."""
+async def test_search_books_skips_the_broad_pass_when_titles_suffice():
     base = gb.settings.GOOGLE_BOOKS_BASE_URL
     title_payload = {
         "items": [
             _api_volume("a", "Dune", "Frank Herbert"),
-            _api_volume("b", "Dune", "Frank Herbert", cover=True),  # dup of a, richer
+            _api_volume("b", "Dune", "Frank Herbert", cover=True),
             _api_volume("c", "Dune Messiah", "Frank Herbert"),
             _api_volume("d", "Children of Dune", "Frank Herbert"),
         ]
@@ -441,6 +329,29 @@ async def test_search_books_dedups_on_title_only_path():
     )
 
     results = await gb.search_books("dune")
-    # 4 title hits (>= _MIN_TITLE_RESULTS) ⇒ broad pass NOT made, but a/b still collapse.
+    # 4 title hits (>= _MIN_TITLE_RESULTS) ⇒ broad pass NOT made.
     assert route.call_count == 1
-    assert [r["external_id"] for r in results] == ["b", "c", "d"]
+    assert [r["external_id"] for r in results] == ["a", "b", "c", "d"]
+
+
+@respx.mock
+@pytest.mark.asyncio
+async def test_search_books_does_not_repeat_a_volume_across_passes():
+    """A volume returned by both passes appears once, in title-pass order."""
+    base = gb.settings.GOOGLE_BOOKS_BASE_URL
+    route = respx.get(f"{base}/volumes")
+    route.side_effect = [
+        Response(200, json={"items": [_api_volume("a", "Dune", "Frank Herbert")]}),
+        Response(
+            200,
+            json={
+                "items": [
+                    _api_volume("a", "Dune", "Frank Herbert"),
+                    _api_volume("z", "Dune Companion", "Someone Else"),
+                ]
+            },
+        ),
+    ]
+
+    results = await gb.search_books("dune")
+    assert [r["external_id"] for r in results] == ["a", "z"]
