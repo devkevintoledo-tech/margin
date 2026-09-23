@@ -40,4 +40,22 @@ describe('VoteControl', () => {
     await userEvent.click(screen.getByRole('button', { name: /upvote/i }))
     expect(onVote).not.toHaveBeenCalled()
   })
+
+  it('renders a row variant for table cells', () => {
+    render(<VoteControl variant="row" score={42} myVote={0} onVote={() => {}} />)
+    expect(screen.getByText('+42')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /upvote/i })).toBeInTheDocument()
+  })
+
+  it('signs positive scores and keeps negatives ASCII', () => {
+    const { rerender } = render(<VoteControl score={7} myVote={0} onVote={() => {}} />)
+    expect(screen.getByText('+7')).toBeInTheDocument()
+    rerender(<VoteControl score={-7} myVote={0} onVote={() => {}} />)
+    expect(screen.getByText('-7')).toBeInTheDocument()
+  })
+
+  it('renders zero without a sign', () => {
+    render(<VoteControl score={0} myVote={0} onVote={() => {}} />)
+    expect(screen.getByText('0')).toBeInTheDocument()
+  })
 })
