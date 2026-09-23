@@ -30,6 +30,9 @@ function App() {
           <Route path="/books/:id" element={<Book />} />
           <Route path="/books/:id/threads/:threadId" element={<Thread />} />
           <Route path="/genres/:slug" element={<Genre />} />
+          {/* Genre threads have always been linked as /genres/:slug/threads/:threadId;
+              without this route those links fell through to NotFound. */}
+          <Route path="/genres/:slug/threads/:threadId" element={<Thread />} />
           <Route path="/search" element={<Search />} />
           <Route path="/profile/:username" element={<Profile />} />
           <Route path="/login" element={<Login />} />
