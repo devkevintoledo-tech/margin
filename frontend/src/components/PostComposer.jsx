@@ -12,7 +12,7 @@ function PostComposer({ threadId, parentId = null, onSuccess, placeholder = 'Wri
   if (!user) {
     return (
       <p className="text-ink-dim text-sm py-2">
-        <Link to="/login" className="text-accent-ink hover:underline">Log in</Link> to post.
+        <Link to="/login" className="text-accent hover:underline">Log in</Link> to post.
       </p>
     )
   }
@@ -33,13 +33,18 @@ function PostComposer({ threadId, parentId = null, onSuccess, placeholder = 'Wri
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-2">
-      <textarea
-        value={content}
-        onChange={(e) => setContent(e.target.value)}
-        placeholder={placeholder}
-        rows={3}
-        className="input resize-none"
-      />
+      <div className="flex gap-2 items-start">
+        <span aria-hidden="true" className="text-accent pt-2 select-none">
+          &gt;
+        </span>
+        <textarea
+          value={content}
+          onChange={(e) => setContent(e.target.value)}
+          placeholder={placeholder}
+          rows={3}
+          className="input resize-none max-w-prose"
+        />
+      </div>
       <div className="flex justify-end">
         <button type="submit" disabled={mutation.isPending || !content.trim()} className="btn-primary">
           {mutation.isPending ? 'Posting...' : 'Post'}
