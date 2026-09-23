@@ -95,7 +95,7 @@ Changes to existing tables:
 
 | Table | Change |
 | --- | --- |
-| `books` | add `work_id UUID FK works.id ON DELETE CASCADE`, indexed, `NOT NULL` after backfill; **drop** `genre_id` |
+| `books` | add `work_id UUID FK works.id ON DELETE CASCADE`, indexed, **nullable**; **drop** `genre_id` |
 | `threads` | add `work_id UUID FK works.id ON DELETE CASCADE`, nullable, indexed; **drop** `book_id` |
 | `shelves` | add `work_id UUID FK works.id ON DELETE CASCADE`, indexed; **drop** `book_id`; **drop** `uq_shelf_user_book`, add `uq_shelf_user_work UNIQUE (user_id, work_id)` |
 
@@ -304,8 +304,16 @@ SELECT count(*) FROM threads WHERE book_id IS NOT NULL AND work_id IS NULL;
 ```
 
 **Migration 2** — drop `threads.book_id`, `shelves.book_id`, `books.genre_id`
-and `uq_shelf_user_book`; add `uq_shelf_user_work`; set `books.work_id NOT
-NULL` (safe: Tier 3 always yields a key).
+and `uq_shelf_user_book`; add `uq_shelf_user_work`; set `shelves.work_id NOT
+NULL`.
+
+`books.work_id` stays **nullable**, which is a correction to an earlier draft of
+this spec. An edition is inserted and flushed before it is resolved — the
+resolution batch needs the generated ids — so a NOT NULL column would make the
+upsert order illegal, and Postgres cannot defer NOT NULL. Every edition still
+ends its transaction attached to a work; that invariant is enforced by the
+resolver and asserted in tests, not by the column. `shelves.work_id` has no such
+problem: a shelf row always knows its work at insert time.
 
 Migration 2 is the destructive step and the gate is what makes it safe. Current
 scale: 223 editions, 8 threads, 0 shelves.
