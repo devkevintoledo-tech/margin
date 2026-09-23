@@ -74,15 +74,21 @@ mistake until seen.
 | Token | Hex | vs `bg` | Use |
 | --- | --- | --- | --- |
 | `ink` | `#C0CAF5` | 10.59:1 | body and headlines |
-| `ink-dim` | `#A9B1D6` | 8.10:1 | secondary copy, descriptions |
-| `ink-muted` | `#737AA2` | 4.10:1 | metadata, timestamps, **and control borders** |
-| `ink-faint` | `#565F89` | 2.76:1 | **`aria-hidden` glyphs only** — tree elbows, separators, frames. Never text a reader must perceive. |
+| `ink-dim` | `#A9B1D6` | 8.10:1 | secondary copy, descriptions, **metadata and timestamps** |
+| `ink-muted` | `#737AA2` | 4.10:1 | **control borders** and non-essential decoration. Below AA's 4.5 for normal text — never text a reader needs. |
+| `ink-faint` | `#565F89` | 2.76:1 | **`aria-hidden` glyphs only** — tree elbows, separators, frames. |
+
+**All text a reader must perceive sits at 8.10:1 or better.** Today's design
+system routes metadata and timestamps through `ink-muted` at 3.3:1; this
+redesign moves them to `ink-dim` and leaves `ink-muted` for borders and
+decoration, so no informational text sits below AA. That is stricter than what
+the code does now, and it is the reason the muted tier splits in three.
 
 `ink-muted` is Tokyo Night's `dark5`, not its `comment` (`#565F89`). `comment`
 measures 2.76:1 — below 3:1 even for incidental text, and worse than the
-`#66635F` it replaces. Moving to `dark5` makes muted metadata *more* legible
-than today's 3.3:1, and isolates the sub-3:1 value in `ink-faint`, where every
-consumer is `aria-hidden` and structurally redundant.
+`#66635F` it replaces. Moving to `dark5` clears the 3:1 non-text floor, and
+isolates the sub-3:1 value in `ink-faint`, where every consumer is
+`aria-hidden` and structurally redundant.
 
 `ink-muted` doubles as the **control border**: WCAG 1.4.11 requires 3:1 for
 input and control boundaries, and `line-strong` is only 1.91:1. Inputs,
@@ -245,7 +251,7 @@ SCORE  THREAD                      REPL   AGE
 `sort`, `onSort`.
 
 Numeric columns right-align; scores colour by sign (`ok` / `danger` /
-`ink-muted`); the header underline is a `border-bottom`, not a row of `─`.
+`ink-dim` at zero); the header underline is a `border-bottom`, not a row of `─`.
 **Sortable headers are the sort control** — the active column shows `▾`/`▴` —
 which is where the parked new/top sorting feature lands with no new UI invented
 for it. Below `sm` the table collapses to stacked rows; a horizontally
@@ -355,7 +361,7 @@ already right.
 
 **`Profile`** headline goes mono. The `<dl>` stat block becomes an aligned
 key/value table (`reading 4 / want_to_read 12 / read 37`) in shelf-status
-colours — `warning` reading, `ok` read, `ink-muted` want. Shelf sections keep
+colours — `warning` reading, `ok` read, `ink-dim` want. Shelf sections keep
 their cover grids.
 
 **`NotFound`**:
@@ -424,6 +430,9 @@ accessible-name treatment in §3.
 - Blinking caret respects `prefers-reduced-motion`.
 - Focus ring is `accent` at 6.79:1.
 - Control borders meet WCAG 1.4.11 at 4.10:1.
+- **No informational text below 8.10:1.** `ink-muted` (4.10:1) is borders and
+  decoration only; `ink-faint` (2.76:1) is `aria-hidden` glyphs only. Enforced
+  by an automated token test, not by review.
 - Contrast figures in §1 are computed from the hex values and must be
   re-verified with a checker before merge.
 
