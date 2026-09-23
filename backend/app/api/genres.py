@@ -5,15 +5,16 @@ from sqlalchemy import func, literal, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.schemas.book import BookOut, GenreOut
+from app.schemas.book import GenreOut, WorkOut, work_out
 from app.schemas.thread import ThreadSummary
-from app.models.book import Book  # type: ignore[import]
 from app.models.genre import Genre  # type: ignore[import]
 from app.models.post import Post  # type: ignore[import]
 from app.models.thread import Thread  # type: ignore[import]
 from app.models.user import User  # type: ignore[import]
 from app.models.vote import Vote  # type: ignore[import]
+from app.models.work import Work, WorkKind  # type: ignore[import]
 from app.services.auth import get_current_user_optional
+from app.services.works import load_work_presentation
 
 router = APIRouter(prefix="/genres", tags=["genres"])
 
@@ -37,8 +38,8 @@ async def get_genre(slug: str, db: AsyncSession = Depends(get_db)):
     return await _get_genre_or_404(slug, db)
 
 
-@router.get("/{slug}/books", response_model=list[BookOut])
-async def get_genre_books(
+@router.get("/{slug}/works", response_model=list[WorkOut])
+async def get_genre_works(
     slug: str,
     db: AsyncSession = Depends(get_db),
     limit: int = Query(20, ge=1, le=100),
@@ -46,14 +47,19 @@ async def get_genre_books(
 ):
     genre = await _get_genre_or_404(slug, db)
     stmt = (
-        select(Book)
-        .where(Book.genre_id == genre.id)
-        .order_by(Book.title)
+        select(Work)
+        .where(
+            Work.genre_id == genre.id,
+            Work.kind == WorkKind.single,
+            Work.merged_into_id.is_(None),  # tombstones are reachable, not listed
+        )
+        .order_by(Work.title)
         .limit(limit)
         .offset(offset)
     )
-    result = await db.execute(stmt)
-    return result.scalars().all()
+    works = (await db.execute(stmt)).scalars().all()
+    presentation = await load_work_presentation(db, [w.id for w in works])
+    return [work_out(w, presentation.get(w.id)) for w in works]
 
 
 @router.get("/{slug}/threads", response_model=list[ThreadSummary])
@@ -84,7 +90,7 @@ async def get_genre_threads(
             Thread.title,
             Thread.score,
             my_vote,
-            Thread.book_id,
+            Thread.work_id,
             Thread.created_at,
             User.username.label("author"),
             Genre.slug.label("genre_slug"),
