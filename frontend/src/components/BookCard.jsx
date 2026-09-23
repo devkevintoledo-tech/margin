@@ -7,7 +7,7 @@ function BookCard({ book }) {
     <Link to={`/books/${id}`} className="group flex flex-col">
       {/* Covers carry most of the color in the UI (§13), so they stay large and
           unobstructed — the frame reacts on hover, the art never dims. */}
-      <div className="aspect-[2/3] bg-surface border border-line group-hover:border-accent transition-colors duration-base overflow-hidden">
+      <div className="aspect-[2/3] bg-panel border border-line group-hover:border-accent transition-colors duration-base overflow-hidden">
         {cover_url ? (
           <img
             src={cover_url}
@@ -17,15 +17,15 @@ function BookCard({ book }) {
           />
         ) : (
           <div className="w-full h-full flex items-center justify-center p-4">
-            <span className="font-serif italic text-ink-muted text-xs text-center">{title}</span>
+            <span className="font-serif italic text-ink-dim text-xs text-center">{title}</span>
           </div>
         )}
       </div>
       <div className="pt-3 flex flex-col gap-1">
-        <p className="font-serif text-ink text-sm leading-snug line-clamp-2 group-hover:text-accent-ink transition-colors duration-fast">
+        <p className="font-serif text-ink text-sm leading-snug line-clamp-2 group-hover:text-accent transition-colors duration-fast">
           {title}
         </p>
-        <p className="text-ink-muted text-xs uppercase tracking-widest line-clamp-1">{author}</p>
+        <p className="text-ink-dim text-xs lowercase tracking-eyebrow line-clamp-1">{author}</p>
       </div>
     </Link>
   )

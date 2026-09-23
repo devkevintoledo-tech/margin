@@ -4,9 +4,15 @@ import { useAddToShelf, useUpdateShelf, useRemoveFromShelf } from '../api/books'
 import useAuthStore from '../store/auth'
 
 const SHELF_LABELS = {
-  want_to_read: 'Want to Read',
-  reading: 'Reading',
-  read: 'Read',
+  want_to_read: 'want to read',
+  reading: 'reading',
+  read: 'read',
+}
+
+const SHELF_TONE = {
+  want_to_read: 'text-ink-dim',
+  reading: 'text-warning',
+  read: 'text-ok',
 }
 
 function ShelfButton({ bookId, currentStatus }) {
@@ -46,7 +52,7 @@ function ShelfButton({ bookId, currentStatus }) {
     }
   }
 
-  const label = currentStatus ? SHELF_LABELS[currentStatus] : 'Add to Library'
+  const label = currentStatus ? SHELF_LABELS[currentStatus] : 'add to library'
 
   return (
     <div className="relative inline-block self-start" ref={ref}>
@@ -54,20 +60,20 @@ function ShelfButton({ bookId, currentStatus }) {
         onClick={() => setOpen((v) => !v)}
         disabled={isPending}
         aria-expanded={open}
-        className={currentStatus ? 'btn-primary uppercase tracking-wider text-xs' : 'btn-secondary uppercase tracking-wider text-xs'}
+        className="btn-secondary text-xs"
       >
         {isPending ? 'Saving...' : label}
-        <span className="text-[0.6rem]">{open ? '▲' : '▼'}</span>
+        <span aria-hidden="true" className="text-ink-faint">{open ? '▴' : '▾'}</span>
       </button>
 
       {open && (
-        <div className="absolute top-full left-0 mt-0.5 z-20 bg-raised border border-line-strong min-w-full">
+        <div className="float absolute top-full left-0 mt-1 z-20 min-w-full p-0">
           {Object.entries(SHELF_LABELS).map(([status, lbl]) => (
             <button
               key={status}
               onClick={() => handleSelect(status)}
-              className={`block w-full text-left px-4 py-2 text-sm hover:bg-line transition-colors duration-fast ${
-                currentStatus === status ? 'text-accent-ink' : 'text-ink-dim'
+              className={`block w-full text-left px-3 py-1.5 text-xs hover:bg-highlight transition-colors duration-fast ${
+                currentStatus === status ? SHELF_TONE[status] : 'text-ink-dim'
               }`}
             >
               {lbl}
@@ -76,9 +82,9 @@ function ShelfButton({ bookId, currentStatus }) {
           {currentStatus && (
             <button
               onClick={() => handleSelect(null)}
-              className="block w-full text-left px-4 py-2 text-sm text-danger hover:bg-line transition-colors duration-fast border-t border-line"
+              className="block w-full text-left px-3 py-1.5 text-xs text-danger hover:bg-highlight transition-colors duration-fast border-t border-line"
             >
-              Remove from Library
+              remove
             </button>
           )}
         </div>
