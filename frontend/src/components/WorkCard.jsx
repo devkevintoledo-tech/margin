@@ -1,10 +1,10 @@
 import { Link } from 'react-router-dom'
 
-function BookCard({ book }) {
-  const { id, title, author, cover_url } = book
+function WorkCard({ work }) {
+  const { id, title, author, cover_url, edition_count } = work
 
   return (
-    <Link to={`/books/${id}`} className="group flex flex-col">
+    <Link to={`/works/${id}`} className="group flex flex-col">
       {/* Covers carry most of the color in the UI (§13), so they stay large and
           unobstructed — the frame reacts on hover, the art never dims. */}
       <div className="aspect-[2/3] bg-panel border border-line group-hover:border-accent transition-colors duration-base overflow-hidden">
@@ -26,9 +26,14 @@ function BookCard({ book }) {
           {title}
         </p>
         <p className="text-ink-dim text-xs lowercase tracking-eyebrow line-clamp-1">{author}</p>
+        {/* Search collapses many editions into one card; saying so keeps the
+            smaller result count legible rather than mysterious. */}
+        {edition_count > 1 && (
+          <p className="text-ink-dim text-xs tabular-nums">{edition_count} editions</p>
+        )}
       </div>
     </Link>
   )
 }
 
-export default BookCard
+export default WorkCard

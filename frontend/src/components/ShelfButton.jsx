@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { useAddToShelf, useUpdateShelf, useRemoveFromShelf } from '../api/books'
+import { useAddToShelf, useUpdateShelf, useRemoveFromShelf } from '../api/works'
 import useAuthStore from '../store/auth'
 
 const SHELF_LABELS = {
@@ -15,7 +15,7 @@ const SHELF_TONE = {
   read: 'text-ok',
 }
 
-function ShelfButton({ bookId, currentStatus }) {
+function ShelfButton({ workId, currentStatus }) {
   const [open, setOpen] = useState(false)
   const ref = useRef(null)
   const user = useAuthStore((s) => s.user)
@@ -44,11 +44,11 @@ function ShelfButton({ bookId, currentStatus }) {
   const handleSelect = (status) => {
     setOpen(false)
     if (status === null) {
-      removeMutation.mutate({ id: bookId })
+      removeMutation.mutate({ id: workId })
     } else if (currentStatus) {
-      updateMutation.mutate({ id: bookId, status })
+      updateMutation.mutate({ id: workId, status })
     } else {
-      addMutation.mutate({ id: bookId, status })
+      addMutation.mutate({ id: workId, status })
     }
   }
 

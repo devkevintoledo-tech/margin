@@ -1,6 +1,6 @@
 import { useParams } from 'react-router-dom'
 import { useProfile } from '../api/users'
-import BookCard from '../components/BookCard'
+import WorkCard from '../components/WorkCard'
 import PathHeader from '../components/PathHeader'
 import { useStatusBar } from '../store/status'
 
@@ -18,19 +18,19 @@ const SHELF_STATUS_TONE = {
 
 const SHELF_STATUS_ORDER = ['reading', 'want_to_read', 'read']
 
-function ShelfSection({ status, books }) {
-  if (!books || books.length === 0) return null
+function ShelfSection({ status, works }) {
+  if (!works || works.length === 0) return null
   return (
     <section className="flex flex-col gap-4">
       <div className="flex items-baseline gap-3 border-b border-line pb-2">
         <h2 className={`text-xs uppercase tracking-eyebrow ${SHELF_STATUS_TONE[status]}`}>
           {SHELF_STATUS_LABELS[status]}
         </h2>
-        <span className="text-ink-dim text-xs tabular-nums ml-auto">{books.length}</span>
+        <span className="text-ink-dim text-xs tabular-nums ml-auto">{works.length}</span>
       </div>
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-5">
-        {books.map((book) => (
-          <BookCard key={book.id} book={book} />
+        {works.map((work) => (
+          <WorkCard key={work.id} work={work} />
         ))}
       </div>
     </section>
@@ -102,7 +102,7 @@ function Profile() {
 
       {/* Shelves */}
       {SHELF_STATUS_ORDER.map((status) => (
-        <ShelfSection key={status} status={status} books={shelves[status]} />
+        <ShelfSection key={status} status={status} works={shelves[status]} />
       ))}
 
       {totalBooks === 0 && <p className="text-ink-dim text-sm">No books on shelf yet.</p>}
