@@ -52,6 +52,11 @@ def mock_upstream(ol_docs=None):
     google = respx.get(GOOGLE_URL).mock(
         return_value=Response(200, json={"items": RED_RISING_VOLUMES})
     )
+    # Opening a work page enriches it, and enrichment HEADs every cover.
+    for slug in ("deluxe", "plain"):
+        respx.head(f"https://x/{slug}?zoom=0").mock(
+            return_value=Response(200, headers={"content-type": "image/jpeg"})
+        )
     ol = respx.get(OL_URL).mock(
         return_value=Response(200, json={"docs": ol_docs if ol_docs is not None else [OL_RED_RISING]})
     )

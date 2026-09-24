@@ -13,6 +13,7 @@ data written through the API is visible to assertions in the same test.
 
 import os
 import uuid
+from datetime import datetime, timezone
 
 import pytest_asyncio
 
@@ -88,7 +89,12 @@ async def auth_headers(client):
 
 @pytest_asyncio.fixture
 async def work(db_session):
-    """Seed a work and one edition (no upstream round-trip) for thread/shelf tests."""
+    """Seed a work and one edition (no upstream round-trip) for thread/shelf tests.
+
+    ``enriched_at`` is set because opening a work page enriches it from Google
+    Books on first view. Without it, every test that GETs this work would make
+    a live HTTP request — which is exactly what this fixture exists to avoid.
+    """
     w = Work(
         source=WorkSource.openlibrary,
         external_id=f"OL{uuid.uuid4().hex[:8]}W",
@@ -97,6 +103,7 @@ async def work(db_session):
         author="A. Tester",
         kind=WorkKind.single,
         identity_provenance=WorkProvenance.isbn,
+        enriched_at=datetime.now(timezone.utc),
     )
     db_session.add(w)
     await db_session.flush()

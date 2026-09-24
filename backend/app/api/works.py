@@ -15,6 +15,7 @@ from app.schemas.book import ShelfIn, ShelfOut, WorkOut, work_out
 from app.schemas.thread import ThreadSummary
 from app.services import search
 from app.services.auth import get_current_user, get_current_user_optional
+from app.services.enrichment import enrich_work
 from app.services.works import canonical_work, load_work_presentation
 
 router = APIRouter(prefix="/works", tags=["works"])
@@ -113,6 +114,8 @@ async def get_work(
     current_user=Depends(get_current_user_optional),
 ):
     work = await _get_work_or_404(work_id, db)
+    # First view pays for Google Books; every later view is local.
+    await enrich_work(db, work)
     shelf_by_work: dict[UUID, str] = {}
     if current_user is not None:
         stmt = select(Shelf.status).where(
