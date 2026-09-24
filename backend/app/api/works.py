@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from uuid import UUID
 
-import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, literal, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,16 +10,12 @@ from app.database import get_db
 # Through the package, per CLAUDE.md: app.models.__init__ imports every model,
 # so Base.metadata is complete without importing Base directly for its side
 # effect.
-from app.models import Book, Genre, Post, Shelf, Thread, User, Vote, Work, WorkKind
+from app.models import Book, Genre, Post, Shelf, Thread, User, Vote, Work
 from app.schemas.book import ShelfIn, ShelfOut, WorkOut, work_out
 from app.schemas.thread import ThreadSummary
-from app.services import google_books
+from app.services import search
 from app.services.auth import get_current_user, get_current_user_optional
-from app.services.works import (
-    canonical_work,
-    load_work_presentation,
-    resolve_editions,
-)
+from app.services.works import canonical_work, load_work_presentation
 
 router = APIRouter(prefix="/works", tags=["works"])
 
@@ -102,31 +97,13 @@ async def search_works(
     q: str = Query(..., min_length=1),
     db: AsyncSession = Depends(get_db),
 ):
-    """Search Google Books, group the volumes into works, return one per work."""
-    try:
-        results = await google_books.search_books(q)
-    except (httpx.HTTPStatusError, httpx.RequestError) as exc:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Book search is temporarily unavailable. Please try again shortly.",
-        ) from exc
+    """Answer from the local catalog, filling it from Open Library when cold.
 
-    editions, genre_hints = await _upsert_editions(db, results)
-    by_edition = await resolve_editions(db, editions, genre_hints)
-
-    # A work takes the position of its first-seen edition, so Google's relevance
-    # ranking still drives the page.
-    ordered: list[Work] = []
-    seen: set[UUID] = set()
-    for edition in editions:
-        work = by_edition.get(edition.id)
-        if work is None or work.id in seen:
-            continue
-        seen.add(work.id)
-        if work.kind is WorkKind.single:
-            ordered.append(work)
-
-    return await _to_work_outs(db, ordered)
+    No upstream call happens on a query the database has already resolved, so
+    the common case never leaves the process.
+    """
+    works = await search.search(db, q)
+    return await _to_work_outs(db, works)
 
 
 @router.get("/{work_id}", response_model=WorkOut)

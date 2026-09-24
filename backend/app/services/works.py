@@ -20,7 +20,11 @@ from app.models.shelf import Shelf
 from app.models.thread import Thread
 from app.models.work import Work, WorkKind, WorkProvenance, WorkSource
 from app.services import open_library
-from app.services.open_library import OLWork, genre_slug as ol_genre_slug
+from app.services.open_library import (
+    OLWork,
+    cover_url as ol_cover_url,
+    genre_slug as ol_genre_slug,
+)
 from app.services.work_identity import (
     canonical_key,
     classify_kind,
@@ -367,6 +371,18 @@ async def load_work_presentation(
 ) -> dict[UUID, WorkPresentation]:
     """Fetch cover, description and edition count for many works in one query.
 
+    Each field has a fallback order, because a work may have no editions at all
+    once Open Library becomes the ingest source:
+
+    * cover — OL's curated image, then the representative edition's, then none.
+      OL wins because Google serves a placeholder PNG at HTTP 200 for
+      metadata-only records, so its URL cannot be trusted on its own.
+    * description — the representative edition's, then the work's. Google's
+      edition blurbs are richer than OL's, so an enriched edition wins.
+    * edition count — OL's total, then the local row count. OL knows Red Rising
+      has 26 editions while we may have ingested none, and the number is shown
+      as a fact about the book, not about our database.
+
     Kept out of the routes so both ``api/works.py`` and ``api/genres.py`` build
     the same shape, and out of the schema layer so nothing lazy-loads a
     relationship mid-serialization (MissingGreenlet).
@@ -384,8 +400,11 @@ async def load_work_presentation(
     stmt = (
         select(
             Work.id,
+            Work.ol_cover_id,
             representative.c.cover_url,
             representative.c.description,
+            Work.description,
+            Work.ol_edition_count,
             func.coalesce(counts.c.n, 0),
         )
         .outerjoin(representative, Work.representative_book_id == representative.c.id)
@@ -394,6 +413,10 @@ async def load_work_presentation(
     )
     rows = (await db.execute(stmt)).all()
     return {
-        row[0]: WorkPresentation(cover_url=row[1], description=row[2], edition_count=row[3])
+        row[0]: WorkPresentation(
+            cover_url=ol_cover_url(row[1]) or row[2],
+            description=row[3] or row[4],
+            edition_count=row[5] or row[6],
+        )
         for row in rows
     }
