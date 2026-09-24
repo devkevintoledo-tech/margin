@@ -167,9 +167,13 @@ refresh without a manual purge.
 Local ordering lives in one function in a new `services/search.py`:
 
 ```
-score = ts_rank_cd(search_doc, query) * ln(1 + readinglog_count)
+score = ts_rank_cd(search_doc, query) * (1 + ln(1 + readinglog_count))
 tiebreak: ol_edition_count desc, first_publish_year asc
 ```
+
+The multiplier bottoms out at `1.0`, never `0`. A bare `ln(1 + readers)` would
+zero the score of every work OL reports no readers for, discarding the text
+rank along with it and leaving the long tail in arbitrary order.
 
 Popularity is a multiplier, not an addend, so an irrelevant famous book cannot
 outrank a relevant one — *Dune* does not surface for "red rising" merely for
