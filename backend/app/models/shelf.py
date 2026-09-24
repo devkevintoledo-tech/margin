@@ -16,7 +16,7 @@ class ShelfStatus(str, enum.Enum):
 
 class Shelf(Base):
     __tablename__ = "shelves"
-    __table_args__ = (UniqueConstraint("user_id", "book_id", name="uq_shelf_user_book"),)
+    __table_args__ = (UniqueConstraint("user_id", "work_id", name="uq_shelf_user_work"),)
 
     id: Mapped[uuid.UUID] = mapped_column(
         primary_key=True,
@@ -26,14 +26,8 @@ class Shelf(Base):
     user_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
-    # Nullable for the duration of the works migration: a shelf row created
-    # after the cutover knows only its work. The column goes away entirely in
-    # the second migration.
-    book_id: Mapped[uuid.UUID | None] = mapped_column(
-        ForeignKey("books.id", ondelete="CASCADE"), nullable=True, index=True
-    )
-    work_id: Mapped[uuid.UUID | None] = mapped_column(
-        ForeignKey("works.id", ondelete="CASCADE"), nullable=True, index=True
+    work_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("works.id", ondelete="CASCADE"), nullable=False, index=True
     )
     status: Mapped[ShelfStatus] = mapped_column(
         Enum(ShelfStatus, name="shelf_status_enum"), nullable=False
@@ -47,5 +41,4 @@ class Shelf(Base):
 
     # Relationships
     user: Mapped["User"] = relationship("User", back_populates="shelves")  # noqa: F821
-    book: Mapped["Book | None"] = relationship("Book", back_populates="shelves")  # noqa: F821
     work: Mapped["Work | None"] = relationship("Work", back_populates="shelves")  # noqa: F821

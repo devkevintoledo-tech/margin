@@ -21,7 +21,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 
-from sqlalchemy import select, update
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import AsyncSessionLocal
@@ -62,15 +62,12 @@ async def resolve_all(session: AsyncSession, *, upgrade: bool = False) -> dict[s
 
 
 async def _link_through_editions(session: AsyncSession, model) -> int:
-    """Copy ``work_id`` onto rows that still only know their edition."""
-    result = await session.execute(
-        update(model)
-        .where(model.work_id.is_(None), model.book_id.is_not(None))
-        .values(
-            work_id=select(Book.work_id).where(Book.id == model.book_id).scalar_subquery()
-        )
-    )
-    return result.rowcount or 0
+    """No-op since migration 2: threads and shelves carry work_id directly.
+
+    Kept so the summary shape and the CLI output stay stable for anyone
+    following the runbook in this module's docstring.
+    """
+    return 0
 
 
 async def _upgrade_heuristic_works(session: AsyncSession) -> int:

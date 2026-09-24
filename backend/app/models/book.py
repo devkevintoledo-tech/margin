@@ -50,9 +50,9 @@ class Book(Base):
     maturity_rating: Mapped[str | None] = mapped_column(String(20), nullable=True)
     info_link: Mapped[str | None] = mapped_column(String(2048), nullable=True)
     preview_link: Mapped[str | None] = mapped_column(String(2048), nullable=True)
-    genre_id: Mapped[uuid.UUID | None] = mapped_column(
-        ForeignKey("genres.id", ondelete="SET NULL"), nullable=True, index=True
-    )
+    # Nullable by necessity, not by design: an edition is inserted and flushed
+    # before resolution can batch it. Every edition ends a transaction with a
+    # work; the resolver enforces that, not the column.
     work_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("works.id", ondelete="CASCADE"), nullable=True, index=True
     )
@@ -64,9 +64,6 @@ class Book(Base):
     )
 
     # Relationships
-    genre: Mapped["Genre | None"] = relationship("Genre", back_populates="books")  # noqa: F821
     work: Mapped["Work | None"] = relationship(  # noqa: F821
         "Work", back_populates="editions", foreign_keys=[work_id]
     )
-    shelves: Mapped[list["Shelf"]] = relationship("Shelf", back_populates="book", cascade="all, delete-orphan")  # noqa: F821
-    threads: Mapped[list["Thread"]] = relationship("Thread", back_populates="book")  # noqa: F821

@@ -19,6 +19,5 @@ class Genre(Base):
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # Relationships
-    books: Mapped[list["Book"]] = relationship("Book", back_populates="genre")  # noqa: F821
     works: Mapped[list["Work"]] = relationship("Work", back_populates="genre")  # noqa: F821
     threads: Mapped[list["Thread"]] = relationship("Thread", back_populates="genre")  # noqa: F821
