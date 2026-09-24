@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { describe, expect, it } from 'vitest'
 import WorkCard from './WorkCard'
@@ -42,6 +42,13 @@ describe('WorkCard', () => {
 
   it('falls back to the title when there is no cover', () => {
     renderCard({ ...work, cover_url: null })
+    expect(screen.queryByRole('img')).not.toBeInTheDocument()
+    expect(screen.getAllByText('Red Rising').length).toBeGreaterThan(0)
+  })
+
+  it('falls back to the title when the cover fails to load', () => {
+    renderCard({ ...work, cover_url: 'https://example.test/dead.jpg' })
+    fireEvent.error(screen.getByRole('img', { name: 'Red Rising' }))
     expect(screen.queryByRole('img')).not.toBeInTheDocument()
     expect(screen.getAllByText('Red Rising').length).toBeGreaterThan(0)
   })

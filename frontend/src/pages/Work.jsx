@@ -16,6 +16,9 @@ function Work() {
   const { id } = useParams()
   const navigate = useNavigate()
   const [showModal, setShowModal] = useState(false)
+  // Same fallback as WorkCard: a dead cover URL shows the placeholder, not a
+  // broken-image glyph.
+  const [coverFailed, setCoverFailed] = useState(false)
   const user = useAuthStore((s) => s.user)
   const voteMutation = useVoteThread()
 
@@ -114,8 +117,13 @@ function Work() {
           large, full colour, never dimmed. */}
       <section className="flex flex-col sm:flex-row gap-8">
         <div className="shrink-0 w-44 sm:w-56">
-          {work.cover_url ? (
-            <img src={work.cover_url} alt={work.title} className="w-full border border-line" />
+          {work.cover_url && !coverFailed ? (
+            <img
+              src={work.cover_url}
+              alt={work.title}
+              onError={() => setCoverFailed(true)}
+              className="w-full border border-line"
+            />
           ) : (
             <div className="w-full aspect-[2/3] bg-panel border border-line flex items-center justify-center text-ink-dim text-xs">
               No Cover
