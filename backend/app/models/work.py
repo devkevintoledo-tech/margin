@@ -2,7 +2,19 @@ import enum
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, Enum, ForeignKey, Integer, String, Text, UniqueConstraint, text
+from sqlalchemy import (
+    Computed,
+    DateTime,
+    Enum,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+    text,
+)
+from sqlalchemy.dialects.postgresql import TSVECTOR
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
@@ -40,6 +52,7 @@ class Work(Base):
     __tablename__ = "works"
     __table_args__ = (
         UniqueConstraint("source", "external_id", name="uq_works_source_external_id"),
+        Index("ix_works_search_doc", "search_doc", postgresql_using="gin"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -81,6 +94,46 @@ class Work(Base):
     )
     genre_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("genres.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    # --- Open Library presentation and ranking data -------------------------
+    # Cover precedence inverts here: OL's librarian-curated image wins over
+    # Google's, which serves a placeholder PNG at HTTP 200 for metadata-only
+    # records and so cannot be trusted.
+    ol_cover_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # OL's edition total (26 for Red Rising), which is a fact about the book
+    # and independent of how many editions we happen to have ingested.
+    ol_edition_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default=text("0"), default=0
+    )
+    readinglog_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default=text("0"), default=0
+    )
+    ratings_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default=text("0"), default=0
+    )
+    # Space-joined OL subject tags. Indexed at weight C so a series sibling
+    # (Iron Gold, tagged `franchise:Red Rising`) is findable by the series
+    # name — without this the local index returns fewer results than the
+    # upstream call that filled it.
+    subjects: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Work-level description, filled by lazy enrichment. A work can exist with
+    # zero editions, so it cannot always be read through a representative.
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    enriched_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    # Generated, not maintained in Python: the database is the only writer, so
+    # it can never drift from title/author/subjects. Declared here (not only in
+    # the migration) because tests build the schema with create_all.
+    search_doc: Mapped[str] = mapped_column(
+        TSVECTOR,
+        Computed(
+            "setweight(to_tsvector('english', coalesce(title, '')), 'A') || "
+            "setweight(to_tsvector('english', coalesce(author, '')), 'B') || "
+            "setweight(to_tsvector('english', coalesce(subjects, '')), 'C')",
+            persisted=True,
+        ),
+        nullable=False,
     )
     # Tombstone pointer: a merged work keeps resolving so its URLs survive.
     merged_into_id: Mapped[uuid.UUID | None] = mapped_column(

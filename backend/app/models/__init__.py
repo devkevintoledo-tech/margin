@@ -8,6 +8,7 @@ from app.models.post import Post
 from app.models.vote import Vote
 from app.models.password_reset import PasswordResetToken
 from app.models.work import Work, WorkKind, WorkProvenance, WorkSource
+from app.models.search_query import SearchQuery
 
 __all__ = [
     "Base",
@@ -25,4 +26,5 @@ __all__ = [
     "WorkKind",
     "WorkProvenance",
     "WorkSource",
+    "SearchQuery",
 ]
