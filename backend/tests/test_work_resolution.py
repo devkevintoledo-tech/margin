@@ -284,3 +284,40 @@ async def test_a_heuristic_work_keeps_a_readable_title(db_session):
     assert work.source is WorkSource.heuristic
     assert work.title == "Red Rising"
     assert work.canonical_key == "red rising\x1fpierce brown"
+
+
+@respx.mock
+async def test_an_edition_joins_an_existing_open_library_work_when_resolution_fails(db_session):
+    """A later unresolved edition must not stand up a twin beside its own work.
+
+    `_absorb_heuristic_twin` only fires when an Open Library work is *created*.
+    Creation order is whatever the search returned, so the reverse case — the
+    OL work already exists and the heuristic edition arrives second — has to be
+    handled here or the duplicate is permanent.
+    """
+    respx.get(SEARCH_URL).mock(return_value=Response(200, json={"docs": [RED_RISING_DOC]}))
+    resolved_first = make_edition(isbn_13="9780345539809")
+    db_session.add(resolved_first)
+    await db_session.flush()
+    ol_work = (await works_service.resolve_editions(db_session, [resolved_first]))[
+        resolved_first.id
+    ]
+    assert ol_work.source is WorkSource.openlibrary
+
+    # Open Library goes down; a sibling edition of the same book arrives.
+    respx.get(SEARCH_URL).mock(return_value=Response(503, json={}))
+    later = make_edition(title="Red Rising (Deluxe Slipcase Edition)")
+    db_session.add(later)
+    await db_session.flush()
+    got = (await works_service.resolve_editions(db_session, [later]))[later.id]
+
+    assert got.id == ol_work.id
+    others = (
+        await db_session.execute(
+            select(Work).where(
+                Work.canonical_key == ol_work.canonical_key,
+                Work.merged_into_id.is_(None),
+            )
+        )
+    ).scalars().all()
+    assert len(others) == 1

@@ -171,6 +171,24 @@ async def _upsert_work(
     if existing is not None:
         return await canonical_work(db, existing)
 
+    if source is WorkSource.heuristic:
+        # An Open Library work for this same book may already exist. It would
+        # have absorbed a heuristic twin had it been created afterwards, but
+        # creation order is just whatever the search returned — so handle the
+        # other order here too, or the duplicate is permanent and only
+        # `resolve_works --upgrade` would ever clear it.
+        claimed = (
+            await db.execute(
+                select(Work).where(
+                    Work.source == WorkSource.openlibrary,
+                    Work.canonical_key == key,
+                    Work.merged_into_id.is_(None),
+                )
+            )
+        ).scalars().first()
+        if claimed is not None:
+            return claimed
+
     work = Work(
         source=source,
         external_id=external_id,
