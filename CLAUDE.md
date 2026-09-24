@@ -70,7 +70,7 @@ Async end-to-end FastAPI app. The layering is strict:
 
 - **`models/`** — SQLAlchemy 2.0 ORM (`DeclarativeBase` in `models/base.py`). `models/__init__.py` imports every model so `Base.metadata` is fully populated — always import models through the package or this `__init__` so metadata stays complete.
 - **`schemas/`** — Pydantic v2 request/response models. Keep API I/O shapes here, never expose ORM models directly.
-- **`services/`** — business logic with no FastAPI types. `google_books.py` is the Google Books HTTP client (httpx, parses the Volumes API into a normalized dict; optional `GOOGLE_BOOKS_API_KEY`, keyless fallback; two-pass title-weighted search, cover-URL upgrade); `open_library.py` resolves *work identity* (the work/edition graph Google Books lacks: batched `isbn:(...)` search, then title+author with an `edition_count` tiebreak, never raising on upstream failure); `works.py` owns the resolution ladder, representative-edition selection and `merge_works`; `work_identity.py` holds the pure string rules the other two build on; `auth.py` holds JWT (python-jose, HS256), bcrypt password hashing, reset-token generation/hashing, and the `get_current_user` / `get_current_user_optional` dependencies; `email.py` provides the `EmailSender` ABC with SMTP and console implementations.
+- **`services/`** — business logic with no FastAPI types. `search.py` owns search: query gating against `search_queries`, Open Library ingest, and the local ranked query (it is the only caller of Google on the search path, and only when Open Library is down); `open_library.py` is both the *search* source (`search_works`, cover URLs, `genre_slug`) and the *work identity* source (the work/edition graph Google Books lacks: batched `isbn:(...)` search, then title+author with an `edition_count` tiebreak, never raising on upstream failure); `google_books.py` is the Google Books HTTP client, now an *enrichment* client rather than a search one (httpx, parses the Volumes API into a normalized dict; optional `GOOGLE_BOOKS_API_KEY`, keyless fallback; two-pass title-weighted search, cover-URL upgrade); `enrichment.py` fills a work's editions and description from Google on first view of its page; `covers.py` HEADs a cover URL to reject Google's placeholder; `works.py` owns the resolution ladder, `upsert_work_from_ol`, representative-edition selection and `merge_works`; `work_identity.py` holds the pure string rules the others build on; `auth.py` holds JWT (python-jose, HS256), bcrypt password hashing, reset-token generation/hashing, and the `get_current_user` / `get_current_user_optional` dependencies; `email.py` provides the `EmailSender` ABC with SMTP and console implementations.
 - **`scripts/`** — standalone maintenance entrypoints run with `python -m scripts.<name>` (e.g. `backfill_cover_urls`). They open their own session via `AsyncSessionLocal` and must stay idempotent.
 - **`api/`** — thin route handlers. Each module owns an `APIRouter(prefix=...)` and is wired in `main.py`.
 - **`config.py`** — `Settings` (pydantic-settings) loaded from env / `.env`. `database.py` — async engine + `get_db` dependency (a session that auto-commits on success, rolls back on exception).
@@ -92,6 +92,33 @@ how a heuristic work is later recognised as the same book and merged.
 Heuristic → OL merges happen automatically; OL → OL merges never do.
 Collections (box sets, omnibuses) are stored with `kind='collection'` and
 filtered out of search, not dropped at ingest.
+
+A work may have **zero editions**: Open Library's search response carries
+everything a work row stores, so search ingests works without touching `books`
+at all, and editions only arrive when someone opens the work's page. Everything
+edition-derived therefore needs a fallback, which `load_work_presentation` owns:
+cover is OL's curated image, then the representative edition's, then none;
+`edition_count` is OL's total (26 for *Red Rising*) before the local row count,
+because it is a fact about the book and not about our database; description is
+the representative edition's before the work's, since Google's blurbs are
+richer.
+
+**Search is local-first**: `GET /api/works/search` normalizes the query and
+checks `search_queries`. On a miss it calls Open Library's `search.json` once
+(5s timeout — a cold search blocks a real person), turns each doc into a `Work`
+row, and records the query; the row means the catalog already holds everything
+upstream would return, so every later search for it makes no HTTP call at all
+(TTL 30 days). Every search, cold or warm, is then answered by a Postgres
+full-text query over the generated `works.search_doc` column, ranked
+`ts_rank_cd(...) * (1 + ln(1 + readinglog_count))` — popularity multiplies the
+text match rather than adding to it, so a famous but irrelevant book cannot
+outrank a relevant one. Subjects are indexed at weight C (title A, author B),
+which is what keeps a series sibling like *Iron Gold* findable by "red rising".
+Google Books is never on the search path: it is the degraded fallback when Open
+Library is down (and then the query is deliberately *not* recorded, so the next
+search retries), and otherwise runs only from `enrichment.py`. `search_doc` is
+declared twice on purpose — in the model for `create_all` in tests, and in the
+migration for the real database — and the two expressions must stay identical.
 
 `work_identity` exposes two title forms and they are not interchangeable:
 `clean_title()` is the *key* (lowercased, depunctuated, feeds `canonical_key`),

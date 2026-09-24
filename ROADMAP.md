@@ -44,6 +44,7 @@ Round out the spec'd v1 behaviors that are schema-ready but not exposed.
 | ⬜ | **Profile editing** — `User` has only `avatar_url`; add bio + edit endpoint/page. | `backend/app/models/user.py`, `backend/app/api/users.py`, `frontend/src/pages/Profile.jsx` |
 | ✅ | **Book metadata enrichment** — Google Books search now caches description, ISBN-13, publisher, page count, ratings, language, categories, and links; the book page surfaces them. Categories auto-map to a seeded genre. | `backend/app/api/books.py`, `backend/app/services/google_books.py`, `frontend/src/pages/Book.jsx` |
 | ✅ | **Work grouping** — `works` table with Open Library identity (batched ISBN → title+author → labelled heuristic); threads and shelves hang off works, collections hidden from search, `merge_works` for repair. Supersedes the per-response edition dedup. | `backend/app/services/{works,open_library,work_identity}.py`, `backend/app/api/works.py` |
+| ✅ | **Local-first search & covers** — a query is resolved against Open Library at most once (`search_queries`, 30-day TTL) and answered thereafter from a generated `works.search_doc` tsvector, ranked by text match × `ln(readinglog_count)`; covers come from Open Library, Google's placeholder is rejected by its bytes, and Google Books is demoted to lazy edition enrichment on first view of a work page. | `backend/app/services/{search,covers,enrichment,open_library,works}.py`, `backend/scripts/backfill_covers.py` |
 | ⬜ | **Thread sorting/filtering** — sort by new/top, filter genre threads by date. | `backend/app/api/{books,genres}.py`, `frontend/src/pages/{Book,Genre}.jsx` |
 | ⬜ | **Empty/loading-state polish** across pages. | `frontend/src/pages/` |
 
@@ -69,6 +70,9 @@ Explicitly out of scope for v1 in the spec; the natural next layer.
 | ⬜ | **Trending** — surface hot books/genres/threads by recent upvotes + post velocity. | new endpoint, `frontend/src/pages/Home.jsx` |
 | ⬜ | **Full-text search** — search across thread titles + post content (Postgres FTS / `tsvector`). | new endpoint + migration, `frontend/src/pages/Search.jsx` |
 | ⬜ | **Search filters** — book search by genre/author/year. | `backend/app/api/books.py`, `frontend/src/pages/Search.jsx` |
+| ⬜ | **Typo tolerance** — a misspelled query matches nothing today, because `plainto_tsquery` only matches lexemes. Wants a `pg_trgm` index and a similarity fallback; the ranking seam in `search_local` is where it goes. Deliberately out of scope of local-first search. | `backend/app/services/search.py` + migration |
+| ⬜ | **Bulk pre-seeding from an Open Library dump** — the catalog fills one query at a time, so the first search for any term still pays ~1.5s. A dump import would make the common case warm from day one. | new script under `backend/scripts/` |
+| ⬜ | **Author and series pages** — works now store Open Library's `franchise:` and `series:` subject tags, which makes these mostly a query and a route. | `backend/app/api/works.py`, `frontend/src/pages/` |
 | ⬜ | **Recommendations** — book/thread suggestions from shelves + follows. | new service |
 
 ---
@@ -108,7 +112,7 @@ No moderation surface exists today (no roles, flags, or admin tools).
 | --- | --- | --- |
 | ⬜ | **Background jobs / queue** — async Google Books sync, notification fan-out. | new worker service |
 | ⬜ | **Email verification** — password reset already ships (`/auth/forgot-password`). | `backend/app/api/auth.py`, email service |
-| ⬜ | **Rate-limit `/api/works/search`** — anonymous, and fans out to Google Books plus up to `_TITLE_AUTHOR_CALL_CAP` sequential Open Library calls at a 10s timeout each, while writing `books`/`works` rows. Wants a wall-clock budget across tier 2 rather than a call count. | `backend/app/api/works.py`, `backend/app/services/works.py` |
+| ⬜ | **Rate-limit `/api/works/search`** — much cheaper since local-first search: a repeat query makes no upstream call at all, so only a *cold* query costs anything (one 5s Open Library call, or the Google fallback). Still anonymous and still writes `works` rows, so a stream of distinct queries is unbounded work. | `backend/app/api/works.py`, `backend/app/services/search.py` |
 | ⬜ | **Profile shelves render empty cards** — `GET /api/users/{username}` returns shelf rows (shelf `id` + `work_id`, no title/author/cover) and `Profile.jsx` feeds them to `WorkCard`, which links to `/works/<shelf-id>`. Pre-dates work grouping. Return `WorkOut` rows instead. | `backend/app/api/users.py`, `frontend/src/pages/Profile.jsx` |
 | ⬜ | **Data export** — user shelf/post export. | new endpoint |
 | ⬜ | **Observability** — structured logging, metrics, error tracking. | `backend/app/main.py`, infra |
