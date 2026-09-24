@@ -321,3 +321,66 @@ async def test_an_edition_joins_an_existing_open_library_work_when_resolution_fa
         )
     ).scalars().all()
     assert len(others) == 1
+
+
+@respx.mock
+async def test_a_merge_inside_one_batch_does_not_leave_a_stale_mapping(db_session):
+    """A work tombstoned mid-batch must not still be returned for its editions.
+
+    The first edition is recorded against a heuristic work; a later edition in
+    the *same* batch resolves via Open Library, which absorbs that heuristic
+    work. Without re-canonicalizing, the first edition still maps to the
+    tombstone and search renders it as a second, empty card.
+    """
+    # Open Library knows the ISBN but its title+author search finds nothing, so
+    # the first (ISBN-less) edition falls to the heuristic tier.
+    def by_query(request):
+        if "isbn" in request.url.params.get("q", ""):
+            return Response(200, json={"docs": [RED_RISING_DOC]})
+        return Response(200, json={"docs": []})
+
+    respx.get(SEARCH_URL).mock(side_effect=by_query)
+
+    heuristic_first = make_edition(title="Red Rising", isbn_13=None)
+    resolves_second = make_edition(title="Red Rising", isbn_13="9780345539809")
+    db_session.add_all([heuristic_first, resolves_second])
+    await db_session.flush()
+
+    resolved = await works_service.resolve_editions(
+        db_session, [heuristic_first, resolves_second]
+    )
+
+    assert resolved[heuristic_first.id].merged_into_id is None
+    assert resolved[heuristic_first.id].id == resolved[resolves_second.id].id
+
+
+async def test_a_tombstone_keeps_no_presentation_of_its_own(db_session):
+    """A merged work must not render with the cover of editions it lost."""
+    from app.services.works import load_work_presentation
+
+    target = Work(
+        source=WorkSource.openlibrary, external_id="OL1W", canonical_key="k",
+        title="T", author="A", kind=WorkKind.single,
+        identity_provenance=WorkProvenance.isbn,
+    )
+    source = Work(
+        source=WorkSource.heuristic, external_id="abc", canonical_key="k",
+        title="T", author="A", kind=WorkKind.single,
+        identity_provenance=WorkProvenance.heuristic,
+    )
+    db_session.add_all([target, source])
+    await db_session.flush()
+
+    edition = make_edition(cover_url="https://x/cover.jpg", work_id=source.id)
+    db_session.add(edition)
+    await db_session.flush()
+    source.representative_book_id = edition.id
+    await db_session.flush()
+
+    await works_service.merge_works(db_session, source, target)
+
+    presentation = await load_work_presentation(db_session, [source.id, target.id])
+    assert presentation[source.id].cover_url is None
+    assert presentation[source.id].edition_count == 0
+    assert presentation[target.id].cover_url == "https://x/cover.jpg"
+    assert presentation[target.id].edition_count == 1

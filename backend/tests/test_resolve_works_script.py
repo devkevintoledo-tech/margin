@@ -59,8 +59,6 @@ async def test_backfill_is_idempotent(db_session):
     second = await resolve_all(db_session)
 
     assert second["editions_resolved"] == 0
-    assert second["threads_linked"] == 0
-    assert second["shelves_linked"] == 0
 
 
 @respx.mock

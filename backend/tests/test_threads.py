@@ -174,3 +174,50 @@ async def test_thread_listing_carries_created_at_for_the_age_column(
     row = next(r for r in rows if r["id"] == created.json()["id"])
     assert row["created_at"] == created.json()["created_at"]
     assert row["author"]
+
+
+async def test_thread_created_against_a_merge_tombstone_lands_on_the_canonical_work(
+    client, auth_headers, db_session, work
+):
+    """Tombstones exist so old ids keep working — including for writes.
+
+    A stale client (a cached query, an open tab, a bookmark) can post a merged
+    work's id. Every read path canonicalizes, so a thread stored against the
+    tombstone would be invisible on both URLs.
+    """
+    from app.models import Work, WorkKind, WorkProvenance, WorkSource
+
+    merged = Work(
+        source=WorkSource.heuristic,
+        external_id="tombstone",
+        canonical_key=work.canonical_key,
+        title=work.title,
+        author=work.author,
+        kind=WorkKind.single,
+        identity_provenance=WorkProvenance.heuristic,
+        merged_into_id=work.id,
+    )
+    db_session.add(merged)
+    await db_session.flush()
+
+    created = await client.post(
+        "/api/threads/",
+        json={"title": "Posted against an old id", "work_id": str(merged.id)},
+        headers=auth_headers,
+    )
+    assert created.status_code == 201, created.text
+    assert created.json()["work_id"] == str(work.id)
+
+    listed = await client.get(f"/api/works/{work.id}/threads")
+    assert [t["title"] for t in listed.json()] == ["Posted against an old id"]
+
+
+async def test_thread_against_an_unknown_work_is_404_not_500(client, auth_headers):
+    import uuid as _uuid
+
+    resp = await client.post(
+        "/api/threads/",
+        json={"title": "Nowhere", "work_id": str(_uuid.uuid4())},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 404, resp.text

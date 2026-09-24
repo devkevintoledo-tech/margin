@@ -44,7 +44,14 @@ async def _search(params: dict[str, Any]) -> list[dict[str, Any]]:
         async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
             response = await client.get(url, params=params)
             response.raise_for_status()
-            return response.json().get("docs", [])
+            body = response.json()
+            # Valid JSON that is not an object (an HTML error page proxied as
+            # `[]`, a CDN interstitial) would make `.get` raise, and this
+            # function's whole contract is that it never does.
+            if not isinstance(body, dict):
+                return []
+            docs = body.get("docs", [])
+            return docs if isinstance(docs, list) else []
     except (httpx.HTTPStatusError, httpx.RequestError, ValueError):
         # Timeout, 429, outage, malformed body — identity resolution degrades
         # to the heuristic tier rather than failing the user's search.

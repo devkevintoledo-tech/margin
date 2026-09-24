@@ -355,3 +355,32 @@ async def test_search_books_does_not_repeat_a_volume_across_passes():
 
     results = await gb.search_books("dune")
     assert [r["external_id"] for r in results] == ["a", "z"]
+
+
+# ---------------------------------------------------------------------------
+# _isbn_13() — normalized at the edge so the DB column and the work-resolution
+# lookup both get 13 plain digits.
+# ---------------------------------------------------------------------------
+
+
+def test_isbn_13_strips_hyphens():
+    ids = [{"type": "ISBN_13", "identifier": "978-0-345-53980-9"}]
+    assert gb._isbn_13(ids) == "9780345539809"
+
+
+def test_isbn_13_upgrades_an_isbn_10_when_that_is_all_there_is():
+    ids = [{"type": "ISBN_10", "identifier": "0345539788"}]
+    assert gb._isbn_13(ids) == "9780345539786"
+
+
+def test_isbn_13_prefers_the_13_form():
+    ids = [
+        {"type": "ISBN_10", "identifier": "0345539788"},
+        {"type": "ISBN_13", "identifier": "9780345539809"},
+    ]
+    assert gb._isbn_13(ids) == "9780345539809"
+
+
+def test_isbn_13_ignores_other_identifier_types():
+    assert gb._isbn_13([{"type": "OTHER", "identifier": "xyz"}]) is None
+    assert gb._isbn_13(None) is None

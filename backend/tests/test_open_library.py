@@ -100,3 +100,16 @@ async def test_resolve_by_title_author_rejects_an_author_mismatch():
 async def test_resolve_by_title_author_survives_a_timeout():
     respx.get(SEARCH_URL).mock(side_effect=httpx.ReadTimeout("slow"))
     assert await ol.resolve_by_title_author("Red Rising", "Pierce Brown") is None
+
+
+@respx.mock
+async def test_resolve_by_isbns_survives_a_non_object_json_body():
+    """An HTML error page proxied as JSON must not crash identity resolution."""
+    respx.get(SEARCH_URL).mock(return_value=Response(200, json=[]))
+    assert await ol.resolve_by_isbns(["9780345539809"]) == {}
+
+
+@respx.mock
+async def test_resolve_by_title_author_survives_a_non_object_json_body():
+    respx.get(SEARCH_URL).mock(return_value=Response(200, json="nope"))
+    assert await ol.resolve_by_title_author("Red Rising", "Pierce Brown") is None

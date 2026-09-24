@@ -1,19 +1,19 @@
-"""Backfill: give every edition a work, then move threads and shelves onto it.
+"""Backfill: give every edition a work.
 
 Alembic must not make HTTP calls, so identity resolution lives here, between
 the two migrations. Run after migration 1 and before migration 2::
 
     docker compose exec backend python -m scripts.resolve_works
 
+Migration 2 then moves threads and shelves onto those works in SQL and refuses
+to run if any edition is still unresolved, so this script's only job is to fill
+``books.work_id``.
+
 Idempotent: a second run resolves nothing. ``--upgrade`` re-attempts works that
 fell back to the heuristic tier (because Open Library was unreachable or had no
 record at the time) and merges each one into its Open Library work on success::
 
     docker compose exec backend python -m scripts.resolve_works --upgrade
-
-Before running migration 2, confirm the gate is clean::
-
-    SELECT count(*) FROM threads WHERE book_id IS NOT NULL AND work_id IS NULL;
 """
 
 from __future__ import annotations
@@ -25,7 +25,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import AsyncSessionLocal
-from app.models import Book, Shelf, Thread, Work, WorkSource
+from app.models import Book, Work, WorkProvenance, WorkSource
 from app.services import open_library
 from app.services.works import merge_works, resolve_editions
 
@@ -34,10 +34,9 @@ _BATCH = 20
 
 
 async def resolve_all(session: AsyncSession, *, upgrade: bool = False) -> dict[str, int]:
-    """Resolve unresolved editions, link threads and shelves, optionally upgrade.
+    """Give every unresolved edition a work, optionally upgrading heuristic ones.
 
-    Returns a summary dict with ``editions_resolved``, ``threads_linked``,
-    ``shelves_linked`` and ``works_upgraded``.
+    Returns a summary dict with ``editions_resolved`` and ``works_upgraded``.
     """
     editions = (
         await session.execute(select(Book).where(Book.work_id.is_(None)))
@@ -47,27 +46,13 @@ async def resolve_all(session: AsyncSession, *, upgrade: bool = False) -> dict[s
         await resolve_editions(session, editions[start : start + _BATCH])
     await session.flush()
 
-    threads_linked = await _link_through_editions(session, Thread)
-    shelves_linked = await _link_through_editions(session, Shelf)
-
     upgraded = await _upgrade_heuristic_works(session) if upgrade else 0
 
     await session.commit()
     return {
         "editions_resolved": len(editions),
-        "threads_linked": threads_linked,
-        "shelves_linked": shelves_linked,
         "works_upgraded": upgraded,
     }
-
-
-async def _link_through_editions(session: AsyncSession, model) -> int:
-    """No-op since migration 2: threads and shelves carry work_id directly.
-
-    Kept so the summary shape and the CLI output stay stable for anyone
-    following the runbook in this module's docstring.
-    """
-    return 0
 
 
 async def _upgrade_heuristic_works(session: AsyncSession) -> int:
@@ -112,8 +97,6 @@ async def _upgrade_heuristic_works(session: AsyncSession) -> int:
             work.title = found.title
             work.author = found.author or work.author
             work.first_publish_year = found.first_publish_year or work.first_publish_year
-            from app.models import WorkProvenance
-
             work.identity_provenance = (
                 WorkProvenance.isbn if isbns else WorkProvenance.title_author
             )
@@ -140,8 +123,6 @@ async def main() -> None:
     print(
         "Work resolution complete: "
         f"{summary['editions_resolved']} editions resolved, "
-        f"{summary['threads_linked']} threads linked, "
-        f"{summary['shelves_linked']} shelves linked, "
         f"{summary['works_upgraded']} works upgraded."
     )
 

@@ -70,10 +70,22 @@ def _parse_date(published_date: str | None) -> date | None:
 
 
 def _isbn_13(identifiers: list[dict[str, Any]] | None) -> str | None:
-    for ident in identifiers or []:
-        if ident.get("type") == "ISBN_13":
-            return ident.get("identifier")
-    return None
+    """The volume's ISBN as 13 normalized digits, or None.
+
+    Normalized here, at the edge, for three reasons: Google returns hyphenated
+    values that would overflow ``Book.isbn_13`` (String(13)); work resolution
+    looks editions up in a dict keyed by normalized ISBNs, so an unnormalized
+    one silently misses tier 1; and a volume carrying only an ISBN-10 has a
+    perfectly good identity once upgraded.
+    """
+    # Imported inside the function: work_identity imports `normalize` from this
+    # module, so a module-level import here would be circular.
+    from app.services.work_identity import normalize_isbn
+
+    found = {
+        ident.get("type"): ident.get("identifier") for ident in identifiers or []
+    }
+    return normalize_isbn(found.get("ISBN_13")) or normalize_isbn(found.get("ISBN_10"))
 
 
 # Highest-resolution first; Google Books only returns a subset per volume.

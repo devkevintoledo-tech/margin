@@ -11,6 +11,7 @@ from app.models.post import Post
 from app.models.user import User
 from app.models.vote import Vote
 from app.models.work import Work
+from app.services.works import canonical_work
 from app.schemas.thread import (
     PostOut,
     ThreadWorkRef,
@@ -44,10 +45,23 @@ async def create_thread(
             )
         genre_id = genre.id
 
+    # Resolve the work the same way every read path does. A stale client can
+    # hold a merged work's id — tombstones exist precisely so those keep
+    # working — and a thread stored against one would be invisible on both the
+    # old and the new URL, because the listing canonicalizes before filtering.
+    work_id = payload.work_id
+    if work_id is not None:
+        work = await db.get(Work, work_id)
+        if work is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Work not found"
+            )
+        work_id = (await canonical_work(db, work)).id
+
     thread = Thread(
         title=payload.title,
         user_id=current_user.id,
-        work_id=payload.work_id,
+        work_id=work_id,
         genre_id=genre_id,
     )
     db.add(thread)

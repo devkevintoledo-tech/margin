@@ -109,7 +109,11 @@ async def resolve_editions(
             await _refresh_work(db, work, genre_hints)
     await db.flush()
 
-    return resolved
+    # An edition resolved early in the batch may have been recorded against a
+    # work that a later edition then merged away. The row is correct; this
+    # mapping is what search reads, so it has to follow the tombstone too —
+    # otherwise the caller renders the merged work as a second, empty card.
+    return {book_id: await canonical_work(db, work) for book_id, work in resolved.items()}
 
 
 async def _resolve_upstream(
@@ -282,6 +286,11 @@ async def merge_works(db: AsyncSession, source: Work, target: Work) -> Work:
     )
 
     source.merged_into_id = target.id
+    # The tombstone's derived fields now describe editions it no longer owns:
+    # left alone, load_work_presentation renders it with another work's cover
+    # and an edition count of zero.
+    source.representative_book_id = None
+    source.genre_id = None
     await db.flush()
     await _refresh_work(db, target)
     await db.flush()
