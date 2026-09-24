@@ -43,7 +43,7 @@ Round out the spec'd v1 behaviors that are schema-ready but not exposed.
 | ✅ | **Vote toggling / downvotes** — `votes` table (one row per user per thread/post, ±1), idempotent `PUT /threads/{id}/vote` and `PUT /posts/{id}/vote`; `upvotes` is now a signed `score`. | `backend/app/models/vote.py`, `backend/app/services/votes.py`, `backend/app/api/{threads,posts}.py` |
 | ⬜ | **Profile editing** — `User` has only `avatar_url`; add bio + edit endpoint/page. | `backend/app/models/user.py`, `backend/app/api/users.py`, `frontend/src/pages/Profile.jsx` |
 | ✅ | **Book metadata enrichment** — Google Books search now caches description, ISBN-13, publisher, page count, ratings, language, categories, and links; the book page surfaces them. Categories auto-map to a seeded genre. | `backend/app/api/books.py`, `backend/app/services/google_books.py`, `frontend/src/pages/Book.jsx` |
-| ✅ | **Duplicate search results** — service-layer dedup collapses duplicate editions by normalized `(title, first author)`, keeping the richest-metadata edition wholesale at the first-seen position; relevance order preserved. | `backend/app/services/google_books.py` |
+| ✅ | **Work grouping** — `works` table with Open Library identity (batched ISBN → title+author → labelled heuristic); threads and shelves hang off works, collections hidden from search, `merge_works` for repair. Supersedes the per-response edition dedup. | `backend/app/services/{works,open_library,work_identity}.py`, `backend/app/api/works.py` |
 | ⬜ | **Thread sorting/filtering** — sort by new/top, filter genre threads by date. | `backend/app/api/{books,genres}.py`, `frontend/src/pages/{Book,Genre}.jsx` |
 | ⬜ | **Empty/loading-state polish** across pages. | `frontend/src/pages/` |
 
@@ -94,6 +94,7 @@ No moderation surface exists today (no roles, flags, or admin tools).
 | Status | Feature | Touches |
 | --- | --- | --- |
 | ⬜ | **Roles & permissions** — `role` on `User`, admin dependency. | `backend/app/models/user.py`, `backend/app/services/auth.py` |
+| ⬜ | **Admin merge/split for works** — surface `merge_works()`; split a work whose editions were wrongly grouped. | `backend/app/services/works.py`, new frontend area |
 | ⬜ | **Reporting / flagging** — report threads/posts; moderation queue. | new model + endpoints |
 | ⬜ | **Admin dashboard** — review reports, remove content, manage users. | new frontend area |
 | ⬜ | **Genre CRUD** — genres are seed-only via migration today; admin create/edit. | `backend/app/api/genres.py` |
@@ -106,7 +107,7 @@ No moderation surface exists today (no roles, flags, or admin tools).
 | Status | Feature | Touches |
 | --- | --- | --- |
 | ⬜ | **Background jobs / queue** — async Google Books sync, notification fan-out. | new worker service |
-| ⬜ | **Email verification + password reset** — transactional email flows. | `backend/app/api/auth.py`, email service |
+| ⬜ | **Email verification** — password reset already ships (`/auth/forgot-password`). | `backend/app/api/auth.py`, email service |
 | ⬜ | **Data export** — user shelf/post export. | new endpoint |
 | ⬜ | **Observability** — structured logging, metrics, error tracking. | `backend/app/main.py`, infra |
 

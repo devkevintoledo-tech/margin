@@ -70,7 +70,7 @@ Async end-to-end FastAPI app. The layering is strict:
 
 - **`models/`** — SQLAlchemy 2.0 ORM (`DeclarativeBase` in `models/base.py`). `models/__init__.py` imports every model so `Base.metadata` is fully populated — always import models through the package or this `__init__` so metadata stays complete.
 - **`schemas/`** — Pydantic v2 request/response models. Keep API I/O shapes here, never expose ORM models directly.
-- **`services/`** — business logic with no FastAPI types. `google_books.py` is the Google Books HTTP client (httpx, parses the Volumes API into a normalized dict; optional `GOOGLE_BOOKS_API_KEY`, keyless fallback; two-pass title-weighted search, edition dedup, cover-URL upgrade); `auth.py` holds JWT (python-jose, HS256), bcrypt password hashing, reset-token generation/hashing, and the `get_current_user` / `get_current_user_optional` dependencies; `email.py` provides the `EmailSender` ABC with SMTP and console implementations.
+- **`services/`** — business logic with no FastAPI types. `google_books.py` is the Google Books HTTP client (httpx, parses the Volumes API into a normalized dict; optional `GOOGLE_BOOKS_API_KEY`, keyless fallback; two-pass title-weighted search, cover-URL upgrade); `open_library.py` resolves *work identity* (the work/edition graph Google Books lacks: batched `isbn:(...)` search, then title+author with an `edition_count` tiebreak, never raising on upstream failure); `works.py` owns the resolution ladder, representative-edition selection and `merge_works`; `work_identity.py` holds the pure string rules the other two build on; `auth.py` holds JWT (python-jose, HS256), bcrypt password hashing, reset-token generation/hashing, and the `get_current_user` / `get_current_user_optional` dependencies; `email.py` provides the `EmailSender` ABC with SMTP and console implementations.
 - **`scripts/`** — standalone maintenance entrypoints run with `python -m scripts.<name>` (e.g. `backfill_cover_urls`). They open their own session via `AsyncSessionLocal` and must stay idempotent.
 - **`api/`** — thin route handlers. Each module owns an `APIRouter(prefix=...)` and is wired in `main.py`.
 - **`config.py`** — `Settings` (pydantic-settings) loaded from env / `.env`. `database.py` — async engine + `get_db` dependency (a session that auto-commits on success, rolls back on exception).
@@ -80,6 +80,26 @@ Async end-to-end FastAPI app. The layering is strict:
 Auth flow: register/login issue a JWT (`sub` = user id); protected routes depend on `get_current_user`, which decodes the bearer token and loads the `User`. Google OAuth uses Authlib and requires `SessionMiddleware` (already added in `main.py`).
 
 **Password reset** (`POST /auth/forgot-password` → `/auth/reset-password`): only the token's SHA-256 hash is persisted (`password_reset_tokens`), so a leaked row can't be replayed; the raw token only exists in the emailed link. Preserve these properties when touching the flow — the forgot endpoint returns an identical response whether or not the account exists (anti-enumeration) and only issues tokens for `AuthProvider.email` accounts with a password hash, and it commits the token row *before* sending the email so a failed commit can't produce a live link. Tokens are single-use (`used_at`) and expire after `PASSWORD_RESET_TOKEN_TTL_MINUTES`.
+
+**Works vs editions**: `books` rows are *editions* (one Google Books volume
+each); `works` is what users search, discuss and shelf. `threads.work_id` and
+`shelves.work_id` point at works only — never re-introduce an edition-level FK,
+or discussion splits across printings again. A work's identity is
+`('openlibrary', 'OL…W')` when Open Library resolved it, otherwise
+`('heuristic', sha1(canonical_key))`, recorded in `identity_provenance`.
+`canonical_key` is stored on *every* work, including Open Library ones: it is
+how a heuristic work is later recognised as the same book and merged.
+Heuristic → OL merges happen automatically; OL → OL merges never do.
+Collections (box sets, omnibuses) are stored with `kind='collection'` and
+filtered out of search, not dropped at ingest.
+
+`work_identity` exposes two title forms and they are not interchangeable:
+`clean_title()` is the *key* (lowercased, depunctuated, feeds `canonical_key`),
+`display_title()` is what a reader sees. Both strip the same edition packaging.
+A heuristic work names itself from an edition, so it must use `display_title`.
+
+After a deploy that adds editions predating the works table, run
+`python -m scripts.resolve_works` (and `--upgrade` to promote heuristic works).
 
 **Email**: routes depend on `email_sender_dep`, never on a concrete sender — that's the seam tests override via `app.dependency_overrides`. `get_email_sender()` picks `SmtpEmailSender` when `SMTP_HOST` is set and `ConsoleEmailSender` (logs the link) otherwise, so local dev needs no SMTP server.
 
@@ -146,6 +166,8 @@ Read those before changing anything visual.
 ## Known remaining gaps
 
 - **No token revocation**: `POST /auth/logout` is a stateless no-op — the frontend just clears the persisted JWT, and a stolen token stays valid until expiry. A password reset does not invalidate existing sessions either. Anything relying on server-side session invalidation needs a refresh/denylist design first.
+- **No admin merge/split UI**: `merge_works()` and `scripts.resolve_works
+  --upgrade` are the only repair tools; a mis-grouped work needs a shell.
 - Content is immutable (no edit/delete for threads or posts). See `ROADMAP.md` for the tracked list.
 
 ## Environment
@@ -154,6 +176,6 @@ Backend reads env vars (see `backend/.env.example` and the `backend` service in 
 
 - Core: `DATABASE_URL`, `SECRET_KEY`, `APP_NAME`
 - OAuth (optional): `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`
-- Book data: `GOOGLE_BOOKS_BASE_URL`, `GOOGLE_BOOKS_API_KEY` (optional; keyless fallback)
+- Book data: `GOOGLE_BOOKS_BASE_URL`, `GOOGLE_BOOKS_API_KEY` (optional; keyless fallback), `OPEN_LIBRARY_BASE_URL`
 - Email (optional — no `SMTP_HOST` means reset links are logged, not sent): `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_USE_TLS`, `MAIL_FROM`
 - Password reset: `FRONTEND_BASE_URL` (base of the emailed link), `PASSWORD_RESET_TOKEN_TTL_MINUTES`
