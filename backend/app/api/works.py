@@ -8,7 +8,10 @@ from sqlalchemy import func, literal, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.models.base import Base  # noqa: F401 — ensure metadata loaded
+# Through the package, per CLAUDE.md: app.models.__init__ imports every model,
+# so Base.metadata is complete without importing Base directly for its side
+# effect.
+from app.models import Book, Genre, Post, Shelf, Thread, User, Vote, Work, WorkKind
 from app.schemas.book import ShelfIn, ShelfOut, WorkOut, work_out
 from app.schemas.thread import ThreadSummary
 from app.services import google_books
@@ -18,15 +21,6 @@ from app.services.works import (
     load_work_presentation,
     resolve_editions,
 )
-
-from app.models.book import Book  # type: ignore[import]
-from app.models.genre import Genre  # type: ignore[import]
-from app.models.post import Post  # type: ignore[import]
-from app.models.shelf import Shelf  # type: ignore[import]
-from app.models.thread import Thread  # type: ignore[import]
-from app.models.user import User  # type: ignore[import]
-from app.models.vote import Vote  # type: ignore[import]
-from app.models.work import Work, WorkKind  # type: ignore[import]
 
 router = APIRouter(prefix="/works", tags=["works"])
 

@@ -149,3 +149,45 @@ async def test_upgrade_merges_into_an_existing_open_library_work(db_session):
     await db_session.refresh(thread)
     assert heuristic.merged_into_id == target_id
     assert thread.work_id == target_id
+
+
+@respx.mock
+async def test_upgrade_refuses_a_work_whose_editions_disagree(db_session):
+    """--upgrade rewrites identity in place, so it must not guess.
+
+    If a heuristic work's own editions resolve to two different Open Library
+    works, the grouping itself is wrong and no single identity is correct.
+    Promoting to whichever answered first would silently pick one.
+    """
+    respx.get(OL_URL).mock(return_value=Response(503, json={}))
+    a = Book(
+        source="google_books", external_id=uuid.uuid4().hex[:12],
+        title="Red Rising", author="Pierce Brown", isbn_13="9780345539809",
+    )
+    b = Book(
+        source="google_books", external_id=uuid.uuid4().hex[:12],
+        title="Red Rising", author="Pierce Brown", isbn_13="9781473646506",
+    )
+    db_session.add_all([a, b])
+    await db_session.flush()
+    await resolve_all(db_session)
+    await db_session.refresh(a)
+    work = await db_session.get(Work, a.work_id)
+    assert work.source is WorkSource.heuristic
+
+    # The two ISBNs belong to two different Open Library works.
+    respx.get(OL_URL).mock(
+        return_value=Response(200, json={"docs": [OL_RED_RISING, {
+            "key": "/works/OL19340986W",
+            "title": "Golden Son",
+            "author_name": ["Pierce Brown"],
+            "first_publish_year": 2015,
+            "edition_count": 21,
+            "isbn": ["9781473646506"],
+        }]})
+    )
+    summary = await resolve_all(db_session, upgrade=True)
+
+    assert summary["works_upgraded"] == 0
+    await db_session.refresh(work)
+    assert work.source is WorkSource.heuristic

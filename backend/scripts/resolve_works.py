@@ -27,7 +27,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import AsyncSessionLocal
 from app.models import Book, Work, WorkProvenance, WorkSource
 from app.services import open_library
-from app.services.works import merge_works, resolve_editions
+from app.services.works import _absorb_heuristic_twin, merge_works, resolve_editions
 
 # Google Books pages are 20 volumes; one Open Library call covers a batch.
 _BATCH = 20
@@ -75,7 +75,14 @@ async def _upgrade_heuristic_works(session: AsyncSession) -> int:
         found = None
         if isbns:
             by_isbn = await open_library.resolve_by_isbns(isbns)
-            found = next(iter(by_isbn.values()), None)
+            # This rewrites the work's identity in place, so it must not guess.
+            # If this work's own editions point at two different Open Library
+            # works, the heuristic grouped two books together and no single
+            # identity is right — leave it for a deliberate merge/split.
+            candidates = {w.key: w for w in by_isbn.values()}
+            if len(candidates) > 1:
+                continue
+            found = next(iter(candidates.values()), None)
         if found is None:
             found = await open_library.resolve_by_title_author(work.title, work.author)
         if found is None:
@@ -100,6 +107,10 @@ async def _upgrade_heuristic_works(session: AsyncSession) -> int:
             work.identity_provenance = (
                 WorkProvenance.isbn if isbns else WorkProvenance.title_author
             )
+            await session.flush()
+            # It is an Open Library work now, so fold in any heuristic sibling
+            # exactly as creating it fresh would have.
+            await _absorb_heuristic_twin(session, work)
         else:
             await merge_works(session, work, target)
         upgraded += 1

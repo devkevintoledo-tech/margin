@@ -98,8 +98,14 @@ filtered out of search, not dropped at ingest.
 `display_title()` is what a reader sees. Both strip the same edition packaging.
 A heuristic work names itself from an edition, so it must use `display_title`.
 
-After a deploy that adds editions predating the works table, run
-`python -m scripts.resolve_works` (and `--upgrade` to promote heuristic works).
+**Upgrading a pre-works database** is a three-step sequence, in this order:
+`alembic upgrade 0c433c23eda9` (adds `works`), then
+`python -m scripts.resolve_works` (gives every edition a work — needs HTTP, so
+it cannot live in a migration), then `alembic upgrade head`, which moves threads
+and shelves onto those works in SQL and *refuses to run* if any edition is still
+unresolved. `--upgrade` later promotes works that fell back to the heuristic
+tier; it skips any whose own editions resolve to different Open Library works,
+because that grouping is wrong and no single identity is right.
 
 **Email**: routes depend on `email_sender_dep`, never on a concrete sender — that's the seam tests override via `app.dependency_overrides`. `get_email_sender()` picks `SmtpEmailSender` when `SMTP_HOST` is set and `ConsoleEmailSender` (logs the link) otherwise, so local dev needs no SMTP server.
 

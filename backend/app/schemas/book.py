@@ -1,14 +1,18 @@
 from __future__ import annotations
 
 from datetime import date, datetime
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
 
 from app.models.shelf import ShelfStatus
 from app.models.work import Work, WorkKind
-from app.services.works import WorkPresentation
+
+if TYPE_CHECKING:  # pragma: no cover
+    # Type-only: importing this at runtime would make schemas depend on
+    # services, inverting the layering (services -> schemas -> models).
+    from app.services.works import WorkPresentation
 
 
 class BookOut(BaseModel):
@@ -60,7 +64,7 @@ class WorkOut(BaseModel):
 
 def work_out(
     work: Work,
-    presentation: WorkPresentation | None = None,
+    presentation: "WorkPresentation | None" = None,
     shelf_status: ShelfStatus | None = None,
 ) -> WorkOut:
     """Build a WorkOut from scalar columns plus its presentation row."""

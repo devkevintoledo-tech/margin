@@ -94,7 +94,7 @@ No moderation surface exists today (no roles, flags, or admin tools).
 | Status | Feature | Touches |
 | --- | --- | --- |
 | ⬜ | **Roles & permissions** — `role` on `User`, admin dependency. | `backend/app/models/user.py`, `backend/app/services/auth.py` |
-| ⬜ | **Admin merge/split for works** — surface `merge_works()`; split a work whose editions were wrongly grouped. | `backend/app/services/works.py`, new frontend area |
+| ⬜ | **Admin merge/split for works** — surface `merge_works()`; split a work whose editions were wrongly grouped. `scripts.resolve_works --upgrade` deliberately skips a work whose own editions disagree, so those need a human. | `backend/app/services/works.py`, new frontend area |
 | ⬜ | **Reporting / flagging** — report threads/posts; moderation queue. | new model + endpoints |
 | ⬜ | **Admin dashboard** — review reports, remove content, manage users. | new frontend area |
 | ⬜ | **Genre CRUD** — genres are seed-only via migration today; admin create/edit. | `backend/app/api/genres.py` |
@@ -108,6 +108,8 @@ No moderation surface exists today (no roles, flags, or admin tools).
 | --- | --- | --- |
 | ⬜ | **Background jobs / queue** — async Google Books sync, notification fan-out. | new worker service |
 | ⬜ | **Email verification** — password reset already ships (`/auth/forgot-password`). | `backend/app/api/auth.py`, email service |
+| ⬜ | **Rate-limit `/api/works/search`** — anonymous, and fans out to Google Books plus up to `_TITLE_AUTHOR_CALL_CAP` sequential Open Library calls at a 10s timeout each, while writing `books`/`works` rows. Wants a wall-clock budget across tier 2 rather than a call count. | `backend/app/api/works.py`, `backend/app/services/works.py` |
+| ⬜ | **Profile shelves render empty cards** — `GET /api/users/{username}` returns shelf rows (shelf `id` + `work_id`, no title/author/cover) and `Profile.jsx` feeds them to `WorkCard`, which links to `/works/<shelf-id>`. Pre-dates work grouping. Return `WorkOut` rows instead. | `backend/app/api/users.py`, `frontend/src/pages/Profile.jsx` |
 | ⬜ | **Data export** — user shelf/post export. | new endpoint |
 | ⬜ | **Observability** — structured logging, metrics, error tracking. | `backend/app/main.py`, infra |
 
