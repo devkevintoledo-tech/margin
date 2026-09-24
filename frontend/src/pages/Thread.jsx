@@ -16,7 +16,7 @@ function Thread() {
   const { data: thread, isLoading, isError } = useThread(resolvedId)
 
   const posts = thread?.posts || []
-  const anchor = thread?.book?.title || thread?.genre?.name || ''
+  const anchor = thread?.work?.title || thread?.genre?.name || ''
 
   // `posts` arrives as a tree — top-level posts carry their own `replies` — so
   // its length is the number of branches, not the number of posts.
@@ -53,9 +53,9 @@ function Thread() {
   const topLevelPosts = posts.filter((p) => !p.parent_id)
 
   const segments = []
-  if (thread.book) {
-    segments.push({ label: 'books', to: '/' })
-    segments.push({ label: thread.book.title, to: `/books/${thread.book.id}` })
+  if (thread.work) {
+    segments.push({ label: 'works', to: '/' })
+    segments.push({ label: thread.work.title, to: `/works/${thread.work.id}` })
   } else if (thread.genre) {
     segments.push({ label: 'genres', to: '/' })
     segments.push({ label: thread.genre.name, to: `/genres/${thread.genre.slug}` })

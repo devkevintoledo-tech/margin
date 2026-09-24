@@ -19,12 +19,12 @@ describe('StatusBar', () => {
   it('shows the mode and path a page declares', () => {
     render(
       <>
-        <Page mode="BOOK" path="~/books/the-dispossessed" facts={['2 threads']} />
+        <Page mode="WORK" path="~/works/the-dispossessed" facts={['2 threads']} />
         <StatusBar />
       </>,
     )
-    expect(screen.getByText('BOOK')).toBeInTheDocument()
-    expect(screen.getByText('~/books/the-dispossessed')).toBeInTheDocument()
+    expect(screen.getByText('WORK')).toBeInTheDocument()
+    expect(screen.getByText('~/works/the-dispossessed')).toBeInTheDocument()
     expect(screen.getByText('2 threads')).toBeInTheDocument()
   })
 

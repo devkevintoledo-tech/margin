@@ -123,3 +123,35 @@ def test_classify_kind_leaves_single_works_alone(title):
 
 def test_classify_kind_reads_the_subtitle_too():
     assert wi.classify_kind("Red Rising", "The Complete Series") == "collection"
+
+
+# ---------------------------------------------------------------------------
+# display_title() — same trimming as clean_title, but readable.
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize(
+    "raw,expected",
+    [
+        ("Red Rising", "Red Rising"),
+        ("Red Rising (Deluxe Slipcase Edition)", "Red Rising"),
+        ("Red Rising [Hardcover]", "Red Rising"),
+        ("Red Rising 01", "Red Rising"),
+        ("Red Rising, Vol. 2", "Red Rising"),
+        ("The Hobbit: Illustrated Edition", "The Hobbit"),
+        # Punctuation and capitals are part of the title, not noise.
+        ("Red Rising: Sons of Ares", "Red Rising: Sons of Ares"),
+        ("Fahrenheit 451", "Fahrenheit 451"),
+    ],
+)
+def test_display_title_trims_packaging_but_keeps_the_title_readable(raw, expected):
+    assert wi.display_title(raw) == expected
+
+
+def test_display_title_and_clean_title_agree_on_what_to_strip():
+    """The two differ only in presentation — never in which work they name."""
+    for raw in ("Red Rising (Deluxe Slipcase Edition)", "Red Rising 01", "The Hobbit: Illustrated Edition"):
+        assert wi.clean_title(wi.display_title(raw)) == wi.clean_title(raw)
+
+
+def test_display_title_handles_empty():
+    assert wi.display_title("") == ""

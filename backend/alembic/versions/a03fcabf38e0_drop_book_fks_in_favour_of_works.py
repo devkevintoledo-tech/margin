@@ -24,6 +24,24 @@ def upgrade() -> None:
 
     op.drop_column("shelves", "book_id")
     op.drop_column("threads", "book_id")
+
+    # Genre moves from the edition to the work before the column goes. Without
+    # this, every genre page empties out on deploy and only refills as users
+    # search. DISTINCT ON picks one genre per work; editions of a work
+    # effectively never disagree, and if they did, either answer is as good.
+    op.execute(
+        """
+        UPDATE works w
+        SET genre_id = sub.genre_id
+        FROM (
+            SELECT DISTINCT ON (work_id) work_id, genre_id
+            FROM books
+            WHERE work_id IS NOT NULL AND genre_id IS NOT NULL
+            ORDER BY work_id, genre_id
+        ) AS sub
+        WHERE w.id = sub.work_id AND w.genre_id IS NULL
+        """
+    )
     op.drop_column("books", "genre_id")
 
     # books.work_id stays nullable: editions are flushed before they are

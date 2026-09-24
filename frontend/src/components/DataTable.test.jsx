@@ -10,7 +10,7 @@ const columns = [
     key: 'title',
     label: 'Thread',
     sortable: true,
-    render: (r) => <Link to={`/books/1/threads/${r.id}`}>{r.title}</Link>,
+    render: (r) => <Link to={`/works/1/threads/${r.id}`}>{r.title}</Link>,
   },
 ]
 
@@ -37,7 +37,7 @@ describe('DataTable', () => {
     renderTable()
     expect(screen.getByRole('link', { name: 'Overrated' })).toHaveAttribute(
       'href',
-      '/books/1/threads/2',
+      '/works/1/threads/2',
     )
   })
 

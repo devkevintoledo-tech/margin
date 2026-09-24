@@ -266,3 +266,21 @@ async def test_canonical_work_follows_the_tombstone(db_session):
     await db_session.flush()
 
     assert (await works_service.canonical_work(db_session, source)).id == target.id
+
+
+@respx.mock
+async def test_a_heuristic_work_keeps_a_readable_title(db_session):
+    """The heuristic tier names the work from an edition — in title case.
+
+    The canonical key is lowercased for matching; the title a reader sees
+    must not be.
+    """
+    respx.get(SEARCH_URL).mock(return_value=Response(503, json={}))
+    edition = make_edition(title="Red Rising (Deluxe Slipcase Edition)")
+    db_session.add(edition)
+    await db_session.flush()
+
+    work = (await works_service.resolve_editions(db_session, [edition]))[edition.id]
+    assert work.source is WorkSource.heuristic
+    assert work.title == "Red Rising"
+    assert work.canonical_key == "red rising\x1fpierce brown"

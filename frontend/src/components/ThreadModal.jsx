@@ -3,8 +3,8 @@ import { useCreateThread } from '../api/threads'
 import { errorMessage } from '../api/errors'
 
 /**
- * Thread creation for both books and genres. `target` is whichever key the API
- * expects — `{ book_id }` or `{ genre_slug }` — and is spread into the payload.
+ * Thread creation for both works and genres. `target` is whichever key the API
+ * expects — `{ work_id }` or `{ genre_slug }` — and is spread into the payload.
  *
  * The default labels are load-bearing: `e2e/thread.spec.js` clicks
  * "Start a Thread" and "Create Thread" by accessible name.

@@ -56,20 +56,40 @@ _COLLECTION_PATTERNS = tuple(
 )
 
 
-def clean_title(title: str) -> str:
-    """Normalize a title with edition packaging removed.
+def _strip_edition_noise(title: str) -> str:
+    """Remove edition packaging, preserving the text otherwise.
 
     Deliberately does NOT drop everything after a colon — a subtitle usually
     names a different book (``Red Rising: Sons of Ares``). Only a colon-led
     tail made of edition words is dropped.
     """
-    if not title:
-        return ""
-
     working = _BRACKETED.sub(" ", title)
     working = _EDITION_TAIL.sub("", working)
-    working = _strip_volume_marker(working)
-    return normalize(working)
+    return _strip_volume_marker(working)
+
+
+def clean_title(title: str) -> str:
+    """The grouping form of a title: edition packaging removed, then normalized.
+
+    Lowercased and stripped of punctuation, so it is a key, not something to
+    show a reader. Use :func:`display_title` for that.
+    """
+    if not title:
+        return ""
+    return normalize(_strip_edition_noise(title))
+
+
+def display_title(title: str) -> str:
+    """The readable form of a title: edition packaging removed, casing kept.
+
+    A work created on the heuristic tier has no authority to name it, so it
+    borrows an edition's title — and a book's title has to survive that with
+    its capitals intact. ``clean_title`` would render *Red Rising* as
+    "red rising" on the cover of its own page.
+    """
+    if not title:
+        return ""
+    return re.sub(r"\s+", " ", _strip_edition_noise(title)).strip(" ,:-")
 
 
 def _strip_volume_marker(title: str) -> str:

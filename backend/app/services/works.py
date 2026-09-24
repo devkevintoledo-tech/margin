@@ -23,7 +23,7 @@ from app.services.open_library import OLWork
 from app.services.work_identity import (
     canonical_key,
     classify_kind,
-    clean_title,
+    display_title,
     heuristic_external_id,
 )
 
@@ -156,7 +156,9 @@ async def _upsert_work(
         year = ol_work.first_publish_year or edition.published_year
     else:
         source, external_id = WorkSource.heuristic, heuristic_external_id(key)
-        title = (clean_title(edition.title or "") or edition.title or "Untitled").strip()
+        # display_title, not clean_title: this string is shown on the work's
+        # own page, and clean_title is a lookup key (lowercased, depunctuated).
+        title = display_title(edition.title or "") or edition.title or "Untitled"
         author = edition.author or "Unknown"
         year = edition.published_year
 
