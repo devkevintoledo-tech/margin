@@ -7,6 +7,7 @@ from sqlalchemy import select
 from app.models import (
     AuthProvider,
     Book,
+    Genre,
     Shelf,
     ShelfStatus,
     Thread,
@@ -17,6 +18,8 @@ from app.models import (
     WorkSource,
 )
 from app.services import works as works_service
+from app.services.open_library import OLWork
+from app.services.works import upsert_work_from_ol
 
 SEARCH_URL = "https://openlibrary.org/search.json"
 
@@ -384,3 +387,83 @@ async def test_a_tombstone_keeps_no_presentation_of_its_own(db_session):
     assert presentation[source.id].edition_count == 0
     assert presentation[target.id].cover_url == "https://x/cover.jpg"
     assert presentation[target.id].edition_count == 1
+
+
+def ol_work(**kw):
+    base = dict(
+        key="OL17076473W",
+        title="Red Rising",
+        author="Pierce Brown",
+        first_publish_year=2014,
+        edition_count=26,
+        isbn_13s=frozenset({"9780345539809"}),
+        cover_id=7316188,
+        readinglog_count=1036,
+        ratings_count=102,
+        subjects=("franchise:Red Rising", "genre:science fiction"),
+    )
+    base.update(kw)
+    return OLWork(**base)
+
+
+async def test_upsert_creates_a_work_with_cover_popularity_and_subjects(db_session):
+    work = await upsert_work_from_ol(db_session, ol_work())
+    assert work.source is WorkSource.openlibrary
+    assert work.external_id == "OL17076473W"
+    assert work.title == "Red Rising"
+    assert work.ol_cover_id == 7316188
+    assert work.readinglog_count == 1036
+    assert work.ratings_count == 102
+    assert work.ol_edition_count == 26
+    assert "franchise:Red Rising" in work.subjects
+    assert work.identity_provenance is WorkProvenance.isbn
+
+
+async def test_upsert_is_idempotent_on_the_open_library_key(db_session):
+    first = await upsert_work_from_ol(db_session, ol_work())
+    second = await upsert_work_from_ol(db_session, ol_work())
+    assert first.id == second.id
+    rows = (await db_session.execute(select(Work))).scalars().all()
+    assert len(rows) == 1
+
+
+async def test_upsert_refreshes_popularity_on_an_existing_work(db_session):
+    await upsert_work_from_ol(db_session, ol_work(readinglog_count=10))
+    work = await upsert_work_from_ol(db_session, ol_work(readinglog_count=1036))
+    assert work.readinglog_count == 1036
+
+
+async def test_upsert_assigns_a_genre_from_the_open_library_subject_tag(db_session):
+    genre = Genre(name="Science Fiction", slug="science-fiction")
+    db_session.add(genre)
+    await db_session.flush()
+    work = await upsert_work_from_ol(db_session, ol_work())
+    assert work.genre_id == genre.id
+
+
+async def test_upsert_absorbs_a_matching_heuristic_work(db_session):
+    from app.services.work_identity import canonical_key, heuristic_external_id
+
+    key = canonical_key("Red Rising", "Pierce Brown")
+    twin = Work(
+        source=WorkSource.heuristic,
+        external_id=heuristic_external_id(key),
+        canonical_key=key,
+        title="Red Rising",
+        author="Pierce Brown",
+        kind=WorkKind.single,
+        identity_provenance=WorkProvenance.heuristic,
+    )
+    db_session.add(twin)
+    await db_session.flush()
+
+    work = await upsert_work_from_ol(db_session, ol_work())
+    await db_session.refresh(twin)
+    assert twin.merged_into_id == work.id
+
+
+async def test_upsert_marks_a_box_set_as_a_collection(db_session):
+    work = await upsert_work_from_ol(
+        db_session, ol_work(key="OL99W", title="Red Rising Series 5 Books Collection Set")
+    )
+    assert work.kind is WorkKind.collection

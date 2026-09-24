@@ -15,11 +15,12 @@ from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.book import Book
+from app.models.genre import Genre
 from app.models.shelf import Shelf
 from app.models.thread import Thread
 from app.models.work import Work, WorkKind, WorkProvenance, WorkSource
 from app.services import open_library
-from app.services.open_library import OLWork
+from app.services.open_library import OLWork, genre_slug as ol_genre_slug
 from app.services.work_identity import (
     canonical_key,
     classify_kind,
@@ -209,6 +210,62 @@ async def _upsert_work(
 
     if source is WorkSource.openlibrary:
         await _absorb_heuristic_twin(db, work)
+    return work
+
+
+async def upsert_work_from_ol(db: AsyncSession, ol: OLWork) -> Work:
+    """Create or refresh the work an Open Library search doc describes.
+
+    Unlike ``_upsert_work``, this needs no edition: Open Library's search
+    response carries everything a work row stores, so a work can exist with
+    zero ``books`` rows until someone opens its page.
+    """
+    author = ol.author or "Unknown"
+    key = canonical_key(ol.title, author)
+
+    existing = (
+        await db.execute(
+            select(Work).where(
+                Work.source == WorkSource.openlibrary, Work.external_id == ol.key
+            )
+        )
+    ).scalar_one_or_none()
+
+    work = await canonical_work(db, existing) if existing is not None else None
+
+    if work is None:
+        work = Work(
+            source=WorkSource.openlibrary,
+            external_id=ol.key,
+            canonical_key=key,
+            title=ol.title,
+            author=author,
+            first_publish_year=ol.first_publish_year,
+            kind=WorkKind(classify_kind(ol.title)),
+            # An OL search hit is an authority's own match for the query, the
+            # same standard tier 1 applies to an ISBN lookup.
+            identity_provenance=WorkProvenance.isbn,
+        )
+        db.add(work)
+        await db.flush()
+        await _absorb_heuristic_twin(db, work)
+
+    # Refreshed on every ingest: popularity drifts upward over time, and a
+    # cover can appear on a work that had none.
+    work.ol_cover_id = ol.cover_id or work.ol_cover_id
+    work.ol_edition_count = ol.edition_count
+    work.readinglog_count = ol.readinglog_count
+    work.ratings_count = ol.ratings_count
+    work.subjects = " ".join(ol.subjects) or None
+
+    if work.genre_id is None and ol.subjects:
+        slug = ol_genre_slug(ol.subjects)
+        if slug:
+            work.genre_id = (
+                await db.execute(select(Genre.id).where(Genre.slug == slug))
+            ).scalar_one_or_none()
+
+    await db.flush()
     return work
 
 
