@@ -98,6 +98,16 @@ or discussion splits across printings again. A work's identity is
 `('heuristic', sha1(canonical_key))`, recorded in `identity_provenance`.
 `canonical_key` is stored on *every* work, including Open Library ones: it is
 how a heuristic work is later recognised as the same book and merged.
+It records the key of whichever *edition* created the work, while the work's
+`title` comes from Open Library — so the two legitimately disagree (*Strength
+of the Strong* is stored under `the strength of the strong`, and OL titles
+three different Brian Herbert books plain `Dune`, which only the edition keys
+tell apart). Never "repair" that by overwriting the key from the title: it
+orphans correct editions and collapses distinct books. Both forms are instead
+treated as the work's identity — `identity_keys()` for reads, and
+`_claim_open_library_work` / `_absorb_heuristic_twin` for lookups, so a work
+is found by either. Lookups deliberately stop at a differing *primary author*;
+that is a merge decision, not a lookup.
 Heuristic → OL merges happen automatically; OL → OL merges never do.
 Collections (box sets, omnibuses) are stored with `kind='collection'` and
 filtered out of search, not dropped at ingest.

@@ -200,6 +200,49 @@ async def _resolve_upstream(
     return out
 
 
+async def _claim_open_library_work(db: AsyncSession, key: str) -> Work | None:
+    """Find the live Open Library work an edition key belongs to, if any.
+
+    Exact match first, which is the hot path and the only one most editions
+    need. A work keeps the ``canonical_key`` of whichever edition created it
+    (this function's own caller writes it that way), so it can hold a key no
+    other edition of the same book would ever produce while ``identity_keys``
+    still names it — *Strength of the Strong* stored under ``the strength of
+    the strong``. Matching only the stored key stands up a duplicate beside it.
+
+    The second pass narrows on the author segment, which is identical across a
+    work's key forms whenever the primary author agrees, and compares in Python
+    because ``clean_title``'s rules do not exist in SQL. Works whose forms
+    disagree on the *author* are deliberately not claimed: differing primary
+    authors are a merge decision, not a lookup.
+    """
+    exact = (
+        await db.execute(
+            select(Work).where(
+                Work.source == WorkSource.openlibrary,
+                Work.canonical_key == key,
+                Work.merged_into_id.is_(None),
+            )
+        )
+    ).scalars().first()
+    if exact is not None:
+        return exact
+
+    if "\x1f" not in key:
+        return None
+    author = key.split("\x1f", 1)[1]
+    candidates = (
+        await db.execute(
+            select(Work).where(
+                Work.source == WorkSource.openlibrary,
+                Work.canonical_key.endswith("\x1f" + author, autoescape=True),
+                Work.merged_into_id.is_(None),
+            )
+        )
+    ).scalars().all()
+    return next((w for w in candidates if key in identity_keys(w)), None)
+
+
 async def _upsert_work(
     db: AsyncSession,
     edition: Book,
@@ -237,15 +280,7 @@ async def _upsert_work(
         # creation order is just whatever the search returned — so handle the
         # other order here too, or the duplicate is permanent and only
         # `resolve_works --upgrade` would ever clear it.
-        claimed = (
-            await db.execute(
-                select(Work).where(
-                    Work.source == WorkSource.openlibrary,
-                    Work.canonical_key == key,
-                    Work.merged_into_id.is_(None),
-                )
-            )
-        ).scalars().first()
+        claimed = await _claim_open_library_work(db, key)
         if claimed is not None:
             return claimed
 
@@ -335,7 +370,7 @@ async def _absorb_heuristic_twin(db: AsyncSession, work: Work) -> None:
         await db.execute(
             select(Work).where(
                 Work.source == WorkSource.heuristic,
-                Work.canonical_key == work.canonical_key,
+                Work.canonical_key.in_(identity_keys(work)),
                 Work.merged_into_id.is_(None),
             )
         )

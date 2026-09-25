@@ -519,3 +519,81 @@ async def test_representative_prefers_english_over_a_richer_translation(db_sessi
 
     representative = await db_session.get(Book, work.representative_book_id)
     assert representative.external_id == "en1"
+
+
+# Open Library titles this work without its leading article, so the work row is
+# born with an edition-derived key ('the strength of the strong') that disagrees
+# with its own title — the exact shape of 24 live rows, whose root cause is
+# `_upsert_work` taking `canonical_key` from the edition and `title` from OL.
+LONDON_DOC = {
+    "key": "/works/OL40130137W",
+    "title": "Strength of the Strong",
+    "author_name": ["Jack London"],
+    "first_publish_year": 1911,
+    "edition_count": 12,
+    "isbn": ["9781406930016"],
+}
+
+
+@respx.mock
+async def test_an_edition_claims_a_work_whose_key_came_from_a_different_edition(
+    db_session,
+):
+    """The claim lookup must see past the work's stored key.
+
+    An Open Library work keeps the key of whichever edition created it, so a
+    later edition matching the work's *title* instead finds nothing and stands
+    up a duplicate beside it.
+    """
+    respx.get(SEARCH_URL).mock(return_value=Response(200, json={"docs": [LONDON_DOC]}))
+    articled = make_edition(
+        title="The Strength of the Strong",
+        author="Jack London",
+        isbn_13="9781406930016",
+    )
+    db_session.add(articled)
+    await db_session.flush()
+    ol_work = (await works_service.resolve_editions(db_session, [articled]))[articled.id]
+    assert ol_work.source is WorkSource.openlibrary
+    assert ol_work.canonical_key != works_service.canonical_key(
+        ol_work.title, ol_work.author
+    )
+
+    # Open Library goes down; the same book arrives titled as OL titles it.
+    respx.get(SEARCH_URL).mock(return_value=Response(503, json={}))
+    bare = make_edition(title="Strength of the Strong", author="Jack London")
+    db_session.add(bare)
+    await db_session.flush()
+    got = (await works_service.resolve_editions(db_session, [bare]))[bare.id]
+
+    assert got.id == ol_work.id
+
+
+@respx.mock
+async def test_an_open_library_work_absorbs_a_twin_keyed_on_its_title(db_session):
+    """The reverse order: the heuristic work exists first.
+
+    `_absorb_heuristic_twin` compares stored key to stored key, so a heuristic
+    work keyed on the work's title form is invisible to an Open Library work
+    keyed on an edition's.
+    """
+    respx.get(SEARCH_URL).mock(return_value=Response(503, json={}))
+    bare = make_edition(title="Strength of the Strong", author="Jack London")
+    db_session.add(bare)
+    await db_session.flush()
+    twin = (await works_service.resolve_editions(db_session, [bare]))[bare.id]
+    assert twin.source is WorkSource.heuristic
+
+    respx.get(SEARCH_URL).mock(return_value=Response(200, json={"docs": [LONDON_DOC]}))
+    articled = make_edition(
+        title="The Strength of the Strong",
+        author="Jack London",
+        isbn_13="9781406930016",
+    )
+    db_session.add(articled)
+    await db_session.flush()
+    ol_work = (await works_service.resolve_editions(db_session, [articled]))[articled.id]
+
+    assert ol_work.source is WorkSource.openlibrary
+    await db_session.refresh(twin)
+    assert twin.merged_into_id == ol_work.id
