@@ -2,7 +2,7 @@
 
 **Date:** 2026-09-22
 **Source brief:** [`new-instructions.md`](./new-instructions.md) (sections referenced below as §N)
-**Status:** Tier 1 implemented. Tiers 2–4 recorded, not built.
+**Status:** Tier 1 implemented; Tier 2 in progress (§24 done). Tiers 3–4 recorded, not built.
 
 The brief describes the product the code was already heading toward: dark,
 sharp-cornered, hairline-bordered, editorial. This record says what was adopted,
@@ -61,6 +61,9 @@ fill, breaks AA.
   react on the frame, never by dimming the art.
 - **§24 Voting de-emphasized.** Extracted `VoteControl` (`rail` + `inline`
   variants) from duplicated markup in `Post` and `ThreadCard`.
+- **§24 Downvotes and vote toggling.** One vote per user per item (±1), stored
+  in a `votes` table; `upvotes` became a signed `score`. Both arrows stay
+  muted at rest — only the arrow the reader cast lights up.
 - **§25 Component vocabulary.** `.btn-primary`, `.btn-secondary`, `.btn-ghost`,
   `.input`, `.label`, `.panel`, `.eyebrow`, `.rule`, `.alert-*` in an
   `@layer components` block; new `AuthLayout` shares the four credential screens.
@@ -92,7 +95,6 @@ These are product features, not styling. Tracked in `ROADMAP.md`.
 | 19 | Themes/moods taxonomy | Schema-significant: `Book.genre_id` is a single nullable FK; moods need many-to-many. |
 | 21, 22 | Profile as taste identity | Visual treatment landed (real shelf counts). Taste bars and "most discussed" need aggregate queries. |
 | 23 | Follows, notifications, activity feed | *Roadmap Phase 2.* Note "follow authors" is harder than it looks — `author` is a `String(500)` on `Book`, there is no author entity. |
-| 24 | Downvotes / vote toggling | `upvotes` is an increment-only `Integer`. Needs a `votes` table. *Roadmap Phase 1.* |
 | 27 | Mobile bottom nav, horizontal shelves | Depends on §8 nav existing first. |
 | 28 | Search across users/communities/discussions | Search is Google Books only. *Roadmap Phase 3 (Postgres FTS).* |
 
@@ -117,3 +119,24 @@ serif). Two remain and are **not** decided here:
 1. **§11** — the Takes interaction model (AGREE/DISAGREE vs. up/down voting).
 2. **§14** — the review reaction system. Moot while §14 is rejected; revisit only
    if the no-ratings decision is reversed.
+
+---
+
+## 6. Superseded by the terminal redesign (2026-09-23)
+
+Spec: [`docs/superpowers/specs/2026-09-23-terminal-ui-design.md`](superpowers/specs/2026-09-23-terminal-ui-design.md)
+
+§1's accent, UI sans and three-blue split are **superseded**. What replaced them,
+and why the original reasoning no longer applies:
+
+| §1 decision | Superseded by | Why |
+| --- | --- | --- |
+| Cobalt `#2B5FE3` accent | Tokyo Night blue `#7AA2F7` | The blue lineage is kept deliberately — the identity evolves rather than snaps — but the palette is now an established terminal scheme, which supplies a coherent semantic set (path/user/ok/danger/warning) that a single hand-picked accent could not. |
+| Space Grotesk UI sans | JetBrains Mono | The whole UI is monospaced. Space Grotesk has no role left. |
+| Three-blue fill/text split (`accent`/`accent-hover`/`accent-ink`) | One `accent` plus inversion | White on `#7AA2F7` is 2.52:1, so filled buttons take `text-bg` instead. Inversion is what a terminal does for selected text, and it collapses three tokens to one. |
+| Playfair for book **and** thread titles | Playfair for book titles only | A thread is structure, not a work. The single serif moment is what keeps the UI from reading as a recolored hacker toy. |
+| `ink-muted` at 3.3:1 for metadata | `ink-dim` at 8.10:1 for metadata | The muted tier splits three ways so no informational text sits below AA. Stricter than what this record originally allowed. |
+
+**Unchanged and still binding:** no star ratings or reviews (§1), covers stay
+large and undimmed (§2 §13), voting stays de-emphasised (§24), square corners,
+and the §36 "does it look like Goodreads" test.

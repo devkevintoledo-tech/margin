@@ -1,8 +1,8 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import client from '../api/client'
-import GenreCard from '../components/GenreCard'
+import { useStatusBar } from '../store/status'
 
 const FALLBACK_GENRES = [
   { slug: 'literary-fiction', name: 'Literary Fiction', description: 'Character-driven stories with literary merit.' },
@@ -25,58 +25,68 @@ function Home() {
     placeholderData: FALLBACK_GENRES,
   })
 
+  const list = genres || FALLBACK_GENRES
+
+  useStatusBar({ mode: 'HOME', path: '~', facts: [`${list.length} genres`] })
+
   const handleSearch = (e) => {
     e.preventDefault()
-    if (query.trim()) {
-      navigate(`/search?q=${encodeURIComponent(query.trim())}`)
-    }
+    if (query.trim()) navigate(`/search?q=${encodeURIComponent(query.trim())}`)
   }
 
   return (
-    <main className="flex flex-col">
-      {/* Hero — full-width editorial masthead, not a card (§7). */}
-      <section className="border-b border-line px-6 py-20 md:py-28">
-        <div className="max-w-5xl mx-auto flex flex-col gap-10">
-          <p className="eyebrow">Books worth arguing about</p>
-
-          <h1 className="text-display-sm md:text-display lg:text-display-lg font-bold uppercase text-ink max-w-4xl">
-            Books worth
-            <br />
-            <span className="text-accent-ink">fighting</span> about.
-          </h1>
-
-          <p className="text-ink-dim text-lg max-w-xl leading-relaxed">
-            Threaded discussion anchored to books and genres. No star ratings. No sanitized
-            reviews. Just honest argument.
-          </p>
-
-          <form onSubmit={handleSearch} className="flex w-full max-w-2xl">
-            <input
-              type="text"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search for a book or author..."
-              className="input px-5 py-4 text-base"
-            />
-            <button type="submit" className="btn-primary-lg shrink-0">
-              Search
-            </button>
-          </form>
-        </div>
+    <main className="max-w-shell mx-auto px-4 py-10 flex flex-col gap-12">
+      {/* Boot banner. The frame is a .panel — CSS borders, not characters, so it
+          reflows. This is the only use of display-lg. */}
+      <section className="panel p-6 pt-8 max-w-prose">
+        <h1 className="panel-title">margin 1.0</h1>
+        <p className="text-display-lg text-ink leading-none">
+          MARGIN<span className="text-accent">//</span>
+        </p>
+        <p className="text-accent text-sm mt-3">books worth arguing about</p>
+        <p className="text-ink-dim text-sm mt-4 leading-relaxed">
+          Threaded discussion anchored to books and genres.
+          <br />
+          No star ratings. No sanitized reviews. Just honest argument.
+        </p>
       </section>
 
-      {/* Genres */}
-      <section className="max-w-5xl mx-auto px-6 py-16 w-full flex flex-col gap-8">
-        <div className="flex items-baseline gap-4">
-          <span className="rule" />
-          <h2 className="text-sm font-semibold uppercase tracking-eyebrow text-ink">Browse by genre</h2>
-        </div>
-        {/* Hairline grid: one shared border between tiles, no floating cards. */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-px bg-line">
-          {(genres || FALLBACK_GENRES).map((genre) => (
-            <GenreCard key={genre.slug} genre={genre} />
+      <form onSubmit={handleSearch} className="flex items-center gap-2 max-w-prose">
+        <span aria-hidden="true" className="text-accent select-none">&gt;</span>
+        <input
+          type="text"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="search for a book or author"
+          aria-label="Search for a book or author"
+          className="input"
+        />
+        <button type="submit" className="btn-primary shrink-0">
+          Search
+        </button>
+      </form>
+
+      {/* `ls`-style listing: name in accent, description dim, on the character grid. */}
+      <section className="flex flex-col gap-4">
+        <h2 className="text-xs uppercase tracking-eyebrow text-ink-dim border-b border-line pb-2">
+          Browse by genre
+        </h2>
+        <ul className="flex flex-col">
+          {list.map((genre) => (
+            <li key={genre.slug}>
+              <Link
+                to={`/genres/${genre.slug}`}
+                className="group flex flex-col sm:flex-row sm:items-baseline gap-1 sm:gap-4 py-1.5 px-2 -mx-2
+                           hover:bg-highlight transition-colors duration-fast"
+              >
+                <span className="text-accent group-hover:text-accent-hover sm:w-48 shrink-0">
+                  {genre.slug}
+                </span>
+                <span className="text-ink-dim text-sm truncate">{genre.description}</span>
+              </Link>
+            </li>
           ))}
-        </div>
+        </ul>
       </section>
     </main>
   )

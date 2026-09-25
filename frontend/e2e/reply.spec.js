@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test'
 import { registerViaUi, openFirstSearchResult } from './helpers'
 
 // "Answering": post a top-level reply in a freshly created thread.
-// Like thread.spec, this exercises the live search → book → thread path and
+// Like thread.spec, this exercises the live search → work → thread path and
 // needs the full stack running.
 test.describe('replies', () => {
   test('post a reply in a thread', async ({ page }) => {

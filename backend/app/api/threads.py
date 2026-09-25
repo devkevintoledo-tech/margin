@@ -9,8 +9,20 @@ from app.models.genre import Genre
 from app.models.thread import Thread
 from app.models.post import Post
 from app.models.user import User
-from app.schemas.thread import PostOut, ThreadCreate, ThreadOut, post_out_from_orm
-from app.services.auth import get_current_user
+from app.models.vote import Vote
+from app.models.work import Work
+from app.services.works import canonical_work
+from app.schemas.thread import (
+    PostOut,
+    ThreadWorkRef,
+    ThreadCreate,
+    ThreadGenreRef,
+    ThreadOut,
+    VoteIn,
+    post_out_from_orm,
+)
+from app.services.auth import get_current_user, get_current_user_optional
+from app.services.votes import set_vote
 
 router = APIRouter(prefix="/threads", tags=["threads"])
 
@@ -21,7 +33,7 @@ async def create_thread(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> ThreadOut:
-    # ThreadCreate validator already enforces book XOR genre target.
+    # ThreadCreate validator already enforces work XOR genre target.
     genre_id = payload.genre_id
     if payload.genre_slug and genre_id is None:
         genre = (
@@ -33,10 +45,23 @@ async def create_thread(
             )
         genre_id = genre.id
 
+    # Resolve the work the same way every read path does. A stale client can
+    # hold a merged work's id — tombstones exist precisely so those keep
+    # working — and a thread stored against one would be invisible on both the
+    # old and the new URL, because the listing canonicalizes before filtering.
+    work_id = payload.work_id
+    if work_id is not None:
+        work = await db.get(Work, work_id)
+        if work is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Work not found"
+            )
+        work_id = (await canonical_work(db, work)).id
+
     thread = Thread(
         title=payload.title,
         user_id=current_user.id,
-        book_id=payload.book_id,
+        work_id=work_id,
         genre_id=genre_id,
     )
     db.add(thread)
@@ -48,17 +73,34 @@ async def create_thread(
         await db.flush()
 
     await db.refresh(thread)
-    return ThreadOut.model_validate(thread)
+    return ThreadOut(
+        id=thread.id,
+        title=thread.title,
+        user_id=thread.user_id,
+        work_id=thread.work_id,
+        genre_id=thread.genre_id,
+        score=thread.score,
+        my_vote=0,
+        created_at=thread.created_at,
+        author=current_user.username,
+    )
 
 
 class ThreadWithPosts(ThreadOut):
+    # The work/genre a thread hangs off, so the client can render a link and a
+    # path segment without a second round trip. These live here rather than on
+    # ThreadOut because their names collide with the `Thread.work`/`.genre`
+    # relationships, and ThreadOut is built by model_validate elsewhere.
     posts: list[PostOut] = []
+    work: ThreadWorkRef | None = None
+    genre: ThreadGenreRef | None = None
 
 
 @router.get("/{id}", response_model=ThreadWithPosts)
 async def get_thread(
     id: UUID,
     db: AsyncSession = Depends(get_db),
+    current_user: User | None = Depends(get_current_user_optional),
 ) -> ThreadWithPosts:
     result = await db.execute(select(Thread).where(Thread.id == id))
     thread = result.scalar_one_or_none()
@@ -73,7 +115,66 @@ async def get_thread(
         )
     ).scalars().all()
 
-    nodes = {post.id: post_out_from_orm(post) for post in all_posts}
+    # The caller's own votes: one scalar for the thread, one IN for every post,
+    # so there is no per-post round trip and no lazy relationship is touched.
+    my_vote = 0
+    post_votes: dict[UUID, int] = {}
+    if current_user is not None:
+        my_vote = (
+            await db.execute(
+                select(Vote.value).where(
+                    Vote.thread_id == id, Vote.user_id == current_user.id
+                )
+            )
+        ).scalar_one_or_none() or 0
+        post_ids = [p.id for p in all_posts]
+        if post_ids:
+            rows = (
+                await db.execute(
+                    select(Vote.post_id, Vote.value).where(
+                        Vote.user_id == current_user.id, Vote.post_id.in_(post_ids)
+                    )
+                )
+            ).all()
+            post_votes = {row.post_id: row.value for row in rows}
+
+    # Every username the page needs — the thread's author and each post's — in
+    # one IN query. Reading `post.user.username` instead would lazy-load per
+    # post, outside the greenlet.
+    author_ids = {thread.user_id} | {p.user_id for p in all_posts}
+    usernames = {
+        row.id: row.username
+        for row in (
+            await db.execute(select(User.id, User.username).where(User.id.in_(author_ids)))
+        ).all()
+    }
+
+    work_ref = None
+    if thread.work_id is not None:
+        work = (
+            await db.execute(select(Work.id, Work.title).where(Work.id == thread.work_id))
+        ).first()
+        if work is not None:
+            work_ref = ThreadWorkRef(id=work.id, title=work.title)
+
+    genre_ref = None
+    if thread.genre_id is not None:
+        genre = (
+            await db.execute(
+                select(Genre.id, Genre.name, Genre.slug).where(Genre.id == thread.genre_id)
+            )
+        ).first()
+        if genre is not None:
+            genre_ref = ThreadGenreRef(id=genre.id, name=genre.name, slug=genre.slug)
+
+    nodes = {
+        post.id: post_out_from_orm(
+            post,
+            my_vote=post_votes.get(post.id, 0),
+            author=usernames.get(post.user_id),
+        )
+        for post in all_posts
+    }
     roots: list[PostOut] = []
     for post in all_posts:
         node = nodes[post.id]
@@ -87,25 +188,45 @@ async def get_thread(
         id=thread.id,
         title=thread.title,
         user_id=thread.user_id,
-        book_id=thread.book_id,
+        work_id=thread.work_id,
         genre_id=thread.genre_id,
-        upvotes=thread.upvotes,
+        score=thread.score,
+        my_vote=my_vote,
         created_at=thread.created_at,
+        author=usernames.get(thread.user_id),
         posts=roots,
+        work=work_ref,
+        genre=genre_ref,
     )
 
 
-@router.post("/{id}/upvote", response_model=ThreadOut)
-async def upvote_thread(
+@router.put("/{id}/vote", response_model=ThreadOut)
+async def vote_thread(
     id: UUID,
+    payload: VoteIn,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> ThreadOut:
-    result = await db.execute(select(Thread).where(Thread.id == id))
-    thread = result.scalar_one_or_none()
+    thread = (
+        await db.execute(select(Thread).where(Thread.id == id))
+    ).scalar_one_or_none()
     if thread is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Thread not found")
-    thread.upvotes += 1
-    await db.flush()
+
+    score = await set_vote(
+        db, user_id=current_user.id, thread_id=id, value=payload.value
+    )
     await db.refresh(thread)
-    return ThreadOut.model_validate(thread)
+    return ThreadOut(
+        id=thread.id,
+        title=thread.title,
+        user_id=thread.user_id,
+        work_id=thread.work_id,
+        genre_id=thread.genre_id,
+        score=score,
+        my_vote=payload.value,
+        created_at=thread.created_at,
+        author=(
+            await db.execute(select(User.username).where(User.id == thread.user_id))
+        ).scalar_one_or_none(),
+    )

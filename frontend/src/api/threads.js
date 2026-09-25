@@ -14,8 +14,8 @@ export function useCreateThread() {
   return useMutation({
     mutationFn: (payload) => client.post('/threads/', payload).then((r) => r.data),
     onSuccess: (data) => {
-      if (data.book_id) {
-        queryClient.invalidateQueries({ queryKey: ['books', String(data.book_id), 'threads'] })
+      if (data.work_id) {
+        queryClient.invalidateQueries({ queryKey: ['works', String(data.work_id), 'threads'] })
       }
       if (data.genre_slug) {
         queryClient.invalidateQueries({ queryKey: ['genres', data.genre_slug, 'threads'] })
@@ -24,12 +24,21 @@ export function useCreateThread() {
   })
 }
 
-export function useUpvoteThread() {
+export function useVoteThread() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: ({ id }) => client.post(`/threads/${id}/upvote`).then((r) => r.data),
-    onSuccess: (_, { id }) => {
+    mutationFn: ({ id, value }) =>
+      client.put(`/threads/${id}/vote`, { value }).then((r) => r.data),
+    // Voting from a list has to refresh that list, or the score the reader
+    // just changed stays stale on screen.
+    onSuccess: (_, { id, workId, genreSlug }) => {
       queryClient.invalidateQueries({ queryKey: ['threads', String(id)] })
+      if (workId) {
+        queryClient.invalidateQueries({ queryKey: ['works', String(workId), 'threads'] })
+      }
+      if (genreSlug) {
+        queryClient.invalidateQueries({ queryKey: ['genres', genreSlug, 'threads'] })
+      }
     },
   })
 }
@@ -44,10 +53,11 @@ export function useCreatePost() {
   })
 }
 
-export function useUpvotePost() {
+export function useVotePost() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: ({ id, threadId }) => client.post(`/posts/${id}/upvote`).then((r) => r.data),
+    mutationFn: ({ id, value }) =>
+      client.put(`/posts/${id}/vote`, { value }).then((r) => r.data),
     onSuccess: (_, { threadId }) => {
       if (threadId) {
         queryClient.invalidateQueries({ queryKey: ['threads', String(threadId)] })

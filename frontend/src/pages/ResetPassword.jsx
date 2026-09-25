@@ -3,8 +3,11 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useResetPassword } from '../api/auth'
 import { errorMessage } from '../api/errors'
 import AuthLayout from '../components/AuthLayout'
+import { useStatusBar } from '../store/status'
 
 function ResetPassword() {
+  useStatusBar({ mode: 'AUTH', path: '~/reset-password', facts: [] })
+
   const [searchParams] = useSearchParams()
   const token = searchParams.get('token') || ''
   const [password, setPassword] = useState('')

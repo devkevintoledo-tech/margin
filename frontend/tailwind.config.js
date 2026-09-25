@@ -1,16 +1,18 @@
 /**
- * MARGIN design system.
+ * MARGIN design system — Tokyo Night, terminal-styled.
  *
- * Every color is a semantic token backed by a CSS variable in `src/index.css`
- * (stored as raw `R G B` channels so Tailwind's `/opacity` modifiers still
- * work, e.g. `border-line/60`). Never write a raw `zinc-*`, hex, or arbitrary
- * color in a component — add a token here instead.
+ * Every colour is a semantic token backed by a CSS variable in `src/index.css`
+ * (raw `R G B` channels so `/opacity` modifiers work, e.g. `border-line/60`).
+ * Never write a raw `zinc-*`, hex, or arbitrary colour in a component.
  *
- * Accent usage rules (WCAG AA against `bg` #0D0D0D):
- *   accent       fills, rules, focus borders. White/ink text on it passes 5.5:1.
- *   accent-hover fill hover only.
- *   accent-ink   accent-colored TEXT on a dark surface (7.2:1). Never a fill.
- *   ink-muted    decorative/non-essential text only (3.3:1) — never body copy.
+ * Usage rules (asserted in `src/design/tokens.test.js`):
+ *   accent       interactive: links, buttons, focus, prompt caret.
+ *                As a FILL it takes `text-bg` — white on accent is 2.52:1.
+ *   path         routes and references (path header, book/genre links)
+ *   user         people (usernames, bylines)
+ *   ok/danger/warning   positive / negative / mutated state
+ *   ink-muted    control borders and decoration ONLY — 4.10:1 is below AA
+ *   ink-faint    aria-hidden glyphs ONLY — 2.76:1
  */
 const token = (name) => `rgb(var(--color-${name}) / <alpha-value>)`
 
@@ -20,36 +22,49 @@ export default {
     extend: {
       colors: {
         bg: token('bg'),
-        surface: token('surface'),
-        raised: token('raised'),
+        panel: token('panel'),
+        highlight: token('highlight'),
         line: token('line'),
         'line-strong': token('line-strong'),
+
         ink: token('ink'),
         'ink-dim': token('ink-dim'),
         'ink-muted': token('ink-muted'),
+        'ink-faint': token('ink-faint'),
+
         accent: token('accent'),
         'accent-hover': token('accent-hover'),
-        'accent-ink': token('accent-ink'),
-        success: token('success'),
-        warning: token('warning'),
+        path: token('path'),
+        user: token('user'),
+        ok: token('ok'),
         danger: token('danger'),
+        warning: token('warning'),
       },
       fontFamily: {
-        sans: ['"Space Grotesk"', 'system-ui', 'sans-serif'],
+        // Mono carries the whole UI. Serif is reserved for BOOK titles only —
+        // not thread titles, which are structure.
+        mono: ['"JetBrains Mono"', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace'],
+        sans: ['"JetBrains Mono"', 'ui-monospace', 'monospace'],
         serif: ['"Playfair Display"', 'Georgia', 'serif'],
       },
       fontSize: {
-        // Editorial display sizes. Headlines are confident and tight-tracked;
-        // §6 of the brand doc: "use large typography to establish hierarchy".
-        'display-sm': ['2.5rem', { lineHeight: '1.1', letterSpacing: '-0.02em' }],
-        display: ['3.5rem', { lineHeight: '1.05', letterSpacing: '-0.025em' }],
-        'display-lg': ['5rem', { lineHeight: '1', letterSpacing: '-0.03em' }],
+        // Mono runs ~15% wider per character, so the display scale is smaller
+        // than the proportional one it replaces, at zero tracking.
+        'display-sm': ['1.75rem', { lineHeight: '1.15', letterSpacing: '0' }],
+        display: ['2.25rem', { lineHeight: '1.1', letterSpacing: '0' }],
+        'display-lg': ['3rem', { lineHeight: '1.05', letterSpacing: '0' }],
       },
       letterSpacing: {
-        eyebrow: '0.25em',
+        // 0.25em reads as broken on mono; 0.15em reads as wide.
+        eyebrow: '0.15em',
+      },
+      maxWidth: {
+        // In a monospaced layout `ch` is a real column count, so this IS the grid.
+        prose: '72ch',
+        table: '96ch',
+        shell: '120ch',
       },
       transitionDuration: {
-        // Interaction is subtle and fast (§26). Nothing animates longer than base.
         fast: '120ms',
         base: '180ms',
       },

@@ -20,15 +20,23 @@ export async function registerViaUi(page, user = freshUser()) {
   await passwordFields.nth(0).fill(user.password) // password
   await passwordFields.nth(1).fill(user.password) // confirm password
   await page.getByRole('button', { name: /create account/i }).click()
-  await expect(page.getByText(user.username)).toBeVisible()
+  await expect(signedInAs(page, user)).toBeVisible()
   return user
 }
 
-// Opens the first book returned by a search and waits for the book detail page.
-// Depends on the live Open Library integration; pass a broad, popular query.
+// The navbar's profile link is the signed-in signal. Matching the bare username
+// text is ambiguous: the pinned status bar shows it too.
+export function signedInAs(page, user) {
+  return page.locator(`a[href="/profile/${user.username}"]`)
+}
+
+// Opens the first work returned by a search and waits for the work detail page.
+// Depends on the live Google Books and Open Library integrations; pass a broad,
+// popular query. If Open Library is slow the heuristic tier still groups the
+// results, so nothing here may depend on a work's edition_count.
 export async function openFirstSearchResult(page, query = 'dune') {
   await page.goto(`/search?q=${encodeURIComponent(query)}`)
-  const firstBook = page.locator('a[href^="/books/"]').first()
-  await firstBook.click()
-  await expect(page).toHaveURL(/\/books\//)
+  const firstWork = page.locator('a[href^="/works/"]').first()
+  await firstWork.click()
+  await expect(page).toHaveURL(/\/works\//)
 }

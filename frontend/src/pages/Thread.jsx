@@ -1,21 +1,41 @@
-import { useParams, Link } from 'react-router-dom'
+import { useParams } from 'react-router-dom'
 import { useThread } from '../api/threads'
 import Post from '../components/Post'
 import PostComposer from '../components/PostComposer'
+import PathHeader from '../components/PathHeader'
+import { useStatusBar } from '../store/status'
+import { slug } from '../lib/slug'
+
+function countPosts(posts) {
+  return posts.reduce((n, p) => n + 1 + countPosts(p.replies || []), 0)
+}
 
 function Thread() {
   const { id, threadId } = useParams()
   const resolvedId = threadId || id
   const { data: thread, isLoading, isError } = useThread(resolvedId)
 
+  const posts = thread?.posts || []
+  const anchor = thread?.work?.title || thread?.genre?.name || ''
+
+  // `posts` arrives as a tree — top-level posts carry their own `replies` — so
+  // its length is the number of branches, not the number of posts.
+  const totalPosts = countPosts(posts)
+
+  useStatusBar({
+    mode: 'THREAD',
+    path: anchor ? `~/${slug(anchor)}/threads/${resolvedId}` : `~/threads/${resolvedId}`,
+    facts: [`${totalPosts} ${totalPosts === 1 ? 'post' : 'posts'}`],
+  })
+
   if (isLoading) {
     return (
-      <main className="max-w-3xl mx-auto px-6 py-10">
+      <main className="max-w-prose mx-auto px-4 py-8">
         <div className="animate-pulse flex flex-col gap-4">
-          <div className="h-10 bg-surface w-2/3" />
-          <div className="h-4 bg-surface w-1/4" />
+          <div className="h-8 bg-panel w-2/3" />
+          <div className="h-4 bg-panel w-1/4" />
           {[1, 2, 3].map((i) => (
-            <div key={i} className="h-24 border border-line bg-surface" />
+            <div key={i} className="h-24 border border-line bg-panel" />
           ))}
         </div>
       </main>
@@ -24,44 +44,48 @@ function Thread() {
 
   if (isError || !thread) {
     return (
-      <main className="max-w-3xl mx-auto px-6 py-10">
-        <p className="text-danger">Failed to load thread.</p>
+      <main className="max-w-prose mx-auto px-4 py-8">
+        <p className="alert-danger">Failed to load thread.</p>
       </main>
     )
   }
 
-  const posts = thread.posts || []
   const topLevelPosts = posts.filter((p) => !p.parent_id)
 
-  return (
-    <main className="max-w-3xl mx-auto px-6 py-10 flex flex-col gap-8">
-      {/* Header */}
-      <div className="border-b border-line pb-5 flex flex-col gap-3">
-        {thread.book && (
-          <Link
-            to={`/books/${thread.book.id}`}
-            className="text-xs text-ink-muted hover:text-accent-ink transition-colors duration-fast uppercase tracking-wider"
-          >
-            ← {thread.book.title}
-          </Link>
-        )}
-        {thread.genre && (
-          <Link
-            to={`/genres/${thread.genre.slug}`}
-            className="text-xs text-ink-muted hover:text-accent-ink transition-colors duration-fast uppercase tracking-wider"
-          >
-            ← {thread.genre.name}
-          </Link>
-        )}
-        <h1 className="font-serif text-3xl md:text-4xl text-ink leading-tight">{thread.title}</h1>
-        <div className="flex items-center gap-4 text-ink-muted text-xs uppercase tracking-wider">
-          {thread.author && <span>by {thread.author}</span>}
-          <span className="text-accent-ink">{thread.upvotes ?? 0} upvotes</span>
-          <span>{posts.length} posts</span>
-        </div>
-      </div>
+  const segments = []
+  if (thread.work) {
+    segments.push({ label: 'works', to: '/' })
+    segments.push({ label: thread.work.title, to: `/works/${thread.work.id}` })
+  } else if (thread.genre) {
+    segments.push({ label: 'genres', to: '/' })
+    segments.push({ label: thread.genre.name, to: `/genres/${thread.genre.slug}` })
+  }
+  // The title, not the id: a path segment should say where you are, and a
+  // truncated UUID says nothing.
+  segments.push({ label: thread.title })
 
-      {/* Posts */}
+  return (
+    <main className="max-w-shell mx-auto px-4 py-6 flex flex-col gap-6">
+      <PathHeader segments={segments} />
+
+      <header className="border-b border-line pb-4 flex flex-col gap-2">
+        {/* Serif is reserved for BOOK titles. A thread is structure, so it is mono. */}
+        <h1 className="text-xl md:text-2xl text-ink leading-snug font-medium max-w-prose">
+          {thread.title}
+        </h1>
+        <div className="flex items-center gap-3 text-xs">
+          {thread.author && <span className="text-user">{thread.author}</span>}
+          <span aria-hidden="true" className="text-ink-faint">·</span>
+          <span className={thread.score > 0 ? 'text-ok' : thread.score < 0 ? 'text-danger' : 'text-ink-dim'}>
+            {thread.score > 0 ? `+${thread.score}` : String(thread.score ?? 0)} points
+          </span>
+          <span aria-hidden="true" className="text-ink-faint">·</span>
+          <span className="text-ink-dim">
+            {totalPosts} {totalPosts === 1 ? 'post' : 'posts'}
+          </span>
+        </div>
+      </header>
+
       <div className="flex flex-col divide-y divide-line">
         {topLevelPosts.length === 0 && (
           <p className="text-ink-dim text-sm py-4">No posts yet. Be the first to reply.</p>
@@ -71,9 +95,8 @@ function Thread() {
         ))}
       </div>
 
-      {/* New post */}
-      <div className="border-t border-line pt-6 flex flex-col gap-3">
-        <h3 className="text-xs font-semibold uppercase tracking-eyebrow text-ink-dim">Add a Reply</h3>
+      <div className="border-t border-line pt-5 flex flex-col gap-3">
+        <h2 className="text-xs uppercase tracking-eyebrow text-ink-dim">Add a reply</h2>
         <PostComposer threadId={resolvedId} placeholder="Join the discussion..." />
       </div>
     </main>
