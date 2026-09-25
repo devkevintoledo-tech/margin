@@ -58,7 +58,7 @@ async def enrich_work(db: AsyncSession, work: Work) -> None:
 
     await db.flush()
     # Re-pick the representative now that placeholder covers are gone, so the
-    # edition with real art wins completeness_score.
+    # edition with real art wins its tier of edition_rank.
     await _refresh_work(db, work)
     work.enriched_at = datetime.now(timezone.utc)
     await db.flush()

@@ -340,7 +340,7 @@ async def _refresh_work(
     if not editions:
         return
 
-    best = max(editions, key=completeness_score)
+    best = max(editions, key=edition_rank)
     work.representative_book_id = best.id
 
     if work.genre_id is None and genre_hints:

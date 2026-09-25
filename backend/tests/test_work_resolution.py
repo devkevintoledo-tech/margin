@@ -467,3 +467,55 @@ async def test_upsert_marks_a_box_set_as_a_collection(db_session):
         db_session, ol_work(key="OL99W", title="Red Rising Series 5 Books Collection Set")
     )
     assert work.kind is WorkKind.collection
+
+
+async def test_representative_prefers_english_over_a_richer_translation(db_session):
+    """The live Red Rising bug: Heyne (de) outscored Del Rey (en) on richness."""
+    import uuid
+
+    from app.models import Book, Work, WorkKind, WorkProvenance, WorkSource
+    from app.services.works import _refresh_work
+
+    work = Work(
+        source=WorkSource.openlibrary,
+        external_id=f"OL{uuid.uuid4().hex[:8]}W",
+        canonical_key="red rising\x1fpierce brown",
+        title="Red Rising",
+        author="Pierce Brown",
+        kind=WorkKind.single,
+        identity_provenance=WorkProvenance.isbn,
+    )
+    db_session.add(work)
+    await db_session.flush()
+
+    heyne = Book(
+        source="google_books",
+        external_id="de1",
+        title="Red Rising",
+        author="Pierce Brown",
+        language="de",
+        publisher="Heyne Verlag",
+        cover_url="https://x/de.jpg",
+        description="Der fulminante Auftakt ...",
+        isbn_13="9783453316355",
+        page_count=560,
+        ratings_count=900,
+        work_id=work.id,
+    )
+    del_rey = Book(
+        source="google_books",
+        external_id="en1",
+        title="Red Rising",
+        author="Pierce Brown",
+        language="en",
+        publisher="Del Rey",
+        cover_url="https://x/en.jpg",
+        work_id=work.id,
+    )
+    db_session.add_all([heyne, del_rey])
+    await db_session.flush()
+
+    await _refresh_work(db_session, work)
+
+    representative = await db_session.get(Book, work.representative_book_id)
+    assert representative.external_id == "en1"
