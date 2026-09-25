@@ -74,7 +74,11 @@ Async end-to-end FastAPI app. The layering is strict:
 view of its page, attaching only volumes whose `canonical_key` matches the
 work's — Google answers a title+author query with everything the author wrote,
 so an unattached volume is not evidence that it belongs; `covers.py` HEADs a cover URL to reject Google's placeholder; `works.py` owns the resolution ladder, `upsert_work_from_ol`, representative-edition selection and `merge_works`; `work_identity.py` holds the pure string rules the others build on; `auth.py` holds JWT (python-jose, HS256), bcrypt password hashing, reset-token generation/hashing, and the `get_current_user` / `get_current_user_optional` dependencies; `email.py` provides the `EmailSender` ABC with SMTP and console implementations.
-- **`scripts/`** — standalone maintenance entrypoints run with `python -m scripts.<name>` (e.g. `backfill_cover_urls`). They open their own session via `AsyncSessionLocal` and must stay idempotent.
+- **`scripts/`** — standalone maintenance entrypoints run with `python -m
+  scripts.<name>` (e.g. `backfill_cover_urls`, `repair_presentation`, which
+  detaches editions enrichment wrongly attached and re-picks every
+  representative under the language ladder). They open their own session via
+  `AsyncSessionLocal` and must stay idempotent.
 - **`api/`** — thin route handlers. Each module owns an `APIRouter(prefix=...)` and is wired in `main.py`.
 - **`config.py`** — `Settings` (pydantic-settings) loaded from env / `.env`. `database.py` — async engine + `get_db` dependency (a session that auto-commits on success, rolls back on exception).
 
