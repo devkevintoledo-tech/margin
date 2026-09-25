@@ -411,9 +411,12 @@ async def load_work_presentation(
     Each field has a fallback order, because a work may have no editions at all
     once Open Library becomes the ingest source:
 
-    * cover — OL's curated image, then the representative edition's, then none.
-      OL wins because Google serves a placeholder PNG at HTTP 200 for
-      metadata-only records, so its URL cannot be trusted on its own.
+    * cover — the representative edition's, then OL's curated image, then none.
+      The edition wins because it has been through ``covers.verify`` (so
+      Google's placeholder PNG is already gone) and through ``edition_rank`` (so
+      it is the work's language, not an arbitrary printing's). OL's ``cover_i``
+      is neither: for Red Rising it is the Spanish RBA edition. It stays the
+      fallback because a work may have no editions at all.
     * description — the representative edition's, then the work's. Google's
       edition blurbs are richer than OL's, so an enriched edition wins.
     * edition count — OL's total, then the local row count. OL knows Red Rising
@@ -451,7 +454,7 @@ async def load_work_presentation(
     rows = (await db.execute(stmt)).all()
     return {
         row[0]: WorkPresentation(
-            cover_url=ol_cover_url(row[1]) or row[2],
+            cover_url=row[2] or ol_cover_url(row[1]),
             description=row[3] or row[4],
             edition_count=row[5] or row[6],
         )

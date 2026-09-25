@@ -241,7 +241,10 @@ def bare_work(**kw):
     return Work(**base)
 
 
-async def test_cover_prefers_open_library_over_the_representative_edition(db_session):
+async def test_cover_prefers_the_representative_edition_over_open_library(db_session):
+    """OL's `cover_i` is one arbitrary edition's art — for Red Rising, the
+    Spanish RBA printing. A representative that survived `covers.verify` is
+    both real and language-checked, so it wins."""
     from app.models import Book
     from app.services.works import load_work_presentation
 
@@ -253,8 +256,34 @@ async def test_cover_prefers_open_library_over_the_representative_edition(db_ses
         external_id="g1",
         title="Red Rising",
         author="Pierce Brown",
+        language="en",
         work_id=work.id,
-        cover_url="https://books.google.com/placeholder",
+        cover_url="https://books.google.com/real.jpg",
+    )
+    db_session.add(edition)
+    await db_session.flush()
+    work.representative_book_id = edition.id
+    await db_session.flush()
+
+    got = await load_work_presentation(db_session, [work.id])
+    assert got[work.id].cover_url == "https://books.google.com/real.jpg"
+
+
+async def test_cover_falls_back_to_open_library_when_the_edition_has_none(db_session):
+    """The unenriched majority: a work with an edition that carries no art."""
+    from app.models import Book
+    from app.services.works import load_work_presentation
+
+    work = bare_work(ol_cover_id=7316188)
+    db_session.add(work)
+    await db_session.flush()
+    edition = Book(
+        source="google_books",
+        external_id="g3",
+        title="Red Rising",
+        author="Pierce Brown",
+        work_id=work.id,
+        cover_url=None,
     )
     db_session.add(edition)
     await db_session.flush()

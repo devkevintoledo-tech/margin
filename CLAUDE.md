@@ -97,7 +97,9 @@ A work may have **zero editions**: Open Library's search response carries
 everything a work row stores, so search ingests works without touching `books`
 at all, and editions only arrive when someone opens the work's page. Everything
 edition-derived therefore needs a fallback, which `load_work_presentation` owns:
-cover is OL's curated image, then the representative edition's, then none;
+cover is the representative edition's (verified real, and in the work's
+language), then OL's curated image, then none — OL's `cover_i` is one
+arbitrary printing's art, which is how an English work wore a Spanish cover;
 `edition_count` is OL's total (26 for *Red Rising*) before the local row count,
 because it is a fact about the book and not about our database; description is
 the representative edition's before the work's, since Google's blurbs are
