@@ -37,12 +37,29 @@ from app.services.work_identity import (
 _TITLE_AUTHOR_CALL_CAP = 5
 
 
-def completeness_score(edition: Book) -> int:
-    """Higher = richer edition. Cover weighted highest — it carries the page.
+# Language tiers. Unknown sits between English and a known translation: a
+# missing `language` is an absent fact, not evidence the edition is foreign,
+# so it must not be punished as hard as a German printing.
+_LANGUAGE_ENGLISH = 2
+_LANGUAGE_UNKNOWN = 1
+_LANGUAGE_OTHER = 0
 
-    Moved here from ``google_books._completeness_score``: picking the richest
-    edition is the only decision it was ever really making, and that decision
-    now belongs to the work, not to a single search response.
+
+def _language_rank(edition: Book) -> int:
+    """Rank an edition's language. Google sends IETF tags: `en`, `en-GB`, `pt-BR`."""
+    code = (edition.language or "").strip().lower()
+    if not code:
+        return _LANGUAGE_UNKNOWN
+    return _LANGUAGE_ENGLISH if code.split("-")[0] == "en" else _LANGUAGE_OTHER
+
+
+def completeness_score(edition: Book) -> int:
+    """Higher = richer edition. The ladder's last tier, not its whole judgement.
+
+    Once the flat version of this sum decided the representative outright, a
+    German edition with cover, blurb, ISBN and page count outscored the English
+    printing and put a translated blurb on an English work. It is now only
+    consulted when ``edition_rank`` reaches a tie.
     """
     score = 0
     if edition.cover_url:
@@ -56,6 +73,26 @@ def completeness_score(edition: Book) -> int:
     if edition.ratings_count:
         score += 1
     return score
+
+
+def edition_rank(edition: Book) -> tuple[int, int, int, int]:
+    """Sort key for "which edition speaks for this work" — highest wins.
+
+    A dominance ladder, not a sum: each tier is decided before the next is
+    consulted, so no amount of richness lets a translation outrank a plain
+    English printing. Tiers, in order: language, cover, description,
+    completeness.
+
+    The spec's publisher-family and blurb-quality tiers land in slice 2 and
+    slot into this tuple between language and cover, and between cover and
+    completeness, respectively.
+    """
+    return (
+        _language_rank(edition),
+        1 if edition.cover_url else 0,
+        1 if edition.description else 0,
+        completeness_score(edition),
+    )
 
 
 async def canonical_work(db: AsyncSession, work: Work) -> Work:
