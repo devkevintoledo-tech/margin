@@ -33,8 +33,8 @@ VOLUMES = {
 }
 
 
-async def seed(db):
-    work = Work(
+async def seed(db, **kw):
+    base = dict(
         source=WorkSource.openlibrary,
         external_id=f"OL{uuid.uuid4().hex[:8]}W",
         canonical_key="red rising\x1fpierce brown",
@@ -43,6 +43,8 @@ async def seed(db):
         kind=WorkKind.single,
         identity_provenance=WorkProvenance.isbn,
     )
+    base.update(kw)
+    work = Work(**base)
     db.add(work)
     await db.flush()
     return work
@@ -258,3 +260,44 @@ async def test_enrich_takes_its_description_only_from_its_own_editions(db_sessio
     work = await seed(db_session)
     await enrich_work(db_session, work)
     assert work.description == "A boy from the mines."
+
+
+@respx.mock
+async def test_enrich_keeps_an_edition_when_the_works_key_is_stale(db_session):
+    """A work whose stored `canonical_key` disagrees with its own title — 24
+    such rows exist live, e.g. "Morning Star" holding "light bringer" — must
+    still claim its own editions, while impostors are still refused."""
+    respx.get(GOOGLE_URL).mock(
+        return_value=Response(
+            200,
+            json={
+                "items": [
+                    {
+                        "id": "g1",
+                        "volumeInfo": {
+                            "title": "Red Rising",
+                            "authors": ["Pierce Brown"],
+                            "description": "A boy from the mines.",
+                        },
+                    },
+                    {
+                        "id": "g9",
+                        "volumeInfo": {
+                            "title": "Iron Gold",
+                            "authors": ["Pierce Brown"],
+                        },
+                    },
+                ]
+            },
+        )
+    )
+    work = await seed(db_session, canonical_key="light bringer\x1fpierce brown")
+    await enrich_work(db_session, work)
+
+    attached = {
+        b.external_id
+        for b in (
+            await db_session.execute(select(Book).where(Book.work_id == work.id))
+        ).scalars()
+    }
+    assert attached == {"g1"}

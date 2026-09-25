@@ -17,7 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models import Work
 from app.services import covers, google_books
 from app.services.work_identity import canonical_key
-from app.services.works import _refresh_work
+from app.services.works import _refresh_work, identity_keys
 
 
 async def enrich_work(db: AsyncSession, work: Work) -> None:
@@ -57,7 +57,7 @@ async def enrich_work(db: AsyncSession, work: Work) -> None:
             if edition.work_id == work.id:
                 mine.append(edition)
             continue
-        if canonical_key(edition.title, edition.author) != work.canonical_key:
+        if canonical_key(edition.title, edition.author) not in identity_keys(work):
             continue
         edition.work_id = work.id
         mine.append(edition)

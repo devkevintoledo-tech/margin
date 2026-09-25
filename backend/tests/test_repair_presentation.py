@@ -174,3 +174,24 @@ async def test_detached_editions_are_not_deleted(db_session):
         )
     ).scalar_one_or_none()
     assert still_there is not None
+
+
+async def test_keeps_an_edition_when_the_works_key_is_stale(db_session):
+    """The live defect the dry run exposed: 24 works carry a `canonical_key`
+    that disagrees with their own title, so comparing against the stored key
+    alone detaches the work's own printings."""
+    work = make_work(canonical_key="light bringer\x1fpierce brown")
+    db_session.add(work)
+    await db_session.flush()
+    morning_star = make_edition(language="en", work_id=work.id)
+    iron_gold = make_edition(title="Iron Gold", work_id=work.id)
+    db_session.add_all([morning_star, iron_gold])
+    await db_session.flush()
+
+    summary = await repair(db_session, commit=False)
+
+    await db_session.refresh(morning_star)
+    await db_session.refresh(iron_gold)
+    assert morning_star.work_id == work.id
+    assert iron_gold.work_id is None
+    assert summary["editions_detached"] == 1

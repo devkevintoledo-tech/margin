@@ -95,6 +95,20 @@ def edition_rank(edition: Book) -> tuple[int, int, int, int]:
     )
 
 
+def identity_keys(work: Work) -> set[str]:
+    """Every canonical key that names this work — an edition matching any belongs.
+
+    Normally one: the stored ``canonical_key``. A work whose title no longer
+    agrees with the key it was created under carries two, and 24 live rows are
+    in that state — *Morning Star* holding the key ``light bringer``, *Red
+    Rising* holding ``red rising an explosive dystopian sci fi novel``. Against
+    the stored key alone such a work rejects its own printings, so the key
+    recomputed from its title and author is accepted too. An impostor matches
+    neither form, which is what keeps *Iron Gold* out of *Red Rising*.
+    """
+    return {work.canonical_key, canonical_key(work.title, work.author)}
+
+
 async def canonical_work(db: AsyncSession, work: Work) -> Work:
     """Follow ``merged_into_id`` one hop. Merges repoint, so chains never grow."""
     if work.merged_into_id is None:

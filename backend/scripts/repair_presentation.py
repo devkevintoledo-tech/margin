@@ -3,11 +3,12 @@
 Four idempotent passes over rows we already hold — no HTTP, so this is safe to
 run at any time and as often as you like:
 
-1. Detach editions whose identity does not match their work. Google answered a
-   title+author query with everything the author wrote, and enrichment attached
-   all of it: *Iron Gold* and five *Sons of Ares* graphic novels became editions
-   of *Red Rising*. Detached rows are kept — a later search resolves them into
-   their own works.
+1. Detach editions whose identity does not match their work, by
+   ``identity_keys`` — so a work whose stored key drifted from its own title
+   still keeps its printings. Google answered a title+author query with
+   everything the author wrote, and enrichment attached all of it: *Iron Gold*
+   and five *Sons of Ares* graphic novels became editions of *Red Rising*.
+   Detached rows are kept — a later search resolves them into their own works.
 2. Clear a work description that came from an edition pass 1 detached, so the
    work stops describing a different book.
 3. Null a ``representative_book_id`` pointing at an edition that belongs to
@@ -33,7 +34,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import AsyncSessionLocal
 from app.models import Book, Work
 from app.services.work_identity import canonical_key
-from app.services.works import _refresh_work
+from app.services.works import _refresh_work, identity_keys
 
 
 async def repair(session: AsyncSession, commit: bool = True) -> dict[str, int]:
@@ -56,7 +57,7 @@ async def repair(session: AsyncSession, commit: bool = True) -> dict[str, int]:
         work = works.get(edition.work_id)
         if work is None:
             continue
-        if canonical_key(edition.title, edition.author) == work.canonical_key:
+        if canonical_key(edition.title, edition.author) in identity_keys(work):
             continue
         if work.description and work.description == edition.description:
             work.description = None
