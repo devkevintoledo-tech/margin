@@ -12,7 +12,7 @@ function renderModal(props = {}) {
   return render(
     <QueryClientProvider client={qc}>
       <MemoryRouter>
-        <ThreadModal target={{ book_id: '1' }} onClose={() => {}} onCreated={() => {}} {...props} />
+        <ThreadModal target={{ work_id: '1' }} onClose={() => {}} onCreated={() => {}} {...props} />
       </MemoryRouter>
     </QueryClientProvider>,
   )

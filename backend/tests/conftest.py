@@ -13,6 +13,7 @@ data written through the API is visible to assertions in the same test.
 
 import os
 import uuid
+from datetime import datetime, timezone
 
 import pytest_asyncio
 
@@ -29,7 +30,7 @@ from sqlalchemy.pool import NullPool  # noqa: E402
 
 from app.database import get_db  # noqa: E402
 from app.main import app  # noqa: E402
-from app.models import Base, Book  # noqa: E402  (imports the package → full metadata)
+from app.models import Base, Book, Work, WorkKind, WorkProvenance, WorkSource  # noqa: E402  (imports the package → full metadata)
 
 TEST_DB_URL = os.environ["DATABASE_URL"]
 
@@ -87,15 +88,37 @@ async def auth_headers(client):
 
 
 @pytest_asyncio.fixture
-async def book(db_session):
-    """Seed a book directly (no Open Library round-trip) for thread/post tests."""
-    b = Book(
+async def work(db_session):
+    """Seed a work and one edition (no upstream round-trip) for thread/shelf tests.
+
+    ``enriched_at`` is set because opening a work page enriches it from Google
+    Books on first view. Without it, every test that GETs this work would make
+    a live HTTP request — which is exactly what this fixture exists to avoid.
+    """
+    w = Work(
+        source=WorkSource.openlibrary,
+        external_id=f"OL{uuid.uuid4().hex[:8]}W",
+        canonical_key="the test book\x1fa tester",
+        title="The Test Book",
+        author="A. Tester",
+        kind=WorkKind.single,
+        identity_provenance=WorkProvenance.isbn,
+        enriched_at=datetime.now(timezone.utc),
+    )
+    db_session.add(w)
+    await db_session.flush()
+
+    edition = Book(
         source="google_books",
         external_id=uuid.uuid4().hex[:12],
         title="The Test Book",
         author="A. Tester",
+        work_id=w.id,
     )
-    db_session.add(b)
+    db_session.add(edition)
+    await db_session.flush()
+
+    w.representative_book_id = edition.id
     await db_session.commit()
-    await db_session.refresh(b)
-    return b
+    await db_session.refresh(w)
+    return w

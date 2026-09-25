@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     GOOGLE_CLIENT_SECRET: str = ""
     GOOGLE_BOOKS_BASE_URL: str = "https://www.googleapis.com/books/v1"
     GOOGLE_BOOKS_API_KEY: str = ""
+    OPEN_LIBRARY_BASE_URL: str = "https://openlibrary.org"
 
     SMTP_HOST: str = ""
     SMTP_PORT: int = 587

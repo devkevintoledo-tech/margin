@@ -18,10 +18,10 @@ describe('PathHeader', () => {
   })
 
   it('slugifies segment labels', () => {
-    renderPath([{ label: 'The Dispossessed', to: '/books/1' }])
+    renderPath([{ label: 'The Dispossessed', to: '/works/1' }])
     expect(screen.getByRole('link', { name: 'the-dispossessed' })).toHaveAttribute(
       'href',
-      '/books/1',
+      '/works/1',
     )
   })
 

@@ -1,12 +1,12 @@
 import { test, expect } from '@playwright/test'
 import { registerViaUi, openFirstSearchResult } from './helpers'
 
-// "Writing threads": create a discussion thread on a book page.
-// Depends on the live Open Library search to surface a book, so it needs the
+// "Writing threads": create a discussion thread on a work page.
+// Depends on the live search to surface a work, so it needs the
 // full stack up and network access. test-engineer can swap the search step for
-// a seeded book to make this fully deterministic.
+// a seeded work to make this fully deterministic.
 test.describe('threads', () => {
-  test('create a thread on a book page', async ({ page }) => {
+  test('create a thread on a work page', async ({ page }) => {
     await registerViaUi(page)
     await openFirstSearchResult(page, 'dune')
 

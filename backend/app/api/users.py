@@ -25,7 +25,7 @@ class ShelfBookOut(BaseModel):
     model_config = {"from_attributes": True}
 
     id: UUID
-    book_id: UUID
+    work_id: UUID
     status: str
     created_at: datetime
 

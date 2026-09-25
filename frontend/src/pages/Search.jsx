@@ -1,17 +1,17 @@
 import { useSearchParams } from 'react-router-dom'
-import { useSearchBooks } from '../api/books'
-import BookCard from '../components/BookCard'
+import { useSearchWorks } from '../api/works'
+import WorkCard from '../components/WorkCard'
 import { useStatusBar } from '../store/status'
 
 function Search() {
   const [searchParams] = useSearchParams()
   const q = searchParams.get('q') || ''
-  const { data: books, isLoading, isError } = useSearchBooks(q)
+  const { data: works, isLoading, isError } = useSearchWorks(q)
 
   useStatusBar({
     mode: 'SEARCH',
     path: q ? `~/search?q=${q}` : '~/search',
-    facts: books ? [`${books.length} results`] : [],
+    facts: works ? [`${works.length} results`] : [],
   })
 
   return (
@@ -21,9 +21,9 @@ function Search() {
           <span aria-hidden="true" className="text-accent">$ </span>
           search {q && <span className="text-path">&quot;{q}&quot;</span>}
         </h1>
-        {books && (
+        {works && (
           <p className="text-ink-dim text-xs tabular-nums">
-            {books.length} {books.length === 1 ? 'result' : 'results'}
+            {works.length} {works.length === 1 ? 'result' : 'results'}
           </p>
         )}
       </div>
@@ -48,14 +48,14 @@ function Search() {
 
       {isError && <p className="alert-danger">Failed to load results. Please try again.</p>}
 
-      {books && books.length === 0 && (
+      {works && works.length === 0 && (
         <p className="text-ink-dim text-sm">No books found for &quot;{q}&quot;.</p>
       )}
 
-      {books && books.length > 0 && (
+      {works && works.length > 0 && (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-5">
-          {books.map((book) => (
-            <BookCard key={book.id} book={book} />
+          {works.map((work) => (
+            <WorkCard key={work.id} work={work} />
           ))}
         </div>
       )}

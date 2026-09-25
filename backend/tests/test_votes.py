@@ -24,16 +24,16 @@ async def _user(db_session) -> User:
     return u
 
 
-async def _thread(db_session, user: User, book) -> Thread:
-    t = Thread(title="A thread", user_id=user.id, book_id=book.id)
+async def _thread(db_session, user: User, work) -> Thread:
+    t = Thread(title="A thread", user_id=user.id, work_id=work.id)
     db_session.add(t)
     await db_session.flush()
     return t
 
 
-async def test_thread_and_post_start_at_zero_score(db_session, book):
+async def test_thread_and_post_start_at_zero_score(db_session, work):
     user = await _user(db_session)
-    thread = await _thread(db_session, user, book)
+    thread = await _thread(db_session, user, work)
     post = Post(thread_id=thread.id, user_id=user.id, content="hi")
     db_session.add(post)
     await db_session.flush()
@@ -42,9 +42,9 @@ async def test_thread_and_post_start_at_zero_score(db_session, book):
     assert post.score == 0
 
 
-async def test_one_vote_per_user_per_thread(db_session, book):
+async def test_one_vote_per_user_per_thread(db_session, work):
     user = await _user(db_session)
-    thread = await _thread(db_session, user, book)
+    thread = await _thread(db_session, user, work)
     db_session.add(Vote(user_id=user.id, thread_id=thread.id, value=1))
     await db_session.flush()
 
@@ -53,9 +53,9 @@ async def test_one_vote_per_user_per_thread(db_session, book):
         await db_session.flush()
 
 
-async def test_vote_value_must_be_plus_or_minus_one(db_session, book):
+async def test_vote_value_must_be_plus_or_minus_one(db_session, work):
     user = await _user(db_session)
-    thread = await _thread(db_session, user, book)
+    thread = await _thread(db_session, user, work)
     db_session.add(Vote(user_id=user.id, thread_id=thread.id, value=0))
     with pytest.raises(IntegrityError):
         await db_session.flush()
@@ -64,7 +64,7 @@ async def test_vote_value_must_be_plus_or_minus_one(db_session, book):
 async def test_vote_with_no_target_is_rejected(db_session):
     # The two exactly-one-target cases live in separate tests: recovering from
     # the first IntegrityError would need a rollback, which expires the
-    # committed `book` fixture and makes the next `book.id` lazy-load outside
+    # committed `work` fixture and makes the next `work.id` lazy-load outside
     # the greenlet.
     user = await _user(db_session)
     db_session.add(Vote(user_id=user.id, value=1))
@@ -72,9 +72,9 @@ async def test_vote_with_no_target_is_rejected(db_session):
         await db_session.flush()
 
 
-async def test_vote_with_both_targets_is_rejected(db_session, book):
+async def test_vote_with_both_targets_is_rejected(db_session, work):
     user = await _user(db_session)
-    thread = await _thread(db_session, user, book)
+    thread = await _thread(db_session, user, work)
     post = Post(thread_id=thread.id, user_id=user.id, content="hi")
     db_session.add(post)
     await db_session.flush()
@@ -84,18 +84,18 @@ async def test_vote_with_both_targets_is_rejected(db_session, book):
         await db_session.flush()
 
 
-async def test_two_users_may_vote_the_same_thread(db_session, book):
+async def test_two_users_may_vote_the_same_thread(db_session, work):
     user_a = await _user(db_session)
     user_b = await _user(db_session)
-    thread = await _thread(db_session, user_a, book)
+    thread = await _thread(db_session, user_a, work)
     db_session.add(Vote(user_id=user_a.id, thread_id=thread.id, value=1))
     db_session.add(Vote(user_id=user_b.id, thread_id=thread.id, value=1))
     await db_session.flush()  # must not raise
 
 
-async def test_set_vote_up_then_down_then_clear(db_session, book):
+async def test_set_vote_up_then_down_then_clear(db_session, work):
     user = await _user(db_session)
-    thread = await _thread(db_session, user, book)
+    thread = await _thread(db_session, user, work)
 
     assert await set_vote(db_session, user_id=user.id, thread_id=thread.id, value=1) == 1
     # Switching direction is a single delta of -2, not two writes.
@@ -110,9 +110,9 @@ async def test_set_vote_up_then_down_then_clear(db_session, book):
     assert rows == []
 
 
-async def test_set_vote_is_idempotent(db_session, book):
+async def test_set_vote_is_idempotent(db_session, work):
     user = await _user(db_session)
-    thread = await _thread(db_session, user, book)
+    thread = await _thread(db_session, user, work)
 
     await set_vote(db_session, user_id=user.id, thread_id=thread.id, value=1)
     assert await set_vote(db_session, user_id=user.id, thread_id=thread.id, value=1) == 1
@@ -125,18 +125,18 @@ async def test_set_vote_is_idempotent(db_session, book):
     assert len(rows) == 1
 
 
-async def test_set_vote_sums_across_users(db_session, book):
+async def test_set_vote_sums_across_users(db_session, work):
     user_a = await _user(db_session)
     user_b = await _user(db_session)
-    thread = await _thread(db_session, user_a, book)
+    thread = await _thread(db_session, user_a, work)
 
     await set_vote(db_session, user_id=user_a.id, thread_id=thread.id, value=1)
     assert await set_vote(db_session, user_id=user_b.id, thread_id=thread.id, value=1) == 2
 
 
-async def test_set_vote_on_post(db_session, book):
+async def test_set_vote_on_post(db_session, work):
     user = await _user(db_session)
-    thread = await _thread(db_session, user, book)
+    thread = await _thread(db_session, user, work)
     post = Post(thread_id=thread.id, user_id=user.id, content="hi")
     db_session.add(post)
     await db_session.flush()
@@ -144,9 +144,9 @@ async def test_set_vote_on_post(db_session, book):
     assert await set_vote(db_session, user_id=user.id, post_id=post.id, value=-1) == -1
 
 
-async def test_set_vote_requires_exactly_one_target(db_session, book):
+async def test_set_vote_requires_exactly_one_target(db_session, work):
     user = await _user(db_session)
-    thread = await _thread(db_session, user, book)
+    thread = await _thread(db_session, user, work)
     with pytest.raises(ValueError):
         await set_vote(db_session, user_id=user.id, value=1)
     with pytest.raises(ValueError):
@@ -155,9 +155,9 @@ async def test_set_vote_requires_exactly_one_target(db_session, book):
         )
 
 
-async def test_deleting_a_thread_cascades_its_votes(db_session, book):
+async def test_deleting_a_thread_cascades_its_votes(db_session, work):
     user = await _user(db_session)
-    thread = await _thread(db_session, user, book)
+    thread = await _thread(db_session, user, work)
     await set_vote(db_session, user_id=user.id, thread_id=thread.id, value=1)
 
     await db_session.delete(thread)
@@ -168,10 +168,10 @@ async def test_deleting_a_thread_cascades_its_votes(db_session, book):
 
 
 @pytest_asyncio.fixture
-async def voted_thread_id(client, auth_headers, book):
+async def voted_thread_id(client, auth_headers, work):
     resp = await client.post(
         "/api/threads/",
-        json={"title": "Votable", "book_id": str(book.id)},
+        json={"title": "Votable", "work_id": str(work.id)},
         headers=auth_headers,
     )
     assert resp.status_code == 201, resp.text
@@ -304,17 +304,17 @@ async def test_thread_read_my_vote_is_zero_when_anonymous(
     assert got.json()["posts"][0]["my_vote"] == 0
 
 
-async def test_book_thread_list_carries_my_vote_and_orders_by_score(
-    client, auth_headers, book
+async def test_work_thread_list_carries_my_vote_and_orders_by_score(
+    client, auth_headers, work
 ):
     low = await client.post(
         "/api/threads/",
-        json={"title": "Low", "book_id": str(book.id)},
+        json={"title": "Low", "work_id": str(work.id)},
         headers=auth_headers,
     )
     high = await client.post(
         "/api/threads/",
-        json={"title": "High", "book_id": str(book.id)},
+        json={"title": "High", "work_id": str(work.id)},
         headers=auth_headers,
     )
     await client.put(
@@ -324,11 +324,11 @@ async def test_book_thread_list_carries_my_vote_and_orders_by_score(
         f"/api/threads/{low.json()['id']}/vote", json={"value": -1}, headers=auth_headers
     )
 
-    listed = await client.get(f"/api/books/{book.id}/threads", headers=auth_headers)
+    listed = await client.get(f"/api/works/{work.id}/threads", headers=auth_headers)
     rows = listed.json()
     assert [r["title"] for r in rows] == ["High", "Low"]
     assert rows[0]["my_vote"] == 1
     assert rows[1]["my_vote"] == -1
 
-    anon = await client.get(f"/api/books/{book.id}/threads")
+    anon = await client.get(f"/api/works/{work.id}/threads")
     assert all(r["my_vote"] == 0 for r in anon.json())

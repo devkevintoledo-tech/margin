@@ -4,10 +4,10 @@ import pytest_asyncio
 
 
 @pytest_asyncio.fixture
-async def thread_id(client, auth_headers, book):
+async def thread_id(client, auth_headers, work):
     resp = await client.post(
         "/api/threads/",
-        json={"title": "Discussion", "book_id": str(book.id)},
+        json={"title": "Discussion", "work_id": str(work.id)},
         headers=auth_headers,
     )
     assert resp.status_code == 201, resp.text

@@ -70,7 +70,7 @@ Async end-to-end FastAPI app. The layering is strict:
 
 - **`models/`** — SQLAlchemy 2.0 ORM (`DeclarativeBase` in `models/base.py`). `models/__init__.py` imports every model so `Base.metadata` is fully populated — always import models through the package or this `__init__` so metadata stays complete.
 - **`schemas/`** — Pydantic v2 request/response models. Keep API I/O shapes here, never expose ORM models directly.
-- **`services/`** — business logic with no FastAPI types. `google_books.py` is the Google Books HTTP client (httpx, parses the Volumes API into a normalized dict; optional `GOOGLE_BOOKS_API_KEY`, keyless fallback; two-pass title-weighted search, edition dedup, cover-URL upgrade); `auth.py` holds JWT (python-jose, HS256), bcrypt password hashing, reset-token generation/hashing, and the `get_current_user` / `get_current_user_optional` dependencies; `email.py` provides the `EmailSender` ABC with SMTP and console implementations.
+- **`services/`** — business logic with no FastAPI types. `search.py` owns search: query gating against `search_queries`, Open Library ingest, and the local ranked query (it is the only caller of Google on the search path, and only when Open Library is down); `open_library.py` is both the *search* source (`search_works`, cover URLs, `genre_slug`) and the *work identity* source (the work/edition graph Google Books lacks: batched `isbn:(...)` search, then title+author with an `edition_count` tiebreak, never raising on upstream failure); `google_books.py` is the Google Books HTTP client, now an *enrichment* client rather than a search one (httpx, parses the Volumes API into a normalized dict; optional `GOOGLE_BOOKS_API_KEY`, keyless fallback; two-pass title-weighted search, cover-URL upgrade); `enrichment.py` fills a work's editions and description from Google on first view of its page; `covers.py` HEADs a cover URL to reject Google's placeholder; `works.py` owns the resolution ladder, `upsert_work_from_ol`, representative-edition selection and `merge_works`; `work_identity.py` holds the pure string rules the others build on; `auth.py` holds JWT (python-jose, HS256), bcrypt password hashing, reset-token generation/hashing, and the `get_current_user` / `get_current_user_optional` dependencies; `email.py` provides the `EmailSender` ABC with SMTP and console implementations.
 - **`scripts/`** — standalone maintenance entrypoints run with `python -m scripts.<name>` (e.g. `backfill_cover_urls`). They open their own session via `AsyncSessionLocal` and must stay idempotent.
 - **`api/`** — thin route handlers. Each module owns an `APIRouter(prefix=...)` and is wired in `main.py`.
 - **`config.py`** — `Settings` (pydantic-settings) loaded from env / `.env`. `database.py` — async engine + `get_db` dependency (a session that auto-commits on success, rolls back on exception).
@@ -80,6 +80,59 @@ Async end-to-end FastAPI app. The layering is strict:
 Auth flow: register/login issue a JWT (`sub` = user id); protected routes depend on `get_current_user`, which decodes the bearer token and loads the `User`. Google OAuth uses Authlib and requires `SessionMiddleware` (already added in `main.py`).
 
 **Password reset** (`POST /auth/forgot-password` → `/auth/reset-password`): only the token's SHA-256 hash is persisted (`password_reset_tokens`), so a leaked row can't be replayed; the raw token only exists in the emailed link. Preserve these properties when touching the flow — the forgot endpoint returns an identical response whether or not the account exists (anti-enumeration) and only issues tokens for `AuthProvider.email` accounts with a password hash, and it commits the token row *before* sending the email so a failed commit can't produce a live link. Tokens are single-use (`used_at`) and expire after `PASSWORD_RESET_TOKEN_TTL_MINUTES`.
+
+**Works vs editions**: `books` rows are *editions* (one Google Books volume
+each); `works` is what users search, discuss and shelf. `threads.work_id` and
+`shelves.work_id` point at works only — never re-introduce an edition-level FK,
+or discussion splits across printings again. A work's identity is
+`('openlibrary', 'OL…W')` when Open Library resolved it, otherwise
+`('heuristic', sha1(canonical_key))`, recorded in `identity_provenance`.
+`canonical_key` is stored on *every* work, including Open Library ones: it is
+how a heuristic work is later recognised as the same book and merged.
+Heuristic → OL merges happen automatically; OL → OL merges never do.
+Collections (box sets, omnibuses) are stored with `kind='collection'` and
+filtered out of search, not dropped at ingest.
+
+A work may have **zero editions**: Open Library's search response carries
+everything a work row stores, so search ingests works without touching `books`
+at all, and editions only arrive when someone opens the work's page. Everything
+edition-derived therefore needs a fallback, which `load_work_presentation` owns:
+cover is OL's curated image, then the representative edition's, then none;
+`edition_count` is OL's total (26 for *Red Rising*) before the local row count,
+because it is a fact about the book and not about our database; description is
+the representative edition's before the work's, since Google's blurbs are
+richer.
+
+**Search is local-first**: `GET /api/works/search` normalizes the query and
+checks `search_queries`. On a miss it calls Open Library's `search.json` once
+(5s timeout — a cold search blocks a real person), turns each doc into a `Work`
+row, and records the query; the row means the catalog already holds everything
+upstream would return, so every later search for it makes no HTTP call at all
+(TTL 30 days). Every search, cold or warm, is then answered by a Postgres
+full-text query over the generated `works.search_doc` column, ranked
+`ts_rank_cd(...) * (1 + ln(1 + readinglog_count))` — popularity multiplies the
+text match rather than adding to it, so a famous but irrelevant book cannot
+outrank a relevant one. Subjects are indexed at weight C (title A, author B),
+which is what keeps a series sibling like *Iron Gold* findable by "red rising".
+Google Books is never on the search path: it is the degraded fallback when Open
+Library is down (and then the query is deliberately *not* recorded, so the next
+search retries), and otherwise runs only from `enrichment.py`. `search_doc` is
+declared twice on purpose — in the model for `create_all` in tests, and in the
+migration for the real database — and the two expressions must stay identical.
+
+`work_identity` exposes two title forms and they are not interchangeable:
+`clean_title()` is the *key* (lowercased, depunctuated, feeds `canonical_key`),
+`display_title()` is what a reader sees. Both strip the same edition packaging.
+A heuristic work names itself from an edition, so it must use `display_title`.
+
+**Upgrading a pre-works database** is a three-step sequence, in this order:
+`alembic upgrade 0c433c23eda9` (adds `works`), then
+`python -m scripts.resolve_works` (gives every edition a work — needs HTTP, so
+it cannot live in a migration), then `alembic upgrade head`, which moves threads
+and shelves onto those works in SQL and *refuses to run* if any edition is still
+unresolved. `--upgrade` later promotes works that fell back to the heuristic
+tier; it skips any whose own editions resolve to different Open Library works,
+because that grouping is wrong and no single identity is right.
 
 **Email**: routes depend on `email_sender_dep`, never on a concrete sender — that's the seam tests override via `app.dependency_overrides`. `get_email_sender()` picks `SmtpEmailSender` when `SMTP_HOST` is set and `ConsoleEmailSender` (logs the link) otherwise, so local dev needs no SMTP server.
 
@@ -146,6 +199,8 @@ Read those before changing anything visual.
 ## Known remaining gaps
 
 - **No token revocation**: `POST /auth/logout` is a stateless no-op — the frontend just clears the persisted JWT, and a stolen token stays valid until expiry. A password reset does not invalidate existing sessions either. Anything relying on server-side session invalidation needs a refresh/denylist design first.
+- **No admin merge/split UI**: `merge_works()` and `scripts.resolve_works
+  --upgrade` are the only repair tools; a mis-grouped work needs a shell.
 - Content is immutable (no edit/delete for threads or posts). See `ROADMAP.md` for the tracked list.
 
 ## Environment
@@ -154,6 +209,6 @@ Backend reads env vars (see `backend/.env.example` and the `backend` service in 
 
 - Core: `DATABASE_URL`, `SECRET_KEY`, `APP_NAME`
 - OAuth (optional): `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`
-- Book data: `GOOGLE_BOOKS_BASE_URL`, `GOOGLE_BOOKS_API_KEY` (optional; keyless fallback)
+- Book data: `GOOGLE_BOOKS_BASE_URL`, `GOOGLE_BOOKS_API_KEY` (optional; keyless fallback), `OPEN_LIBRARY_BASE_URL`
 - Email (optional — no `SMTP_HOST` means reset links are logged, not sent): `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_USE_TLS`, `MAIL_FROM`
 - Password reset: `FRONTEND_BASE_URL` (base of the emailed link), `PASSWORD_RESET_TOKEN_TTL_MINUTES`

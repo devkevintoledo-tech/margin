@@ -1,12 +1,18 @@
 from __future__ import annotations
 
 from datetime import date, datetime
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
 
 from app.models.shelf import ShelfStatus
+from app.models.work import Work, WorkKind
+
+if TYPE_CHECKING:  # pragma: no cover
+    # Type-only: importing this at runtime would make schemas depend on
+    # services, inverting the layering (services -> schemas -> models).
+    from app.services.works import WorkPresentation
 
 
 class BookOut(BaseModel):
@@ -36,6 +42,47 @@ class BookOut(BaseModel):
     shelf_status: ShelfStatus | None = None
 
 
+class WorkOut(BaseModel):
+    """A book as readers mean it. Cover and description come from the work's
+    representative edition, resolved by the route — never by a lazy relationship
+    load, which would raise MissingGreenlet mid-serialization."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    title: str
+    subtitle: str | None = None
+    author: str
+    first_publish_year: int | None = None
+    kind: WorkKind
+    genre_id: UUID | None = None
+    cover_url: str | None = None
+    description: str | None = None
+    edition_count: int = 0
+    shelf_status: ShelfStatus | None = None
+
+
+def work_out(
+    work: Work,
+    presentation: "WorkPresentation | None" = None,
+    shelf_status: ShelfStatus | None = None,
+) -> WorkOut:
+    """Build a WorkOut from scalar columns plus its presentation row."""
+    return WorkOut(
+        id=work.id,
+        title=work.title,
+        subtitle=work.subtitle,
+        author=work.author,
+        first_publish_year=work.first_publish_year,
+        kind=work.kind,
+        genre_id=work.genre_id,
+        cover_url=presentation.cover_url if presentation else None,
+        description=presentation.description if presentation else None,
+        edition_count=presentation.edition_count if presentation else 0,
+        shelf_status=shelf_status,
+    )
+
+
 class GenreOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -54,6 +101,6 @@ class ShelfOut(BaseModel):
 
     id: UUID
     user_id: UUID
-    book_id: UUID
+    work_id: UUID
     status: ShelfStatus
     created_at: datetime

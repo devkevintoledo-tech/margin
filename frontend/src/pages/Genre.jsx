@@ -3,7 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import client from '../api/client'
 import { useVoteThread } from '../api/threads'
-import BookCard from '../components/BookCard'
+import WorkCard from '../components/WorkCard'
 import PathHeader from '../components/PathHeader'
 import DataTable from '../components/DataTable'
 import ThreadModal from '../components/ThreadModal'
@@ -25,9 +25,9 @@ function Genre() {
     enabled: !!genreSlug,
   })
 
-  const { data: books } = useQuery({
-    queryKey: ['genres', genreSlug, 'books'],
-    queryFn: () => client.get(`/genres/${genreSlug}/books`).then((r) => r.data),
+  const { data: works } = useQuery({
+    queryKey: ['genres', genreSlug, 'works'],
+    queryFn: () => client.get(`/genres/${genreSlug}/works`).then((r) => r.data),
     enabled: !!genreSlug,
   })
 
@@ -126,14 +126,14 @@ function Genre() {
         )}
       </header>
 
-      {books && books.length > 0 && (
+      {works && works.length > 0 && (
         <section className="flex flex-col gap-4">
           <h2 className="text-xs uppercase tracking-eyebrow text-ink-dim border-b border-line pb-2">
-            Notable books
+            Notable works
           </h2>
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-5">
-            {books.map((book) => (
-              <BookCard key={book.id} book={book} />
+            {works.map((work) => (
+              <WorkCard key={work.id} work={work} />
             ))}
           </div>
         </section>

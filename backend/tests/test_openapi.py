@@ -13,7 +13,7 @@ async def test_openapi_tags_present():
     assert resp.status_code == 200
     data = resp.json()
     tag_names = {t["name"] for t in data.get("tags", [])}
-    expected = {"auth", "books", "genres", "threads", "posts", "users"}
+    expected = {"auth", "works", "genres", "threads", "posts", "users"}
     assert expected == tag_names
     for tag in data["tags"]:
         assert tag.get("description"), f"Tag '{tag['name']}' has no description"

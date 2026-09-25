@@ -10,10 +10,11 @@ from app.models.thread import Thread
 from app.models.post import Post
 from app.models.user import User
 from app.models.vote import Vote
-from app.models.book import Book
+from app.models.work import Work
+from app.services.works import canonical_work
 from app.schemas.thread import (
     PostOut,
-    ThreadBookRef,
+    ThreadWorkRef,
     ThreadCreate,
     ThreadGenreRef,
     ThreadOut,
@@ -32,7 +33,7 @@ async def create_thread(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> ThreadOut:
-    # ThreadCreate validator already enforces book XOR genre target.
+    # ThreadCreate validator already enforces work XOR genre target.
     genre_id = payload.genre_id
     if payload.genre_slug and genre_id is None:
         genre = (
@@ -44,10 +45,23 @@ async def create_thread(
             )
         genre_id = genre.id
 
+    # Resolve the work the same way every read path does. A stale client can
+    # hold a merged work's id — tombstones exist precisely so those keep
+    # working — and a thread stored against one would be invisible on both the
+    # old and the new URL, because the listing canonicalizes before filtering.
+    work_id = payload.work_id
+    if work_id is not None:
+        work = await db.get(Work, work_id)
+        if work is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Work not found"
+            )
+        work_id = (await canonical_work(db, work)).id
+
     thread = Thread(
         title=payload.title,
         user_id=current_user.id,
-        book_id=payload.book_id,
+        work_id=work_id,
         genre_id=genre_id,
     )
     db.add(thread)
@@ -63,7 +77,7 @@ async def create_thread(
         id=thread.id,
         title=thread.title,
         user_id=thread.user_id,
-        book_id=thread.book_id,
+        work_id=thread.work_id,
         genre_id=thread.genre_id,
         score=thread.score,
         my_vote=0,
@@ -73,12 +87,12 @@ async def create_thread(
 
 
 class ThreadWithPosts(ThreadOut):
-    # The book/genre a thread hangs off, so the client can render a link and a
+    # The work/genre a thread hangs off, so the client can render a link and a
     # path segment without a second round trip. These live here rather than on
-    # ThreadOut because their names collide with the `Thread.book`/`.genre`
+    # ThreadOut because their names collide with the `Thread.work`/`.genre`
     # relationships, and ThreadOut is built by model_validate elsewhere.
     posts: list[PostOut] = []
-    book: ThreadBookRef | None = None
+    work: ThreadWorkRef | None = None
     genre: ThreadGenreRef | None = None
 
 
@@ -135,13 +149,13 @@ async def get_thread(
         ).all()
     }
 
-    book_ref = None
-    if thread.book_id is not None:
-        book = (
-            await db.execute(select(Book.id, Book.title).where(Book.id == thread.book_id))
+    work_ref = None
+    if thread.work_id is not None:
+        work = (
+            await db.execute(select(Work.id, Work.title).where(Work.id == thread.work_id))
         ).first()
-        if book is not None:
-            book_ref = ThreadBookRef(id=book.id, title=book.title)
+        if work is not None:
+            work_ref = ThreadWorkRef(id=work.id, title=work.title)
 
     genre_ref = None
     if thread.genre_id is not None:
@@ -174,14 +188,14 @@ async def get_thread(
         id=thread.id,
         title=thread.title,
         user_id=thread.user_id,
-        book_id=thread.book_id,
+        work_id=thread.work_id,
         genre_id=thread.genre_id,
         score=thread.score,
         my_vote=my_vote,
         created_at=thread.created_at,
         author=usernames.get(thread.user_id),
         posts=roots,
-        book=book_ref,
+        work=work_ref,
         genre=genre_ref,
     )
 
@@ -207,7 +221,7 @@ async def vote_thread(
         id=thread.id,
         title=thread.title,
         user_id=thread.user_id,
-        book_id=thread.book_id,
+        work_id=thread.work_id,
         genre_id=thread.genre_id,
         score=score,
         my_vote=payload.value,

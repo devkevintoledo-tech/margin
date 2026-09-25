@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom'
 import { slug } from '../lib/slug'
 
 /**
- * The page's location rendered as a filesystem path — `~/books/the-dispossessed`.
+ * The page's location rendered as a filesystem path — `~/works/the-dispossessed`.
  * Replaces breadcrumbs and makes the app's shape legible.
  *
  * Segments are explicit rather than derived from the URL: routes carry ids, but
