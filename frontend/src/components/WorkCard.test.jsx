@@ -20,9 +20,33 @@ describe('WorkCard', () => {
     edition_count: 26,
   }
 
-  it('links to the work, not to an edition', () => {
+  const inSeries = { ...work, series: { slug: 'red-rising', name: 'Red Rising', kind: 'series' } }
+  const alone = { ...work, series: { slug: 'the-hobbit-a1b2c3', name: 'The Hobbit', kind: 'singleton' } }
+
+  it('opens the series page at this book', () => {
+    renderCard(inSeries)
+    expect(screen.getByRole('link')).toHaveAttribute('href', '/series/red-rising?book=w1')
+  })
+
+  it('opens a singleton at its own series page', () => {
+    renderCard(alone)
+    expect(screen.getByRole('link')).toHaveAttribute('href', '/series/the-hobbit-a1b2c3?book=w1')
+  })
+
+  it('falls back to the legacy work URL when no series is known', () => {
     renderCard(work)
     expect(screen.getByRole('link')).toHaveAttribute('href', '/works/w1')
+  })
+
+  it('names the series a book belongs to', () => {
+    renderCard(inSeries)
+    expect(screen.getByText('series')).toBeInTheDocument()
+    expect(screen.getByText('Red Rising', { selector: '.text-path' })).toBeInTheDocument()
+  })
+
+  it('shows no series tag for a book that stands alone', () => {
+    renderCard(alone)
+    expect(screen.queryByText('series')).not.toBeInTheDocument()
   })
 
   it('shows the cover with the title as its accessible name', () => {

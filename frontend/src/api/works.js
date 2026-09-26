@@ -17,14 +17,6 @@ export function useWork(id) {
   })
 }
 
-export function useWorkThreads(id) {
-  return useQuery({
-    queryKey: ['works', id, 'threads'],
-    queryFn: () => client.get(`/works/${id}/threads`).then((r) => r.data),
-    enabled: !!id,
-  })
-}
-
 export function useAddToShelf() {
   const queryClient = useQueryClient()
   return useMutation({
@@ -32,6 +24,7 @@ export function useAddToShelf() {
     onSuccess: (_, { id }) => {
       queryClient.invalidateQueries({ queryKey: ['works', id] })
       queryClient.invalidateQueries({ queryKey: ['me'] })
+      queryClient.invalidateQueries({ queryKey: ['series'] })
     },
   })
 }
@@ -43,6 +36,7 @@ export function useUpdateShelf() {
     onSuccess: (_, { id }) => {
       queryClient.invalidateQueries({ queryKey: ['works', id] })
       queryClient.invalidateQueries({ queryKey: ['me'] })
+      queryClient.invalidateQueries({ queryKey: ['series'] })
     },
   })
 }
@@ -54,6 +48,7 @@ export function useRemoveFromShelf() {
     onSuccess: (_, { id }) => {
       queryClient.invalidateQueries({ queryKey: ['works', id] })
       queryClient.invalidateQueries({ queryKey: ['me'] })
+      queryClient.invalidateQueries({ queryKey: ['series'] })
     },
   })
 }
