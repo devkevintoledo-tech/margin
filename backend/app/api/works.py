@@ -3,19 +3,17 @@ from __future__ import annotations
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import func, literal, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 # Through the package, per CLAUDE.md: app.models.__init__ imports every model,
 # so Base.metadata is complete without importing Base directly for its side
 # effect.
-from app.models import Book, Genre, Post, Shelf, Thread, User, Vote, Work
+from app.models import Book, Genre, Shelf, Work
 from app.schemas.book import ShelfIn, ShelfOut, WorkOut, work_out
-from app.schemas.thread import ThreadSummary
 from app.services import search
 from app.services.auth import get_current_user, get_current_user_optional
-from app.services.enrichment import enrich_work
 from app.services.works import canonical_work, load_work_presentation
 
 router = APIRouter(prefix="/works", tags=["works"])
@@ -113,9 +111,8 @@ async def get_work(
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user_optional),
 ):
+    """Catalog lookup by id. The frontend only uses it to redirect a legacy /works/:id URL to its series."""
     work = await _get_work_or_404(work_id, db)
-    # First view pays for Google Books; every later view is local.
-    await enrich_work(db, work)
     shelf_by_work: dict[UUID, str] = {}
     if current_user is not None:
         stmt = select(Shelf.status).where(
@@ -125,53 +122,6 @@ async def get_work(
         if found is not None:
             shelf_by_work[work.id] = found
     return (await _to_work_outs(db, [work], shelf_by_work))[0]
-
-
-@router.get("/{work_id}/threads", response_model=list[ThreadSummary])
-async def get_work_threads(
-    work_id: UUID,
-    db: AsyncSession = Depends(get_db),
-    limit: int = Query(20, ge=1, le=100),
-    offset: int = Query(0, ge=0),
-    current_user=Depends(get_current_user_optional),
-):
-    work = await _get_work_or_404(work_id, db)
-    if current_user is None:
-        my_vote = literal(0).label("my_vote")
-    else:
-        # A correlated scalar subquery, not a LEFT JOIN: this query already
-        # GROUP BYs to produce post_count, and a join would have to be folded
-        # into that grouping.
-        my_vote = func.coalesce(
-            select(Vote.value)
-            .where(Vote.thread_id == Thread.id, Vote.user_id == current_user.id)
-            .scalar_subquery(),
-            0,
-        ).label("my_vote")
-
-    stmt = (
-        select(
-            Thread.id,
-            Thread.title,
-            Thread.score,
-            my_vote,
-            Thread.work_id,
-            Thread.created_at,
-            User.username.label("author"),
-            Genre.slug.label("genre_slug"),
-            func.count(Post.id).label("post_count"),
-        )
-        .join(User, Thread.user_id == User.id)
-        .outerjoin(Genre, Thread.genre_id == Genre.id)
-        .outerjoin(Post, Post.thread_id == Thread.id)
-        .where(Thread.work_id == work.id)
-        .group_by(Thread.id, User.username, Genre.slug)
-        .order_by(Thread.score.desc())
-        .limit(limit)
-        .offset(offset)
-    )
-    rows = (await db.execute(stmt)).all()
-    return [ThreadSummary.model_validate(row) for row in rows]
 
 
 @router.post("/{work_id}/shelf", response_model=ShelfOut, status_code=status.HTTP_201_CREATED)

@@ -70,8 +70,17 @@ Async end-to-end FastAPI app. The layering is strict:
 
 - **`models/`** — SQLAlchemy 2.0 ORM (`DeclarativeBase` in `models/base.py`). `models/__init__.py` imports every model so `Base.metadata` is fully populated — always import models through the package or this `__init__` so metadata stays complete.
 - **`schemas/`** — Pydantic v2 request/response models. Keep API I/O shapes here, never expose ORM models directly.
-- **`services/`** — business logic with no FastAPI types. `search.py` owns search: query gating against `search_queries`, Open Library ingest, and the local ranked query (it is the only caller of Google on the search path, and only when Open Library is down); `open_library.py` is both the *search* source (`search_works`, cover URLs, `genre_slug`) and the *work identity* source (the work/edition graph Google Books lacks: batched `isbn:(...)` search, then title+author with an `edition_count` tiebreak, never raising on upstream failure); `google_books.py` is the Google Books HTTP client, now an *enrichment* client rather than a search one (httpx, parses the Volumes API into a normalized dict; optional `GOOGLE_BOOKS_API_KEY`, keyless fallback; two-pass title-weighted search, cover-URL upgrade); `enrichment.py` fills a work's editions and description from Google on first view of its page; `covers.py` HEADs a cover URL to reject Google's placeholder; `works.py` owns the resolution ladder, `upsert_work_from_ol`, representative-edition selection and `merge_works`; `work_identity.py` holds the pure string rules the others build on; `auth.py` holds JWT (python-jose, HS256), bcrypt password hashing, reset-token generation/hashing, and the `get_current_user` / `get_current_user_optional` dependencies; `email.py` provides the `EmailSender` ABC with SMTP and console implementations.
-- **`scripts/`** — standalone maintenance entrypoints run with `python -m scripts.<name>` (e.g. `backfill_cover_urls`). They open their own session via `AsyncSessionLocal` and must stay idempotent.
+- **`services/`** — business logic with no FastAPI types. `search.py` owns search: query gating against `search_queries`, Open Library ingest, and the local ranked query (it is the only caller of Google on the search path, and only when Open Library is down); `open_library.py` is both the *search* source (`search_works`, cover URLs, `genre_slug`) and the *work identity* source (the work/edition graph Google Books lacks: batched `isbn:(...)` search, then title+author with an `edition_count` tiebreak, never raising on upstream failure); `google_books.py` is the Google Books HTTP client, now an *enrichment* client rather than a search one (httpx, parses the Volumes API into a normalized dict; optional `GOOGLE_BOOKS_API_KEY`, keyless fallback; two-pass title-weighted search, cover-URL upgrade); `enrichment.py` fills a work's editions and description from Google on first
+view of its page, attaching only volumes whose `canonical_key` matches one of
+the work's `identity_keys` (its stored key, or the key recomputed from its own
+title — some works drifted apart from the key they were created under) —
+Google answers a title+author query with everything the author wrote, so an
+unattached volume is not evidence that it belongs; `covers.py` HEADs a cover URL to reject Google's placeholder; `works.py` owns the resolution ladder, `upsert_work_from_ol`, representative-edition selection and `merge_works`; `work_identity.py` holds the pure string rules the others build on; `series_identity.py` holds the pure series-tag rules (parsing `franchise:`/`series:` subjects, choosing the container, slugs); `series.py` is the only writer of `series` rows — it gives any work flushed without one a singleton, promotes a singleton when its tags later name a series, and provides `absorb_series`, which `merge_works` runs before rewriting thread tags; `threads.py` owns the one thread-listing query (series feed, its per-book filter, genre feed) and thread creation; `auth.py` holds JWT (python-jose, HS256), bcrypt password hashing, reset-token generation/hashing, and the `get_current_user` / `get_current_user_optional` dependencies; `email.py` provides the `EmailSender` ABC with SMTP and console implementations.
+- **`scripts/`** — standalone maintenance entrypoints run with `python -m
+  scripts.<name>` (e.g. `backfill_cover_urls`, `repair_presentation`, which
+  detaches editions enrichment wrongly attached and re-picks every
+  representative under the language ladder). They open their own session via
+  `AsyncSessionLocal` and must stay idempotent.
 - **`api/`** — thin route handlers. Each module owns an `APIRouter(prefix=...)` and is wired in `main.py`.
 - **`config.py`** — `Settings` (pydantic-settings) loaded from env / `.env`. `database.py` — async engine + `get_db` dependency (a session that auto-commits on success, rolls back on exception).
 
@@ -89,15 +98,39 @@ or discussion splits across printings again. A work's identity is
 `('heuristic', sha1(canonical_key))`, recorded in `identity_provenance`.
 `canonical_key` is stored on *every* work, including Open Library ones: it is
 how a heuristic work is later recognised as the same book and merged.
+It records the key of whichever *edition* created the work, while the work's
+`title` comes from Open Library — so the two legitimately disagree (*Strength
+of the Strong* is stored under `the strength of the strong`, and OL titles
+three different Brian Herbert books plain `Dune`, which only the edition keys
+tell apart). Never "repair" that by overwriting the key from the title: it
+orphans correct editions and collapses distinct books. Both forms are instead
+treated as the work's identity — `identity_keys()` for reads, and
+`_claim_open_library_work` / `_absorb_heuristic_twin` for lookups, so a work
+is found by either. Lookups deliberately stop at a differing *primary author*;
+that is a merge decision, not a lookup.
 Heuristic → OL merges happen automatically; OL → OL merges never do.
 Collections (box sets, omnibuses) are stored with `kind='collection'` and
 filtered out of search, not dropped at ingest.
 
+**Series** are the discussion home and a book's only page. `threads.series_id`
+is the room; `threads.work_id` is an optional *book tag* inside it, and must be a
+member of that series (the series endpoint canonicalizes a merged member's id and
+answers a foreign one with 422). Every work has a series — a singleton of its own
+when nothing better is known — and a singleton renders with no series chrome.
+Detection is the franchise tag, then the broadest `series:` tag (the one most
+catalog works share, name as tiebreak), then singleton. A work already in a real
+series is never moved to another automatically; that is a merge decision. A
+promoted singleton is tombstoned (`merged_into_id`) so its slug keeps resolving
+to the survivor. `works.subjects` is stored one subject per line
+(`join_subjects`), because the old space-joined form erased tag boundaries.
+
 A work may have **zero editions**: Open Library's search response carries
 everything a work row stores, so search ingests works without touching `books`
-at all, and editions only arrive when someone opens the work's page. Everything
+at all, and editions only arrive when someone opens its series page. Everything
 edition-derived therefore needs a fallback, which `load_work_presentation` owns:
-cover is OL's curated image, then the representative edition's, then none;
+cover is the representative edition's (verified real, and in the work's
+language), then OL's curated image, then none — OL's `cover_i` is one
+arbitrary printing's art, which is how an English work wore a Spanish cover;
 `edition_count` is OL's total (26 for *Red Rising*) before the local row count,
 because it is a fact about the book and not about our database; description is
 the representative edition's before the work's, since Google's blurbs are
@@ -134,6 +167,15 @@ unresolved. `--upgrade` later promotes works that fell back to the heuristic
 tier; it skips any whose own editions resolve to different Open Library works,
 because that grouping is wrong and no single identity is right.
 
+**Upgrading to series** is the same shape: `alembic upgrade e7b3c9d2a1f4` (adds
+`series` and nullable `series_id` columns), then `python -m
+scripts.backfill_series` (idempotent; re-fetches space-joined subjects from Open
+Library, assigns every work a series, moves each work thread into its room), then
+`alembic upgrade head`, which *refuses to run* while any work lacks a series. The
+thread constraints (`ck_threads_one_home`, `ck_threads_tag_needs_series`) are
+added `NOT VALID` because 10 legacy threads orphaned by the works migration have
+no home; the backfill reports them and leaves them alone.
+
 **Email**: routes depend on `email_sender_dep`, never on a concrete sender — that's the seam tests override via `app.dependency_overrides`. `get_email_sender()` picks `SmtpEmailSender` when `SMTP_HOST` is set and `ConsoleEmailSender` (logs the link) otherwise, so local dev needs no SMTP server.
 
 ### Frontend (`frontend/src/`)
@@ -142,6 +184,7 @@ Vite + React 18 + React Router + Tailwind.
 - **`store/auth.js`** — Zustand client-state store (token + user), wrapped in `persist` (localStorage key `margin-auth`). `App.jsx` calls `useMe()` on mount to revalidate the persisted token against `/auth/me` and refresh stale user data.
 - React Query is the server-state layer — the `api/` modules expose `useQuery`/`useMutation` hooks; components should consume those rather than calling `client` directly.
 - `vite.config.js` proxies `/api` → `http://localhost:8000` in dev.
+- **Routes**: `/series/:slug` (`pages/Series.jsx`) is a book's only page and replaces the retired work page; threads live at `/series/:slug/threads/:threadId`. Legacy `/works/:id` and `/works/:id/threads/:threadId` URLs go through `WorkRedirect`, which reads the work's `series.slug` from `GET /api/works/{id}` and replaces the history entry. Link to a book with `seriesHref(work)` from `api/series.js`.
 
 ### Design system (`frontend/src/index.css` + `frontend/tailwind.config.js`)
 

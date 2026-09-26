@@ -119,7 +119,7 @@ async def test_upgrade_merges_into_an_existing_open_library_work(db_session):
     assert heuristic.source is WorkSource.heuristic
 
     # A thread on the heuristic work: the merge has to carry it across.
-    thread = Thread(title="Legacy thread", user_id=user.id, work_id=heuristic.id)
+    thread = Thread(title="Legacy thread", user_id=user.id, series_id=heuristic.series_id, work_id=heuristic.id)
     db_session.add(thread)
     await db_session.flush()
 

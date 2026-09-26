@@ -5,17 +5,9 @@ import pytest
 from app.models.genre import Genre
 from app.models.thread import Thread
 from app.models.user import User, AuthProvider
+from app.models import Series
 
 pytestmark = pytest.mark.asyncio
-
-
-@pytest.fixture
-async def genre(db_session):
-    g = Genre(name=f"Sci-Fi {uuid.uuid4().hex[:4]}", slug=f"sci-fi-{uuid.uuid4().hex[:4]}")
-    db_session.add(g)
-    await db_session.flush()
-    await db_session.refresh(g)
-    return g
 
 
 @pytest.fixture
@@ -33,7 +25,7 @@ async def seed_user(db_session):
 
 async def _seed_work_threads(db_session, user, work, n: int):
     for i in range(n):
-        t = Thread(title=f"Thread {i}", user_id=user.id, work_id=work.id)
+        t = Thread(title=f"Thread {i}", user_id=user.id, series_id=work.series_id, work_id=work.id)
         db_session.add(t)
     await db_session.flush()
 
@@ -69,11 +61,12 @@ async def _seed_genre_threads(db_session, user, genre, n: int):
 async def test_work_threads_limit_and_offset(client, db_session, seed_user, work):
     await _seed_work_threads(db_session, seed_user, work, 3)
 
-    page1 = await client.get(f"/api/works/{work.id}/threads?limit=2&offset=0")
+    slug = (await db_session.get(Series, work.series_id)).slug
+    page1 = await client.get(f"/api/series/{slug}/threads?limit=2&offset=0")
     assert page1.status_code == 200
     assert len(page1.json()) == 2
 
-    page2 = await client.get(f"/api/works/{work.id}/threads?limit=2&offset=2")
+    page2 = await client.get(f"/api/series/{slug}/threads?limit=2&offset=2")
     assert page2.status_code == 200
     assert len(page2.json()) == 1
 
@@ -104,7 +97,8 @@ async def test_genre_threads_limit_and_offset(client, db_session, seed_user, gen
 
 async def test_limit_constraints(client, db_session, seed_user, work, genre):
     # limit > 100 rejected on all three endpoints
-    r1 = await client.get(f"/api/works/{work.id}/threads?limit=999")
+    slug = (await db_session.get(Series, work.series_id)).slug
+    r1 = await client.get(f"/api/series/{slug}/threads?limit=999")
     assert r1.status_code == 422
 
     r2 = await client.get(f"/api/genres/{genre.slug}/works?limit=999")
@@ -114,5 +108,5 @@ async def test_limit_constraints(client, db_session, seed_user, work, genre):
     assert r3.status_code == 422
 
     # negative offset rejected
-    r4 = await client.get(f"/api/works/{work.id}/threads?offset=-1")
+    r4 = await client.get(f"/api/series/{slug}/threads?offset=-1")
     assert r4.status_code == 422

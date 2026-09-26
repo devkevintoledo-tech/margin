@@ -10,6 +10,7 @@ from sqlalchemy.exc import IntegrityError
 from app.models import Post, Thread, User, Vote
 from app.models.user import AuthProvider
 from app.services.votes import set_vote
+from app.models import Series
 
 
 async def _user(db_session) -> User:
@@ -25,7 +26,7 @@ async def _user(db_session) -> User:
 
 
 async def _thread(db_session, user: User, work) -> Thread:
-    t = Thread(title="A thread", user_id=user.id, work_id=work.id)
+    t = Thread(title="A thread", user_id=user.id, series_id=work.series_id, work_id=work.id)
     db_session.add(t)
     await db_session.flush()
     return t
@@ -305,7 +306,7 @@ async def test_thread_read_my_vote_is_zero_when_anonymous(
 
 
 async def test_work_thread_list_carries_my_vote_and_orders_by_score(
-    client, auth_headers, work
+    client, auth_headers, db_session, work
 ):
     low = await client.post(
         "/api/threads/",
@@ -324,11 +325,12 @@ async def test_work_thread_list_carries_my_vote_and_orders_by_score(
         f"/api/threads/{low.json()['id']}/vote", json={"value": -1}, headers=auth_headers
     )
 
-    listed = await client.get(f"/api/works/{work.id}/threads", headers=auth_headers)
+    slug = (await db_session.get(Series, work.series_id)).slug
+    listed = await client.get(f"/api/series/{slug}/threads", headers=auth_headers)
     rows = listed.json()
     assert [r["title"] for r in rows] == ["High", "Low"]
     assert rows[0]["my_vote"] == 1
     assert rows[1]["my_vote"] == -1
 
-    anon = await client.get(f"/api/works/{work.id}/threads")
+    anon = await client.get(f"/api/series/{slug}/threads")
     assert all(r["my_vote"] == 0 for r in anon.json())

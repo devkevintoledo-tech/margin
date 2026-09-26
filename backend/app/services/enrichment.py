@@ -16,7 +16,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Work
 from app.services import covers, google_books
-from app.services.works import _refresh_work
+from app.services.work_identity import canonical_key
+from app.services.works import _refresh_work, identity_keys
 
 
 async def enrich_work(db: AsyncSession, work: Work) -> None:
@@ -43,11 +44,23 @@ async def enrich_work(db: AsyncSession, work: Work) -> None:
     from app.api.works import _upsert_editions
 
     editions, _ = await _upsert_editions(db, results)
-    for edition in editions:
-        if edition.work_id is None:
-            edition.work_id = work.id
 
-    mine = [e for e in editions if e.work_id == work.id]
+    # Google answers `intitle:/inauthor:` with everything the author wrote
+    # under that phrase — Iron Gold, the Sons of Ares graphic novels — so an
+    # unattached edition is not evidence that it belongs here. It is attached
+    # only when it resolves to this work's identity, by the same rule ingest
+    # uses. A volume that fails keeps `work_id = None` and is free to be
+    # resolved into its own work by a later search.
+    mine: list = []
+    for edition in editions:
+        if edition.work_id is not None:
+            if edition.work_id == work.id:
+                mine.append(edition)
+            continue
+        if canonical_key(edition.title, edition.author) not in identity_keys(work):
+            continue
+        edition.work_id = work.id
+        mine.append(edition)
     real = await covers.verify([e.cover_url for e in mine if e.cover_url])
     for edition in mine:
         if edition.cover_url and edition.cover_url not in real:
@@ -58,7 +71,7 @@ async def enrich_work(db: AsyncSession, work: Work) -> None:
 
     await db.flush()
     # Re-pick the representative now that placeholder covers are gone, so the
-    # edition with real art wins completeness_score.
+    # edition with real art wins its tier of edition_rank.
     await _refresh_work(db, work)
     work.enriched_at = datetime.now(timezone.utc)
     await db.flush()

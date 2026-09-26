@@ -7,7 +7,7 @@ test.describe('search relevance and covers', () => {
   test('puts the canonical work first and gives every result a cover', async ({ page }) => {
     await page.goto('/search?q=red%20rising')
 
-    const results = page.locator('a[href^="/works/"]')
+    const results = page.locator('a[href^="/series/"]')
     await expect(results.first()).toBeVisible({ timeout: 30_000 })
 
     await expect(results.first()).toContainText('Red Rising')
@@ -49,11 +49,11 @@ test.describe('search relevance and covers', () => {
 
   test('is fast on a repeat query, because it never leaves the database', async ({ page }) => {
     await page.goto('/search?q=red%20rising')
-    await expect(page.locator('a[href^="/works/"]').first()).toBeVisible({ timeout: 30_000 })
+    await expect(page.locator('a[href^="/series/"]').first()).toBeVisible({ timeout: 30_000 })
 
     const started = Date.now()
     await page.goto('/search?q=red%20rising')
-    await expect(page.locator('a[href^="/works/"]').first()).toBeVisible()
+    await expect(page.locator('a[href^="/series/"]').first()).toBeVisible()
     expect(Date.now() - started).toBeLessThan(2_000)
   })
 })

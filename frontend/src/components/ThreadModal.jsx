@@ -1,16 +1,23 @@
 import { useState } from 'react'
 import { useCreateThread } from '../api/threads'
+import { useCreateSeriesThread } from '../api/series'
 import { errorMessage } from '../api/errors'
 
 /**
- * Thread creation for both works and genres. `target` is whichever key the API
- * expects — `{ work_id }` or `{ genre_slug }` — and is spread into the payload.
+ * Thread creation for series and genre rooms. In a series, pass `seriesSlug`
+ * and the series' `books`: the thread posts to that room, and the optional
+ * "about which book" tag is what the page's per-book filter reads, so it is
+ * the spoiler control. Elsewhere `target` is the key the API expects — e.g.
+ * `{ genre_slug }` — and is spread into the payload.
  *
  * The default labels are load-bearing: `e2e/thread.spec.js` clicks
  * "Start a Thread" and "Create Thread" by accessible name.
  */
 function ThreadModal({
   target,
+  seriesSlug,
+  books = [],
+  defaultBookId = '',
   onClose,
   onCreated,
   title = 'Start a Thread',
@@ -18,15 +25,18 @@ function ThreadModal({
 }) {
   const [threadTitle, setThreadTitle] = useState('')
   const [body, setBody] = useState('')
-  const mutation = useCreateThread()
+  const [bookId, setBookId] = useState(defaultBookId)
+  const genericMutation = useCreateThread()
+  const seriesMutation = useCreateSeriesThread(seriesSlug)
+  const mutation = seriesSlug ? seriesMutation : genericMutation
 
   const handleSubmit = (e) => {
     e.preventDefault()
     if (!threadTitle.trim()) return
-    mutation.mutate(
-      { ...target, title: threadTitle.trim(), content: body.trim() },
-      { onSuccess: (data) => onCreated(data) },
-    )
+    const payload = seriesSlug
+      ? { title: threadTitle.trim(), content: body.trim(), ...(bookId ? { work_id: bookId } : {}) }
+      : { ...target, title: threadTitle.trim(), content: body.trim() }
+    mutation.mutate(payload, { onSuccess: (data) => onCreated(data) })
   }
 
   return (
@@ -53,6 +63,21 @@ function ThreadModal({
             required
             className="input"
           />
+          {books.length > 0 && (
+            <select
+              aria-label="About which book"
+              value={bookId}
+              onChange={(e) => setBookId(e.target.value)}
+              className="input"
+            >
+              <option value="">all books</option>
+              {books.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.title}
+                </option>
+              ))}
+            </select>
+          )}
           <textarea
             value={body}
             onChange={(e) => setBody(e.target.value)}

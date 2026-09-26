@@ -1,5 +1,6 @@
 import respx
 from httpx import Response
+from app.models import Series
 
 GOOGLE_URL = "https://www.googleapis.com/books/v1/volumes"
 OL_URL = "https://openlibrary.org/search.json"
@@ -209,13 +210,14 @@ async def test_shelf_crud_is_keyed_on_the_work(client, auth_headers, work):
     assert removed.status_code == 204
 
 
-async def test_work_threads_listing(client, auth_headers, work):
+async def test_work_threads_listing(client, auth_headers, db_session, work):
     await client.post(
         "/api/threads/",
         json={"title": "Is Darrow a hero?", "work_id": str(work.id), "content": "Discuss."},
         headers=auth_headers,
     )
-    resp = await client.get(f"/api/works/{work.id}/threads")
+    slug = (await db_session.get(Series, work.series_id)).slug
+    resp = await client.get(f"/api/series/{slug}/threads")
     assert resp.status_code == 200
     body = resp.json()
     assert len(body) == 1
@@ -241,7 +243,10 @@ def bare_work(**kw):
     return Work(**base)
 
 
-async def test_cover_prefers_open_library_over_the_representative_edition(db_session):
+async def test_cover_prefers_the_representative_edition_over_open_library(db_session):
+    """OL's `cover_i` is one arbitrary edition's art — for Red Rising, the
+    Spanish RBA printing. A representative that survived `covers.verify` is
+    both real and language-checked, so it wins."""
     from app.models import Book
     from app.services.works import load_work_presentation
 
@@ -253,8 +258,34 @@ async def test_cover_prefers_open_library_over_the_representative_edition(db_ses
         external_id="g1",
         title="Red Rising",
         author="Pierce Brown",
+        language="en",
         work_id=work.id,
-        cover_url="https://books.google.com/placeholder",
+        cover_url="https://books.google.com/real.jpg",
+    )
+    db_session.add(edition)
+    await db_session.flush()
+    work.representative_book_id = edition.id
+    await db_session.flush()
+
+    got = await load_work_presentation(db_session, [work.id])
+    assert got[work.id].cover_url == "https://books.google.com/real.jpg"
+
+
+async def test_cover_falls_back_to_open_library_when_the_edition_has_none(db_session):
+    """The unenriched majority: a work with an edition that carries no art."""
+    from app.models import Book
+    from app.services.works import load_work_presentation
+
+    work = bare_work(ol_cover_id=7316188)
+    db_session.add(work)
+    await db_session.flush()
+    edition = Book(
+        source="google_books",
+        external_id="g3",
+        title="Red Rising",
+        author="Pierce Brown",
+        work_id=work.id,
+        cover_url=None,
     )
     db_session.add(edition)
     await db_session.flush()
@@ -369,3 +400,26 @@ async def test_description_prefers_the_enriched_edition(db_session):
 
     got = await load_work_presentation(db_session, [work.id])
     assert got[work.id].description == "A richer Google blurb."
+
+
+@respx.mock
+async def test_search_results_carry_their_series(client, db_session):
+    from app.services.open_library import OLWork
+    from app.services.works import upsert_work_from_ol
+    from app.models import SearchQuery
+    from datetime import datetime, timezone
+
+    await upsert_work_from_ol(db_session, OLWork(
+        key="OLRR1W", title="Red Rising", author="Pierce Brown", first_publish_year=2014,
+        edition_count=26, isbn_13s=frozenset(), subjects=("franchise:Red Rising",)))
+    await upsert_work_from_ol(db_session, OLWork(
+        key="OLHB1W", title="Red Hobbit", author="Someone", first_publish_year=1937,
+        edition_count=3, isbn_13s=frozenset(), subjects=("Fantasy",)))
+    # Mark the query resolved so search stays local.
+    db_session.add(SearchQuery(normalized_query="red", resolved_at=datetime.now(timezone.utc), result_count=2))
+    await db_session.flush()
+
+    rows = (await client.get("/api/works/search", params={"q": "red"})).json()
+    by_title = {r["title"]: r for r in rows}
+    assert by_title["Red Rising"]["series"] == {"slug": "red-rising", "name": "Red Rising", "kind": "series"}
+    assert by_title["Red Hobbit"]["series"]["kind"] == "singleton"

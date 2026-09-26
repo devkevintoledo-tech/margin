@@ -30,13 +30,13 @@ export function signedInAs(page, user) {
   return page.locator(`a[href="/profile/${user.username}"]`)
 }
 
-// Opens the first work returned by a search and waits for the work detail page.
+// Opens the first work returned by a search and waits for the book's series page.
 // Depends on the live Google Books and Open Library integrations; pass a broad,
 // popular query. If Open Library is slow the heuristic tier still groups the
 // results, so nothing here may depend on a work's edition_count.
 export async function openFirstSearchResult(page, query = 'dune') {
   await page.goto(`/search?q=${encodeURIComponent(query)}`)
-  const firstWork = page.locator('a[href^="/works/"]').first()
+  const firstWork = page.locator('a[href^="/series/"]').first()
   await firstWork.click()
-  await expect(page).toHaveURL(/\/works\//)
+  await expect(page).toHaveURL(/\/series\//)
 }

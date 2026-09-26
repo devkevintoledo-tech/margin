@@ -14,9 +14,6 @@ export function useCreateThread() {
   return useMutation({
     mutationFn: (payload) => client.post('/threads/', payload).then((r) => r.data),
     onSuccess: (data) => {
-      if (data.work_id) {
-        queryClient.invalidateQueries({ queryKey: ['works', String(data.work_id), 'threads'] })
-      }
       if (data.genre_slug) {
         queryClient.invalidateQueries({ queryKey: ['genres', data.genre_slug, 'threads'] })
       }
@@ -31,11 +28,9 @@ export function useVoteThread() {
       client.put(`/threads/${id}/vote`, { value }).then((r) => r.data),
     // Voting from a list has to refresh that list, or the score the reader
     // just changed stays stale on screen.
-    onSuccess: (_, { id, workId, genreSlug }) => {
+    onSuccess: (_, { id, seriesSlug, genreSlug }) => {
       queryClient.invalidateQueries({ queryKey: ['threads', String(id)] })
-      if (workId) {
-        queryClient.invalidateQueries({ queryKey: ['works', String(workId), 'threads'] })
-      }
+      if (seriesSlug) queryClient.invalidateQueries({ queryKey: ['series', seriesSlug, 'threads'] })
       if (genreSlug) {
         queryClient.invalidateQueries({ queryKey: ['genres', genreSlug, 'threads'] })
       }

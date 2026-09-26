@@ -1,5 +1,7 @@
 """Thread creation (work XOR genre target), fetch, and upvote."""
 
+from app.models import Series
+
 
 async def test_create_work_thread_and_fetch(client, auth_headers, work):
     resp = await client.post(
@@ -160,7 +162,7 @@ async def _other_user(client):
 
 
 async def test_thread_listing_carries_created_at_for_the_age_column(
-    client, auth_headers, work
+    client, auth_headers, db_session, work
 ):
     """The work/genre listings render a thread's age, so they must date it."""
     created = await client.post(
@@ -170,7 +172,8 @@ async def test_thread_listing_carries_created_at_for_the_age_column(
     )
     assert created.status_code == 201, created.text
 
-    rows = (await client.get(f"/api/works/{work.id}/threads")).json()
+    slug = (await db_session.get(Series, work.series_id)).slug
+    rows = (await client.get(f"/api/series/{slug}/threads")).json()
     row = next(r for r in rows if r["id"] == created.json()["id"])
     assert row["created_at"] == created.json()["created_at"]
     assert row["author"]
@@ -208,7 +211,8 @@ async def test_thread_created_against_a_merge_tombstone_lands_on_the_canonical_w
     assert created.status_code == 201, created.text
     assert created.json()["work_id"] == str(work.id)
 
-    listed = await client.get(f"/api/works/{work.id}/threads")
+    slug = (await db_session.get(Series, work.series_id)).slug
+    listed = await client.get(f"/api/series/{slug}/threads")
     assert [t["title"] for t in listed.json()] == ["Posted against an old id"]
 
 
@@ -221,3 +225,26 @@ async def test_thread_against_an_unknown_work_is_404_not_500(client, auth_header
         headers=auth_headers,
     )
     assert resp.status_code == 404, resp.text
+
+
+async def test_a_work_thread_lands_in_the_works_series_tagged(client, auth_headers, work):
+    resp = await client.post(
+        "/api/threads/", json={"title": "Legacy path", "work_id": str(work.id)}, headers=auth_headers
+    )
+    assert resp.status_code == 201, resp.text
+    body = resp.json()
+    assert body["series_id"] == str(work.series_id)
+    assert body["work_id"] == str(work.id)
+
+    detail = (await client.get(f"/api/threads/{body['id']}")).json()
+    assert detail["series"]["kind"] == "singleton"
+    assert detail["series"]["slug"]
+
+
+async def test_a_genre_thread_has_no_series(client, auth_headers, genre):
+    resp = await client.post(
+        "/api/threads/", json={"title": "Genre talk", "genre_slug": genre.slug}, headers=auth_headers
+    )
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["series_id"] is None
+    assert (await client.get(f"/api/threads/{resp.json()['id']}")).json()["series"] is None

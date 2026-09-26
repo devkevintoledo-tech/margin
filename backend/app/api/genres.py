@@ -1,19 +1,17 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import func, literal, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.schemas.book import GenreOut, WorkOut, work_out
 from app.schemas.thread import ThreadSummary
 from app.models.genre import Genre  # type: ignore[import]
-from app.models.post import Post  # type: ignore[import]
 from app.models.thread import Thread  # type: ignore[import]
-from app.models.user import User  # type: ignore[import]
-from app.models.vote import Vote  # type: ignore[import]
 from app.models.work import Work, WorkKind  # type: ignore[import]
 from app.services.auth import get_current_user_optional
+from app.services.threads import thread_summaries
 from app.services.works import load_work_presentation
 
 router = APIRouter(prefix="/genres", tags=["genres"])
@@ -71,39 +69,6 @@ async def get_genre_threads(
     current_user=Depends(get_current_user_optional),
 ):
     genre = await _get_genre_or_404(slug, db)
-    if current_user is None:
-        my_vote = literal(0).label("my_vote")
-    else:
-        # A correlated scalar subquery, not a LEFT JOIN: this query already
-        # GROUP BYs to produce post_count, and a join would have to be folded
-        # into that grouping.
-        my_vote = func.coalesce(
-            select(Vote.value)
-            .where(Vote.thread_id == Thread.id, Vote.user_id == current_user.id)
-            .scalar_subquery(),
-            0,
-        ).label("my_vote")
-
-    stmt = (
-        select(
-            Thread.id,
-            Thread.title,
-            Thread.score,
-            my_vote,
-            Thread.work_id,
-            Thread.created_at,
-            User.username.label("author"),
-            Genre.slug.label("genre_slug"),
-            func.count(Post.id).label("post_count"),
-        )
-        .join(User, Thread.user_id == User.id)
-        .outerjoin(Genre, Thread.genre_id == Genre.id)
-        .outerjoin(Post, Post.thread_id == Thread.id)
-        .where(Thread.genre_id == genre.id)
-        .group_by(Thread.id, User.username, Genre.slug)
-        .order_by(Thread.score.desc())
-        .limit(limit)
-        .offset(offset)
+    return await thread_summaries(
+        db, Thread.genre_id == genre.id, current_user=current_user, limit=limit, offset=offset
     )
-    rows = (await db.execute(stmt)).all()
-    return [ThreadSummary.model_validate(row) for row in rows]

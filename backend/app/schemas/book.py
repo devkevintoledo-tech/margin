@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict
 
 from app.models.shelf import ShelfStatus
 from app.models.work import Work, WorkKind
+from app.schemas.series import SeriesRef
 
 if TYPE_CHECKING:  # pragma: no cover
     # Type-only: importing this at runtime would make schemas depend on
@@ -60,6 +61,7 @@ class WorkOut(BaseModel):
     description: str | None = None
     edition_count: int = 0
     shelf_status: ShelfStatus | None = None
+    series: SeriesRef | None = None
 
 
 def work_out(
@@ -80,6 +82,7 @@ def work_out(
         description=presentation.description if presentation else None,
         edition_count=presentation.edition_count if presentation else 0,
         shelf_status=shelf_status,
+        series=presentation.series if presentation else None,
     )
 
 

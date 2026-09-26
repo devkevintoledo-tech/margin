@@ -18,13 +18,17 @@ from app.models.book import Book
 from app.models.genre import Genre
 from app.models.shelf import Shelf
 from app.models.thread import Thread
+from app.models.series import Series
 from app.models.work import Work, WorkKind, WorkProvenance, WorkSource
+from app.schemas.series import SeriesRef
 from app.services import open_library
+from app.services import series as series_service
 from app.services.open_library import (
     OLWork,
     cover_url as ol_cover_url,
     genre_slug as ol_genre_slug,
 )
+from app.services.series_identity import join_subjects
 from app.services.work_identity import (
     canonical_key,
     classify_kind,
@@ -37,12 +41,29 @@ from app.services.work_identity import (
 _TITLE_AUTHOR_CALL_CAP = 5
 
 
-def completeness_score(edition: Book) -> int:
-    """Higher = richer edition. Cover weighted highest — it carries the page.
+# Language tiers. Unknown sits between English and a known translation: a
+# missing `language` is an absent fact, not evidence the edition is foreign,
+# so it must not be punished as hard as a German printing.
+_LANGUAGE_ENGLISH = 2
+_LANGUAGE_UNKNOWN = 1
+_LANGUAGE_OTHER = 0
 
-    Moved here from ``google_books._completeness_score``: picking the richest
-    edition is the only decision it was ever really making, and that decision
-    now belongs to the work, not to a single search response.
+
+def _language_rank(edition: Book) -> int:
+    """Rank an edition's language. Google sends IETF tags: `en`, `en-GB`, `pt-BR`."""
+    code = (edition.language or "").strip().lower()
+    if not code:
+        return _LANGUAGE_UNKNOWN
+    return _LANGUAGE_ENGLISH if code.split("-")[0] == "en" else _LANGUAGE_OTHER
+
+
+def completeness_score(edition: Book) -> int:
+    """Higher = richer edition. The ladder's last tier, not its whole judgement.
+
+    Once the flat version of this sum decided the representative outright, a
+    German edition with cover, blurb, ISBN and page count outscored the English
+    printing and put a translated blurb on an English work. It is now only
+    consulted when ``edition_rank`` reaches a tie.
     """
     score = 0
     if edition.cover_url:
@@ -56,6 +77,40 @@ def completeness_score(edition: Book) -> int:
     if edition.ratings_count:
         score += 1
     return score
+
+
+def edition_rank(edition: Book) -> tuple[int, int, int, int]:
+    """Sort key for "which edition speaks for this work" — highest wins.
+
+    A dominance ladder, not a sum: each tier is decided before the next is
+    consulted, so no amount of richness lets a translation outrank a plain
+    English printing. Tiers, in order: language, cover, description,
+    completeness.
+
+    The spec's publisher-family and blurb-quality tiers land in slice 2 and
+    slot into this tuple between language and cover, and between cover and
+    completeness, respectively.
+    """
+    return (
+        _language_rank(edition),
+        1 if edition.cover_url else 0,
+        1 if edition.description else 0,
+        completeness_score(edition),
+    )
+
+
+def identity_keys(work: Work) -> set[str]:
+    """Every canonical key that names this work — an edition matching any belongs.
+
+    Normally one: the stored ``canonical_key``. A work whose title no longer
+    agrees with the key it was created under carries two, and 24 live rows are
+    in that state — *Morning Star* holding the key ``light bringer``, *Red
+    Rising* holding ``red rising an explosive dystopian sci fi novel``. Against
+    the stored key alone such a work rejects its own printings, so the key
+    recomputed from its title and author is accepted too. An impostor matches
+    neither form, which is what keeps *Iron Gold* out of *Red Rising*.
+    """
+    return {work.canonical_key, canonical_key(work.title, work.author)}
 
 
 async def canonical_work(db: AsyncSession, work: Work) -> Work:
@@ -149,6 +204,49 @@ async def _resolve_upstream(
     return out
 
 
+async def _claim_open_library_work(db: AsyncSession, key: str) -> Work | None:
+    """Find the live Open Library work an edition key belongs to, if any.
+
+    Exact match first, which is the hot path and the only one most editions
+    need. A work keeps the ``canonical_key`` of whichever edition created it
+    (this function's own caller writes it that way), so it can hold a key no
+    other edition of the same book would ever produce while ``identity_keys``
+    still names it — *Strength of the Strong* stored under ``the strength of
+    the strong``. Matching only the stored key stands up a duplicate beside it.
+
+    The second pass narrows on the author segment, which is identical across a
+    work's key forms whenever the primary author agrees, and compares in Python
+    because ``clean_title``'s rules do not exist in SQL. Works whose forms
+    disagree on the *author* are deliberately not claimed: differing primary
+    authors are a merge decision, not a lookup.
+    """
+    exact = (
+        await db.execute(
+            select(Work).where(
+                Work.source == WorkSource.openlibrary,
+                Work.canonical_key == key,
+                Work.merged_into_id.is_(None),
+            )
+        )
+    ).scalars().first()
+    if exact is not None:
+        return exact
+
+    if "\x1f" not in key:
+        return None
+    author = key.split("\x1f", 1)[1]
+    candidates = (
+        await db.execute(
+            select(Work).where(
+                Work.source == WorkSource.openlibrary,
+                Work.canonical_key.endswith("\x1f" + author, autoescape=True),
+                Work.merged_into_id.is_(None),
+            )
+        )
+    ).scalars().all()
+    return next((w for w in candidates if key in identity_keys(w)), None)
+
+
 async def _upsert_work(
     db: AsyncSession,
     edition: Book,
@@ -186,15 +284,7 @@ async def _upsert_work(
         # creation order is just whatever the search returned — so handle the
         # other order here too, or the duplicate is permanent and only
         # `resolve_works --upgrade` would ever clear it.
-        claimed = (
-            await db.execute(
-                select(Work).where(
-                    Work.source == WorkSource.openlibrary,
-                    Work.canonical_key == key,
-                    Work.merged_into_id.is_(None),
-                )
-            )
-        ).scalars().first()
+        claimed = await _claim_open_library_work(db, key)
         if claimed is not None:
             return claimed
 
@@ -237,7 +327,12 @@ async def upsert_work_from_ol(db: AsyncSession, ol: OLWork) -> Work:
 
     work = await canonical_work(db, existing) if existing is not None else None
 
+    subjects = join_subjects(ol.subjects)
+
     if work is None:
+        # Decide the room before the insert. Otherwise the flush would give the
+        # work a throwaway singleton that is promoted and tombstoned a line later.
+        series = await series_service.series_for_subjects(db, subjects)
         work = Work(
             source=WorkSource.openlibrary,
             external_id=ol.key,
@@ -249,6 +344,8 @@ async def upsert_work_from_ol(db: AsyncSession, ol: OLWork) -> Work:
             # An OL search hit is an authority's own match for the query, the
             # same standard tier 1 applies to an ISBN lookup.
             identity_provenance=WorkProvenance.isbn,
+            subjects=subjects,
+            series_id=series.id if series is not None else None,
         )
         db.add(work)
         await db.flush()
@@ -260,7 +357,9 @@ async def upsert_work_from_ol(db: AsyncSession, ol: OLWork) -> Work:
     work.ol_edition_count = ol.edition_count
     work.readinglog_count = ol.readinglog_count
     work.ratings_count = ol.ratings_count
-    work.subjects = " ".join(ol.subjects) or None
+    work.subjects = subjects
+    # New tags on a re-ingest can promote a singleton into its series.
+    await series_service.assign_series(db, work)
 
     if work.genre_id is None and ol.subjects:
         slug = ol_genre_slug(ol.subjects)
@@ -284,7 +383,7 @@ async def _absorb_heuristic_twin(db: AsyncSession, work: Work) -> None:
         await db.execute(
             select(Work).where(
                 Work.source == WorkSource.heuristic,
-                Work.canonical_key == work.canonical_key,
+                Work.canonical_key.in_(identity_keys(work)),
                 Work.merged_into_id.is_(None),
             )
         )
@@ -303,7 +402,7 @@ async def _refresh_work(
     if not editions:
         return
 
-    best = max(editions, key=completeness_score)
+    best = max(editions, key=edition_rank)
     work.representative_book_id = best.id
 
     if work.genre_id is None and genre_hints:
@@ -339,6 +438,9 @@ async def merge_works(db: AsyncSession, source: Work, target: Work) -> Work:
             target_owners.add(shelf.user_id)
     await db.flush()
 
+    # Threads change rooms before their book tag is rewritten below: the tag
+    # is how the ones about `source` are found.
+    await series_service.absorb_series(db, source, target)
     await db.execute(
         update(Book).where(Book.work_id == source.id).values(work_id=target.id)
     )
@@ -364,6 +466,7 @@ class WorkPresentation(NamedTuple):
     cover_url: str | None
     description: str | None
     edition_count: int
+    series: SeriesRef | None
 
 
 async def load_work_presentation(
@@ -374,14 +477,18 @@ async def load_work_presentation(
     Each field has a fallback order, because a work may have no editions at all
     once Open Library becomes the ingest source:
 
-    * cover — OL's curated image, then the representative edition's, then none.
-      OL wins because Google serves a placeholder PNG at HTTP 200 for
-      metadata-only records, so its URL cannot be trusted on its own.
+    * cover — the representative edition's, then OL's curated image, then none.
+      The edition wins because it has been through ``covers.verify`` (so
+      Google's placeholder PNG is already gone) and through ``edition_rank`` (so
+      it is the work's language, not an arbitrary printing's). OL's ``cover_i``
+      is neither: for Red Rising it is the Spanish RBA edition. It stays the
+      fallback because a work may have no editions at all.
     * description — the representative edition's, then the work's. Google's
       edition blurbs are richer than OL's, so an enriched edition wins.
     * edition count — OL's total, then the local row count. OL knows Red Rising
       has 26 editions while we may have ingested none, and the number is shown
       as a fact about the book, not about our database.
+    * series — the room the work's card links to; singletons included.
 
     Kept out of the routes so both ``api/works.py`` and ``api/genres.py`` build
     the same shape, and out of the schema layer so nothing lazy-loads a
@@ -406,17 +513,22 @@ async def load_work_presentation(
             Work.description,
             Work.ol_edition_count,
             func.coalesce(counts.c.n, 0),
+            Series.slug,
+            Series.name,
+            Series.kind,
         )
         .outerjoin(representative, Work.representative_book_id == representative.c.id)
         .outerjoin(counts, counts.c.work_id == Work.id)
+        .outerjoin(Series, Work.series_id == Series.id)
         .where(Work.id.in_(work_ids))
     )
     rows = (await db.execute(stmt)).all()
     return {
         row[0]: WorkPresentation(
-            cover_url=ol_cover_url(row[1]) or row[2],
+            cover_url=row[2] or ol_cover_url(row[1]),
             description=row[3] or row[4],
             edition_count=row[5] or row[6],
+            series=SeriesRef(slug=row[7], name=row[8], kind=row[9]) if row[7] else None,
         )
         for row in rows
     }
