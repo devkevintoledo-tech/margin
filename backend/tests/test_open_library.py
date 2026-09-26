@@ -220,3 +220,20 @@ def test_genre_slug_falls_back_to_a_plain_subject():
 
 def test_genre_slug_returns_none_when_nothing_matches():
     assert ol.genre_slug(["Dragons", "Swords"]) is None
+
+
+WORK_URL = "https://openlibrary.org/works/OL17076473W.json"
+
+
+@respx.mock
+async def test_fetch_work_subjects_returns_the_tag_list():
+    respx.get(WORK_URL).mock(
+        return_value=Response(200, json={"subjects": ["franchise:Red Rising", "Fiction"]})
+    )
+    assert await ol.fetch_work_subjects("OL17076473W") == ("franchise:Red Rising", "Fiction")
+
+
+@respx.mock
+async def test_fetch_work_subjects_survives_failure():
+    respx.get(WORK_URL).mock(return_value=Response(503))
+    assert await ol.fetch_work_subjects("OL17076473W") is None

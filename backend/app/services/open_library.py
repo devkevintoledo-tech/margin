@@ -198,3 +198,26 @@ def genre_slug(subjects: Sequence[str]) -> str | None:
             if needle in blob:
                 return slug
     return None
+
+
+async def fetch_work_subjects(key: str) -> tuple[str, ...] | None:
+    """A work's subject tags from ``/works/{key}.json``, or None on any failure.
+
+    Only the series backfill needs this: rows ingested before subjects were
+    stored one per line lost their tag boundaries, and the work record carries
+    the same ``franchise:``/``series:`` tags the search index does.
+    """
+    url = f"{settings.OPEN_LIBRARY_BASE_URL}/works/{key}.json"
+    try:
+        async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+            response = await client.get(url)
+            response.raise_for_status()
+            body = response.json()
+    except (httpx.HTTPStatusError, httpx.RequestError, ValueError):
+        return None
+    if not isinstance(body, dict):
+        return None
+    subjects = body.get("subjects")
+    if not isinstance(subjects, list):
+        return None
+    return tuple(s for s in subjects if isinstance(s, str))
