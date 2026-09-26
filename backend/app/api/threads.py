@@ -50,17 +50,20 @@ async def create_thread(
     # working — and a thread stored against one would be invisible on both the
     # old and the new URL, because the listing canonicalizes before filtering.
     work_id = payload.work_id
+    series_id = None
     if work_id is not None:
         work = await db.get(Work, work_id)
         if work is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND, detail="Work not found"
             )
-        work_id = (await canonical_work(db, work)).id
+        work = await canonical_work(db, work)
+        work_id, series_id = work.id, work.series_id
 
     thread = Thread(
         title=payload.title,
         user_id=current_user.id,
+        series_id=series_id,
         work_id=work_id,
         genre_id=genre_id,
     )

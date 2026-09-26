@@ -15,6 +15,7 @@ import os
 import uuid
 from datetime import datetime, timezone
 
+import pytest
 import pytest_asyncio
 
 # Settings reads these at import time — populate before importing the app.
@@ -30,7 +31,7 @@ from sqlalchemy.pool import NullPool  # noqa: E402
 
 from app.database import get_db  # noqa: E402
 from app.main import app  # noqa: E402
-from app.models import Base, Book, Work, WorkKind, WorkProvenance, WorkSource  # noqa: E402  (imports the package → full metadata)
+from app.models import Base, Book, Genre, Work, WorkKind, WorkProvenance, WorkSource  # noqa: E402  (imports the package → full metadata)
 
 TEST_DB_URL = os.environ["DATABASE_URL"]
 
@@ -122,3 +123,12 @@ async def work(db_session):
     await db_session.commit()
     await db_session.refresh(w)
     return w
+
+
+@pytest.fixture
+async def genre(db_session):
+    g = Genre(name=f"Sci-Fi {uuid.uuid4().hex[:4]}", slug=f"sci-fi-{uuid.uuid4().hex[:4]}")
+    db_session.add(g)
+    await db_session.flush()
+    await db_session.refresh(g)
+    return g

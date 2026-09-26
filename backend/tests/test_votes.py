@@ -25,7 +25,7 @@ async def _user(db_session) -> User:
 
 
 async def _thread(db_session, user: User, work) -> Thread:
-    t = Thread(title="A thread", user_id=user.id, work_id=work.id)
+    t = Thread(title="A thread", user_id=user.id, series_id=work.series_id, work_id=work.id)
     db_session.add(t)
     await db_session.flush()
     return t

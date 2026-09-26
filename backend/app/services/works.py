@@ -20,6 +20,7 @@ from app.models.shelf import Shelf
 from app.models.thread import Thread
 from app.models.work import Work, WorkKind, WorkProvenance, WorkSource
 from app.services import open_library
+from app.services import series as series_service  # noqa: F401  (registers the singleton listener)
 from app.services.open_library import (
     OLWork,
     cover_url as ol_cover_url,

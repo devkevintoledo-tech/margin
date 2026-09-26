@@ -10,15 +10,6 @@ pytestmark = pytest.mark.asyncio
 
 
 @pytest.fixture
-async def genre(db_session):
-    g = Genre(name=f"Sci-Fi {uuid.uuid4().hex[:4]}", slug=f"sci-fi-{uuid.uuid4().hex[:4]}")
-    db_session.add(g)
-    await db_session.flush()
-    await db_session.refresh(g)
-    return g
-
-
-@pytest.fixture
 async def seed_user(db_session):
     u = User(
         email=f"p{uuid.uuid4().hex[:6]}@test.com",
@@ -33,7 +24,7 @@ async def seed_user(db_session):
 
 async def _seed_work_threads(db_session, user, work, n: int):
     for i in range(n):
-        t = Thread(title=f"Thread {i}", user_id=user.id, work_id=work.id)
+        t = Thread(title=f"Thread {i}", user_id=user.id, series_id=work.series_id, work_id=work.id)
         db_session.add(t)
     await db_session.flush()
 

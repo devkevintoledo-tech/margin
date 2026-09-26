@@ -95,6 +95,12 @@ class Work(Base):
     genre_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("genres.id", ondelete="SET NULL"), nullable=True, index=True
     )
+    # The book's room. Every work has one — a singleton of its own when no
+    # series is known — so a work page, a search card and a thread all resolve
+    # to exactly one place. `services/series.py` fills it on flush.
+    series_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("series.id"), nullable=False, index=True
+    )
     # --- Open Library presentation and ranking data -------------------------
     # Cover precedence inverts here: OL's librarian-curated image wins over
     # Google's, which serves a placeholder PNG at HTTP 200 for metadata-only
@@ -158,6 +164,9 @@ class Work(Base):
         "Book", foreign_keys=[representative_book_id], post_update=True
     )
     genre: Mapped["Genre | None"] = relationship("Genre", back_populates="works")  # noqa: F821
+    series: Mapped["Series"] = relationship(  # noqa: F821
+        "Series", back_populates="works", foreign_keys=[series_id]
+    )
     threads: Mapped[list["Thread"]] = relationship("Thread", back_populates="work")  # noqa: F821
     shelves: Mapped[list["Shelf"]] = relationship(  # noqa: F821
         "Shelf", back_populates="work", cascade="all, delete-orphan"

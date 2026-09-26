@@ -202,7 +202,7 @@ async def test_merge_moves_threads_and_shelves(db_session):
     db_session.add_all([source, target, user])
     await db_session.flush()
 
-    thread = Thread(title="Is Darrow a hero?", user_id=user.id, work_id=source.id)
+    thread = Thread(title="Is Darrow a hero?", user_id=user.id, series_id=source.series_id, work_id=source.id)
     shelf = Shelf(user_id=user.id, work_id=source.id, status=ShelfStatus.read)
     db_session.add_all([thread, shelf])
     await db_session.flush()
