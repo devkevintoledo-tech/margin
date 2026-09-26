@@ -398,3 +398,26 @@ async def test_description_prefers_the_enriched_edition(db_session):
 
     got = await load_work_presentation(db_session, [work.id])
     assert got[work.id].description == "A richer Google blurb."
+
+
+@respx.mock
+async def test_search_results_carry_their_series(client, db_session):
+    from app.services.open_library import OLWork
+    from app.services.works import upsert_work_from_ol
+    from app.models import SearchQuery
+    from datetime import datetime, timezone
+
+    await upsert_work_from_ol(db_session, OLWork(
+        key="OLRR1W", title="Red Rising", author="Pierce Brown", first_publish_year=2014,
+        edition_count=26, isbn_13s=frozenset(), subjects=("franchise:Red Rising",)))
+    await upsert_work_from_ol(db_session, OLWork(
+        key="OLHB1W", title="Red Hobbit", author="Someone", first_publish_year=1937,
+        edition_count=3, isbn_13s=frozenset(), subjects=("Fantasy",)))
+    # Mark the query resolved so search stays local.
+    db_session.add(SearchQuery(normalized_query="red", resolved_at=datetime.now(timezone.utc), result_count=2))
+    await db_session.flush()
+
+    rows = (await client.get("/api/works/search", params={"q": "red"})).json()
+    by_title = {r["title"]: r for r in rows}
+    assert by_title["Red Rising"]["series"] == {"slug": "red-rising", "name": "Red Rising", "kind": "series"}
+    assert by_title["Red Hobbit"]["series"]["kind"] == "singleton"

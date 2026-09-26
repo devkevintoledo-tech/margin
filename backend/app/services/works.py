@@ -18,7 +18,9 @@ from app.models.book import Book
 from app.models.genre import Genre
 from app.models.shelf import Shelf
 from app.models.thread import Thread
+from app.models.series import Series
 from app.models.work import Work, WorkKind, WorkProvenance, WorkSource
+from app.schemas.series import SeriesRef
 from app.services import open_library
 from app.services import series as series_service
 from app.services.open_library import (
@@ -464,6 +466,7 @@ class WorkPresentation(NamedTuple):
     cover_url: str | None
     description: str | None
     edition_count: int
+    series: SeriesRef | None
 
 
 async def load_work_presentation(
@@ -485,6 +488,7 @@ async def load_work_presentation(
     * edition count — OL's total, then the local row count. OL knows Red Rising
       has 26 editions while we may have ingested none, and the number is shown
       as a fact about the book, not about our database.
+    * series — the room the work's card links to; singletons included.
 
     Kept out of the routes so both ``api/works.py`` and ``api/genres.py`` build
     the same shape, and out of the schema layer so nothing lazy-loads a
@@ -509,9 +513,13 @@ async def load_work_presentation(
             Work.description,
             Work.ol_edition_count,
             func.coalesce(counts.c.n, 0),
+            Series.slug,
+            Series.name,
+            Series.kind,
         )
         .outerjoin(representative, Work.representative_book_id == representative.c.id)
         .outerjoin(counts, counts.c.work_id == Work.id)
+        .outerjoin(Series, Work.series_id == Series.id)
         .where(Work.id.in_(work_ids))
     )
     rows = (await db.execute(stmt)).all()
@@ -520,6 +528,7 @@ async def load_work_presentation(
             cover_url=row[2] or ol_cover_url(row[1]),
             description=row[3] or row[4],
             edition_count=row[5] or row[6],
+            series=SeriesRef(slug=row[7], name=row[8], kind=row[9]) if row[7] else None,
         )
         for row in rows
     }
