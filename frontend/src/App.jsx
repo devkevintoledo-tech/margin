@@ -5,7 +5,8 @@ import StatusBar from './components/StatusBar'
 import { useMe } from './api/auth'
 
 const Home = React.lazy(() => import('./pages/Home'))
-const Work = React.lazy(() => import('./pages/Work'))
+const Series = React.lazy(() => import('./pages/Series'))
+const WorkRedirect = React.lazy(() => import('./pages/WorkRedirect'))
 const Thread = React.lazy(() => import('./pages/Thread'))
 const Genre = React.lazy(() => import('./pages/Genre'))
 const Search = React.lazy(() => import('./pages/Search'))
@@ -27,8 +28,11 @@ function App() {
       <Suspense fallback={<div className="flex items-center justify-center h-64 text-ink-dim">Loading...</div>}>
         <Routes>
           <Route path="/" element={<Home />} />
-          <Route path="/works/:id" element={<Work />} />
-          <Route path="/works/:id/threads/:threadId" element={<Thread />} />
+          <Route path="/series/:slug" element={<Series />} />
+          <Route path="/series/:slug/threads/:threadId" element={<Thread />} />
+          {/* Legacy URLs: the work page is retired; these redirect to the series. */}
+          <Route path="/works/:id" element={<WorkRedirect />} />
+          <Route path="/works/:id/threads/:threadId" element={<WorkRedirect />} />
           <Route path="/genres/:slug" element={<Genre />} />
           {/* Genre threads have always been linked as /genres/:slug/threads/:threadId;
               without this route those links fell through to NotFound. */}
