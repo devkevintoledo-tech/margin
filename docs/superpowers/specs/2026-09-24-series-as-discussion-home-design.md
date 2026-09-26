@@ -245,8 +245,9 @@ view retries, exactly as today.
 destination for a book; search links straight to it.*
 
 - **Search** — results stay works (one card per book). A card whose series is
-  `kind='series'` carries a `⊂ ⟨series name⟩` tag under the author, in `path`
-  (it is a reference); singletons carry none. The whole card links to
+  `kind='series'` carries a `series ⟨name⟩` line under the author — the word in
+  `ink-dim`, the name in `path`; text rather than a glyph, because the
+  literal-glyph set is closed (it is a reference); singletons carry none. The whole card links to
   `/series/:slug?book=<work_id>`, which scrolls to and highlights that book's
   row. `GET /api/works/search` gains `series: {slug, name, kind}` per result.
 - **`/series/:slug`** — the room, and the only book page.

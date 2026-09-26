@@ -75,7 +75,7 @@ view of its page, attaching only volumes whose `canonical_key` matches one of
 the work's `identity_keys` (its stored key, or the key recomputed from its own
 title — some works drifted apart from the key they were created under) —
 Google answers a title+author query with everything the author wrote, so an
-unattached volume is not evidence that it belongs; `covers.py` HEADs a cover URL to reject Google's placeholder; `works.py` owns the resolution ladder, `upsert_work_from_ol`, representative-edition selection and `merge_works`; `work_identity.py` holds the pure string rules the others build on; `auth.py` holds JWT (python-jose, HS256), bcrypt password hashing, reset-token generation/hashing, and the `get_current_user` / `get_current_user_optional` dependencies; `email.py` provides the `EmailSender` ABC with SMTP and console implementations.
+unattached volume is not evidence that it belongs; `covers.py` HEADs a cover URL to reject Google's placeholder; `works.py` owns the resolution ladder, `upsert_work_from_ol`, representative-edition selection and `merge_works`; `work_identity.py` holds the pure string rules the others build on; `series_identity.py` holds the pure series-tag rules (parsing `franchise:`/`series:` subjects, choosing the container, slugs); `series.py` is the only writer of `series` rows — it gives any work flushed without one a singleton, promotes a singleton when its tags later name a series, and provides `absorb_series`, which `merge_works` runs before rewriting thread tags; `threads.py` owns the one thread-listing query (series feed, its per-book filter, genre feed) and thread creation; `auth.py` holds JWT (python-jose, HS256), bcrypt password hashing, reset-token generation/hashing, and the `get_current_user` / `get_current_user_optional` dependencies; `email.py` provides the `EmailSender` ABC with SMTP and console implementations.
 - **`scripts/`** — standalone maintenance entrypoints run with `python -m
   scripts.<name>` (e.g. `backfill_cover_urls`, `repair_presentation`, which
   detaches editions enrichment wrongly attached and re-picks every
@@ -112,9 +112,21 @@ Heuristic → OL merges happen automatically; OL → OL merges never do.
 Collections (box sets, omnibuses) are stored with `kind='collection'` and
 filtered out of search, not dropped at ingest.
 
+**Series** are the discussion home and a book's only page. `threads.series_id`
+is the room; `threads.work_id` is an optional *book tag* inside it, and must be a
+member of that series (the series endpoint canonicalizes a merged member's id and
+answers a foreign one with 422). Every work has a series — a singleton of its own
+when nothing better is known — and a singleton renders with no series chrome.
+Detection is the franchise tag, then the broadest `series:` tag (the one most
+catalog works share, name as tiebreak), then singleton. A work already in a real
+series is never moved to another automatically; that is a merge decision. A
+promoted singleton is tombstoned (`merged_into_id`) so its slug keeps resolving
+to the survivor. `works.subjects` is stored one subject per line
+(`join_subjects`), because the old space-joined form erased tag boundaries.
+
 A work may have **zero editions**: Open Library's search response carries
 everything a work row stores, so search ingests works without touching `books`
-at all, and editions only arrive when someone opens the work's page. Everything
+at all, and editions only arrive when someone opens its series page. Everything
 edition-derived therefore needs a fallback, which `load_work_presentation` owns:
 cover is the representative edition's (verified real, and in the work's
 language), then OL's curated image, then none — OL's `cover_i` is one
@@ -155,6 +167,15 @@ unresolved. `--upgrade` later promotes works that fell back to the heuristic
 tier; it skips any whose own editions resolve to different Open Library works,
 because that grouping is wrong and no single identity is right.
 
+**Upgrading to series** is the same shape: `alembic upgrade e7b3c9d2a1f4` (adds
+`series` and nullable `series_id` columns), then `python -m
+scripts.backfill_series` (idempotent; re-fetches space-joined subjects from Open
+Library, assigns every work a series, moves each work thread into its room), then
+`alembic upgrade head`, which *refuses to run* while any work lacks a series. The
+thread constraints (`ck_threads_one_home`, `ck_threads_tag_needs_series`) are
+added `NOT VALID` because 10 legacy threads orphaned by the works migration have
+no home; the backfill reports them and leaves them alone.
+
 **Email**: routes depend on `email_sender_dep`, never on a concrete sender — that's the seam tests override via `app.dependency_overrides`. `get_email_sender()` picks `SmtpEmailSender` when `SMTP_HOST` is set and `ConsoleEmailSender` (logs the link) otherwise, so local dev needs no SMTP server.
 
 ### Frontend (`frontend/src/`)
@@ -163,6 +184,7 @@ Vite + React 18 + React Router + Tailwind.
 - **`store/auth.js`** — Zustand client-state store (token + user), wrapped in `persist` (localStorage key `margin-auth`). `App.jsx` calls `useMe()` on mount to revalidate the persisted token against `/auth/me` and refresh stale user data.
 - React Query is the server-state layer — the `api/` modules expose `useQuery`/`useMutation` hooks; components should consume those rather than calling `client` directly.
 - `vite.config.js` proxies `/api` → `http://localhost:8000` in dev.
+- **Routes**: `/series/:slug` (`pages/Series.jsx`) is a book's only page and replaces the retired work page; threads live at `/series/:slug/threads/:threadId`. Legacy `/works/:id` and `/works/:id/threads/:threadId` URLs go through `WorkRedirect`, which reads the work's `series.slug` from `GET /api/works/{id}` and replaces the history entry. Link to a book with `seriesHref(work)` from `api/series.js`.
 
 ### Design system (`frontend/src/index.css` + `frontend/tailwind.config.js`)
 
