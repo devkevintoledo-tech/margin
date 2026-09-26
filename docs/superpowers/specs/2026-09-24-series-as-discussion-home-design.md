@@ -112,6 +112,7 @@ selection rules below need, from a source that cannot attach the wrong book.
 |---|---|---|
 | Where is consistency enforced? | At the **series** | Per-work rules make consistency a side effect; the series makes it a guarantee. |
 | Does the series replace the book as the discussion home? | **Yes** | One room per saga, as r/redrising. A reader mid-series never changes rooms. |
+| Does the work page survive? | **No — retired** (amended 2026-09-26) | The series page is the only book destination; search links to it and legacy URLs redirect. |
 | What about standalone books? | **Every work gets a series**, of one if need be | One container type, one page template, one feed. A singleton shows no series chrome. |
 | Do we track position in a series? | **No** | Membership is enough for v1. Ordering falls back to `first_publish_year`, which is correct for all six Red Rising novels. |
 | How do spoilers work? | **Optional per-thread book tag, used as a filter** | One nullable column, no hiding. It is also the exact signal reader-progress gating would later need. |
@@ -145,7 +146,7 @@ threads.work_id     uuid → works.id    nullable, indexed      -- REINTERPRETED
 is the work-grouping problem one level up: a singleton that later turns out to
 be book four of something is a merge, and reusing the tombstone pattern means
 `merge_series` is `merge_works` with different foreign keys. Promotion moves
-threads with it, and because a work page renders *its series'* feed, the reader
+threads with it, and because a tombstoned slug redirects to its survivor, the reader
 watches the room grow rather than their thread disappear.
 
 The thread target constraint becomes:
@@ -240,19 +241,57 @@ view retries, exactly as today.
 
 ### Surfaces
 
-- **`/series/:slug`** — the room. Series name, member books as a cover row
-  ordered by `first_publish_year`, the full thread list, and a composer whose
-  "which book" tag is optional.
-- **Work page** — unchanged as catalog (cover, blurb, editions, shelf button).
-  Its discussion section becomes the series feed filtered to this book plus
-  untagged threads, with the path header making containment legible:
-  `~/series/red-rising/golden-son`.
-- **Singleton** — no series chrome at all; the page looks like today's.
-- **Search** — results stay works, with a `part of ⟨series⟩` line.
+*Amended 2026-09-26: the work page is retired. The series page is the only
+destination for a book; search links straight to it.*
 
-All within the existing terminal vocabulary: `DataTable` for thread lists,
-`PathHeader` for breadcrumbs, tokens only, no new radii, fonts or durations, and
-the §36 check before any screen is called done.
+- **Search** — results stay works (one card per book). A card whose series is
+  `kind='series'` carries a `⊂ ⟨series name⟩` tag under the author, in `path`
+  (it is a reference); singletons carry none. The whole card links to
+  `/series/:slug?book=<work_id>`, which scrolls to and highlights that book's
+  row. `GET /api/works/search` gains `series: {slug, name, kind}` per result.
+- **`/series/:slug`** — the room, and the only book page.
+  - *Header*: `PathHeader` `~/series/red-rising`, series name, book count. A
+    singleton shows its book's title instead and no count or series chrome.
+  - *Description*: one blurb under the header, clamped to ~4 lines with an
+    expand toggle — the singleton's own book, otherwise the first member by
+    `first_publish_year`. No per-book blurbs.
+  - *Books*: a dense list ordered by `first_publish_year`. Each row is large
+    cover, serif title, author, year and `ShelfButton` — nothing else, and rows
+    are not links. Shelving stays on works through the existing endpoint.
+  - *Discussions*: the whole series' feed in `DataTable`, with a filter row
+    `all · ⟨book⟩ · ⟨book⟩ …` over the per-thread book tag (hidden for
+    singletons). A tagged thread shows its book in its row.
+  - *Composer*: `ThreadModal` gains an optional "about which book" select,
+    hidden for singletons.
+  - Threads live at `/series/:slug/threads/:threadId`.
+- **No editions list anywhere.** Editions remain in the database as cover and
+  blurb supply only.
+- **Legacy URLs**: `/works/:id` and `/works/:id/threads/:threadId` become a
+  redirect component that reads the work's `series.slug` from
+  `GET /api/works/{id}` and `navigate(…, {replace: true})`s. That endpoint
+  survives only for this lookup. Every internal link to `/works/:id` (profile
+  shelves, home, thread back-path) is repointed at the series URL.
+- **Enrichment trigger moves** from first view of a work page to first view of
+  its series page: `GET /api/series/{slug}` enriches any unenriched member. This
+  is also what feeds detection tier 3, so series coverage grows with views.
+
+**Coverage caveat.** At backfill time only 8 of 98 OL works carry a `series:`
+tag and 6 a `franchise:` tag, and heuristic works carry none — most search
+results will initially show no tag and open a singleton page.
+
+### API
+
+- `GET /api/series/{slug}` → `{slug, name, kind, description, works: [{id,
+  title, author, cover_url, first_publish_year, shelf_status}]}`, members
+  ordered by `first_publish_year`, then title. A tombstoned (`merged_into_id`)
+  slug answers with the survivor's slug so the client can redirect.
+- `GET /api/series/{slug}/threads?work_id=` — the feed, optionally filtered to
+  one book's tag.
+- `POST /api/series/{slug}/threads` — body may carry `work_id`, which must be a
+  member of that series (422 otherwise).
+- Singletons are created at ingest (`upsert_work_from_ol` and the heuristic
+  path), so every searchable work has a series and a slug from its first
+  appearance.
 
 ## Testing
 
@@ -265,10 +304,13 @@ The three new rule sets are pure functions and carry the weight:
   despite equal completeness.
 - `blurb` — strip and score, case by case, including the two live examples.
 
-Above them: API tests for the thread-target constraint and the filtered work
-feed; a migration round-trip; Vitest for the series page; and one Playwright
-pass that opens a series, posts a thread tagged to book two, and confirms it
-appears on that book's page and not on book three's. Google and Open Library
+Above them: API tests for `GET /api/series/{slug}`, the thread-target
+constraint, the book-tag filter and search's `series` field; a migration
+round-trip; Vitest for the series page (singleton vs series chrome, the tag
+filter, shelf-only book rows), the `WorkCard` series tag and the legacy-URL
+redirect; and one Playwright pass that searches, clicks a result, lands on its
+series page, posts a thread tagged to book two, and confirms the book-two
+filter shows it and the book-three filter does not. Google and Open Library
 stay mocked with `respx` throughout — no test touches the network.
 
 ## Migration of existing data
@@ -304,8 +346,11 @@ Deleting or rehoming them is a product decision, not a backfill's.
 | **0** | Language ladder, cover order, enrichment identity gate, `repair_presentation` | nothing — ships alone |
 | **1** | Series model, detection, `backfill_series` | 0 |
 | **2** | Edition family, `blurb.py`, series-wide presentation | 1 |
-| **3** | Series page, work page rewiring, thread targeting and tag | 1 |
-| **4** | `part of ⟨series⟩` in search, series-aware empty states | 3 |
+| **3** | Series page, work page retirement + legacy redirects, thread targeting and tag | 1 |
+| **4** | Series tag on search cards, search → series page linking | 3 |
+
+*Amended 2026-09-26:* slices 1, 3 and 4 ship together as the next unit of work;
+slice 2 (edition family, `blurb.py`) is independent of them and follows.
 
 Slice 0 stands alone and fixes a bug that is corrupting rows today; it should
 ship before any of the series work begins.
