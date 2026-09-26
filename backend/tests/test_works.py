@@ -1,5 +1,6 @@
 import respx
 from httpx import Response
+from app.models import Series
 
 GOOGLE_URL = "https://www.googleapis.com/books/v1/volumes"
 OL_URL = "https://openlibrary.org/search.json"
@@ -209,13 +210,14 @@ async def test_shelf_crud_is_keyed_on_the_work(client, auth_headers, work):
     assert removed.status_code == 204
 
 
-async def test_work_threads_listing(client, auth_headers, work):
+async def test_work_threads_listing(client, auth_headers, db_session, work):
     await client.post(
         "/api/threads/",
         json={"title": "Is Darrow a hero?", "work_id": str(work.id), "content": "Discuss."},
         headers=auth_headers,
     )
-    resp = await client.get(f"/api/works/{work.id}/threads")
+    slug = (await db_session.get(Series, work.series_id)).slug
+    resp = await client.get(f"/api/series/{slug}/threads")
     assert resp.status_code == 200
     body = resp.json()
     assert len(body) == 1

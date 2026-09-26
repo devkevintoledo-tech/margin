@@ -1,5 +1,7 @@
 """Thread creation (work XOR genre target), fetch, and upvote."""
 
+from app.models import Series
+
 
 async def test_create_work_thread_and_fetch(client, auth_headers, work):
     resp = await client.post(
@@ -160,7 +162,7 @@ async def _other_user(client):
 
 
 async def test_thread_listing_carries_created_at_for_the_age_column(
-    client, auth_headers, work
+    client, auth_headers, db_session, work
 ):
     """The work/genre listings render a thread's age, so they must date it."""
     created = await client.post(
@@ -170,7 +172,8 @@ async def test_thread_listing_carries_created_at_for_the_age_column(
     )
     assert created.status_code == 201, created.text
 
-    rows = (await client.get(f"/api/works/{work.id}/threads")).json()
+    slug = (await db_session.get(Series, work.series_id)).slug
+    rows = (await client.get(f"/api/series/{slug}/threads")).json()
     row = next(r for r in rows if r["id"] == created.json()["id"])
     assert row["created_at"] == created.json()["created_at"]
     assert row["author"]
@@ -208,7 +211,8 @@ async def test_thread_created_against_a_merge_tombstone_lands_on_the_canonical_w
     assert created.status_code == 201, created.text
     assert created.json()["work_id"] == str(work.id)
 
-    listed = await client.get(f"/api/works/{work.id}/threads")
+    slug = (await db_session.get(Series, work.series_id)).slug
+    listed = await client.get(f"/api/series/{slug}/threads")
     assert [t["title"] for t in listed.json()] == ["Posted against an old id"]
 
 

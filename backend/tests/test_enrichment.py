@@ -4,7 +4,7 @@ import respx
 from httpx import Response
 from sqlalchemy import select
 
-from app.models import Book, Work, WorkKind, WorkProvenance, WorkSource
+from app.models import Book, Series, Work, WorkKind, WorkProvenance, WorkSource
 from app.services.enrichment import enrich_work
 
 GOOGLE_URL = "https://www.googleapis.com/books/v1/volumes"
@@ -132,10 +132,11 @@ async def test_enrich_survives_a_google_outage(db_session):
 
 
 @respx.mock
-async def test_get_work_triggers_enrichment(client, db_session):
+async def test_series_view_triggers_enrichment(client, db_session):
     mock_google_and_covers()
     work = await seed(db_session)
-    resp = await client.get(f"/api/works/{work.id}")
+    slug = (await db_session.get(Series, work.series_id)).slug
+    resp = await client.get(f"/api/series/{slug}")
     assert resp.status_code == 200
     assert resp.json()["description"] == "A boy from the mines."
 
