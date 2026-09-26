@@ -215,6 +215,7 @@ async def test_merge_moves_threads_and_shelves(db_session):
     assert thread.work_id == target.id
     assert shelf.work_id == target.id
     assert source.merged_into_id == target.id
+    assert thread.series_id == target.series_id
 
 
 async def test_merge_keeps_the_oldest_row_on_a_shelf_collision(db_session):

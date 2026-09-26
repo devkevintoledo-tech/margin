@@ -27,6 +27,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import AsyncSessionLocal
 from app.models import Book, Work, WorkSource
 from app.services import covers, open_library
+from app.services.series_identity import join_subjects
 from app.services.works import _refresh_work
 
 
@@ -53,7 +54,7 @@ async def backfill(session: AsyncSession, commit: bool = True) -> dict[str, int]
         work.ol_edition_count = match.edition_count
         work.readinglog_count = match.readinglog_count
         work.ratings_count = match.ratings_count
-        work.subjects = " ".join(match.subjects) or work.subjects
+        work.subjects = join_subjects(match.subjects) or work.subjects
         works_updated += 1
 
     editions = (

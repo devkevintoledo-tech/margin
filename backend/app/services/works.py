@@ -20,12 +20,13 @@ from app.models.shelf import Shelf
 from app.models.thread import Thread
 from app.models.work import Work, WorkKind, WorkProvenance, WorkSource
 from app.services import open_library
-from app.services import series as series_service  # noqa: F401  (registers the singleton listener)
+from app.services import series as series_service
 from app.services.open_library import (
     OLWork,
     cover_url as ol_cover_url,
     genre_slug as ol_genre_slug,
 )
+from app.services.series_identity import join_subjects
 from app.services.work_identity import (
     canonical_key,
     classify_kind,
@@ -324,7 +325,12 @@ async def upsert_work_from_ol(db: AsyncSession, ol: OLWork) -> Work:
 
     work = await canonical_work(db, existing) if existing is not None else None
 
+    subjects = join_subjects(ol.subjects)
+
     if work is None:
+        # Decide the room before the insert. Otherwise the flush would give the
+        # work a throwaway singleton that is promoted and tombstoned a line later.
+        series = await series_service.series_for_subjects(db, subjects)
         work = Work(
             source=WorkSource.openlibrary,
             external_id=ol.key,
@@ -336,6 +342,8 @@ async def upsert_work_from_ol(db: AsyncSession, ol: OLWork) -> Work:
             # An OL search hit is an authority's own match for the query, the
             # same standard tier 1 applies to an ISBN lookup.
             identity_provenance=WorkProvenance.isbn,
+            subjects=subjects,
+            series_id=series.id if series is not None else None,
         )
         db.add(work)
         await db.flush()
@@ -347,7 +355,9 @@ async def upsert_work_from_ol(db: AsyncSession, ol: OLWork) -> Work:
     work.ol_edition_count = ol.edition_count
     work.readinglog_count = ol.readinglog_count
     work.ratings_count = ol.ratings_count
-    work.subjects = " ".join(ol.subjects) or None
+    work.subjects = subjects
+    # New tags on a re-ingest can promote a singleton into its series.
+    await series_service.assign_series(db, work)
 
     if work.genre_id is None and ol.subjects:
         slug = ol_genre_slug(ol.subjects)
@@ -426,6 +436,9 @@ async def merge_works(db: AsyncSession, source: Work, target: Work) -> Work:
             target_owners.add(shelf.user_id)
     await db.flush()
 
+    # Threads change rooms before their book tag is rewritten below: the tag
+    # is how the ones about `source` are found.
+    await series_service.absorb_series(db, source, target)
     await db.execute(
         update(Book).where(Book.work_id == source.id).values(work_id=target.id)
     )
