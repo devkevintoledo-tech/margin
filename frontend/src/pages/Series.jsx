@@ -141,7 +141,8 @@ function Series() {
       aria-pressed={filter === id}
       onClick={() => setFilter(id)}
       className={`text-xs px-1 transition-colors duration-fast ${
-        filter === id ? 'text-accent' : 'text-ink-dim hover:text-accent'
+        // Underlined as well as coloured: nothing means anything by colour alone.
+        filter === id ? 'text-accent underline underline-offset-4' : 'text-ink-dim hover:text-accent'
       }`}
     >
       {label}

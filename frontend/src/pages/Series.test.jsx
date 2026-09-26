@@ -96,6 +96,19 @@ describe('Series page', () => {
     expect(client.get).toHaveBeenCalledWith('/series/red-rising/threads', { params: { work_id: 'b2' } })
   })
 
+  it('marks the active book filter by more than colour', async () => {
+    mockApi(SAGA)
+    renderPage('/series/red-rising')
+    const group = await screen.findByRole('group', { name: 'Filter by book' })
+    const all = within(group).getByRole('button', { name: 'all' })
+    const gold = within(group).getByRole('button', { name: 'Golden Son' })
+    expect(all).toHaveClass('underline')
+    expect(gold).not.toHaveClass('underline')
+    await userEvent.click(gold)
+    expect(gold).toHaveClass('underline')
+    expect(all).not.toHaveClass('underline')
+  })
+
   it('highlights the book named by ?book=', async () => {
     mockApi(SAGA)
     renderPage('/series/red-rising?book=b2')

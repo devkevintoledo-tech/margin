@@ -51,6 +51,11 @@ async def get_series(
     works = await _members(db, series)
     for work in [w for w in works if w.enriched_at is None][:_ENRICH_CAP]:
         await enrich_work(db, work)
+        # Still unenriched means Google failed (enrich_work swallows it so the
+        # next view retries). Stop: during an outage every member would fail
+        # the same way, and the page would pay for each one on every view.
+        if work.enriched_at is None:
+            break
 
     presentation = await load_work_presentation(db, [w.id for w in works])
     shelves: dict[UUID, str] = {}

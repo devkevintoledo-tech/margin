@@ -143,3 +143,23 @@ async def test_series_threads_pagination_limits(client, db_session):
 
 async def test_work_thread_listing_is_gone(client, work):
     assert (await client.get(f"/api/works/{work.id}/threads")).status_code == 404
+
+
+@respx.mock
+async def test_series_page_stops_enriching_when_google_fails(client, db_session):
+    """An outage costs one failed lookup per view, not one per member."""
+    route = respx.get(GOOGLE_URL).mock(return_value=Response(500))
+    for key, title in [("OLF1W", "One"), ("OLF2W", "Two"), ("OLF3W", "Three")]:
+        await upsert_work_from_ol(db_session, OLWork(
+            key=key, title=title, author="Author", first_publish_year=2000,
+            edition_count=1, isbn_13s=frozenset(), subjects=("franchise:Outage",)))
+
+    resp = await client.get("/api/series/outage")
+    assert resp.status_code == 200
+    assert [w["title"] for w in resp.json()["works"]] == ["One", "Three", "Two"]
+    # Search_books may retry within one lookup; three members would triple it.
+    one_lookup = route.call_count
+    route.reset()
+    await client.get("/api/series/outage")
+    assert route.call_count == one_lookup
+    assert one_lookup <= 2
