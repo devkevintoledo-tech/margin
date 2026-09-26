@@ -8,9 +8,12 @@ from app.database import get_db
 from app.models.genre import Genre
 from app.models.thread import Thread
 from app.models.post import Post
+from app.models.series import Series
 from app.models.user import User
 from app.models.vote import Vote
 from app.models.work import Work
+from app.schemas.series import SeriesRef
+from app.services import threads as threads_service
 from app.services.works import canonical_work
 from app.schemas.thread import (
     PostOut,
@@ -50,7 +53,7 @@ async def create_thread(
     # working — and a thread stored against one would be invisible on both the
     # old and the new URL, because the listing canonicalizes before filtering.
     work_id = payload.work_id
-    series_id = None
+    series_id: UUID | None = None
     if work_id is not None:
         work = await db.get(Work, work_id)
         if work is None:
@@ -60,33 +63,11 @@ async def create_thread(
         work = await canonical_work(db, work)
         work_id, series_id = work.id, work.series_id
 
-    thread = Thread(
-        title=payload.title,
-        user_id=current_user.id,
-        series_id=series_id,
-        work_id=work_id,
-        genre_id=genre_id,
+    thread = await threads_service.create_thread(
+        db, user=current_user, title=payload.title, body=payload.body,
+        series_id=series_id, work_id=work_id, genre_id=genre_id,
     )
-    db.add(thread)
-    await db.flush()
-
-    # Optional opening post seeds the thread with its first message.
-    if payload.body:
-        db.add(Post(thread_id=thread.id, user_id=current_user.id, content=payload.body))
-        await db.flush()
-
-    await db.refresh(thread)
-    return ThreadOut(
-        id=thread.id,
-        title=thread.title,
-        user_id=thread.user_id,
-        work_id=thread.work_id,
-        genre_id=thread.genre_id,
-        score=thread.score,
-        my_vote=0,
-        created_at=thread.created_at,
-        author=current_user.username,
-    )
+    return threads_service.thread_out(thread, author=current_user.username)
 
 
 class ThreadWithPosts(ThreadOut):
@@ -97,6 +78,7 @@ class ThreadWithPosts(ThreadOut):
     posts: list[PostOut] = []
     work: ThreadWorkRef | None = None
     genre: ThreadGenreRef | None = None
+    series: SeriesRef | None = None
 
 
 @router.get("/{id}", response_model=ThreadWithPosts)
@@ -170,6 +152,16 @@ async def get_thread(
         if genre is not None:
             genre_ref = ThreadGenreRef(id=genre.id, name=genre.name, slug=genre.slug)
 
+    series_ref = None
+    if thread.series_id is not None:
+        row = (
+            await db.execute(
+                select(Series.slug, Series.name, Series.kind).where(Series.id == thread.series_id)
+            )
+        ).first()
+        if row is not None:
+            series_ref = SeriesRef(slug=row.slug, name=row.name, kind=row.kind)
+
     nodes = {
         post.id: post_out_from_orm(
             post,
@@ -191,6 +183,7 @@ async def get_thread(
         id=thread.id,
         title=thread.title,
         user_id=thread.user_id,
+        series_id=thread.series_id,
         work_id=thread.work_id,
         genre_id=thread.genre_id,
         score=thread.score,
@@ -200,6 +193,7 @@ async def get_thread(
         posts=roots,
         work=work_ref,
         genre=genre_ref,
+        series=series_ref,
     )
 
 
@@ -220,16 +214,11 @@ async def vote_thread(
         db, user_id=current_user.id, thread_id=id, value=payload.value
     )
     await db.refresh(thread)
-    return ThreadOut(
-        id=thread.id,
-        title=thread.title,
-        user_id=thread.user_id,
-        work_id=thread.work_id,
-        genre_id=thread.genre_id,
-        score=score,
-        my_vote=payload.value,
-        created_at=thread.created_at,
+    return threads_service.thread_out(
+        thread,
         author=(
             await db.execute(select(User.username).where(User.id == thread.user_id))
         ).scalar_one_or_none(),
+        my_vote=payload.value,
+        score=score,
     )

@@ -221,3 +221,26 @@ async def test_thread_against_an_unknown_work_is_404_not_500(client, auth_header
         headers=auth_headers,
     )
     assert resp.status_code == 404, resp.text
+
+
+async def test_a_work_thread_lands_in_the_works_series_tagged(client, auth_headers, work):
+    resp = await client.post(
+        "/api/threads/", json={"title": "Legacy path", "work_id": str(work.id)}, headers=auth_headers
+    )
+    assert resp.status_code == 201, resp.text
+    body = resp.json()
+    assert body["series_id"] == str(work.series_id)
+    assert body["work_id"] == str(work.id)
+
+    detail = (await client.get(f"/api/threads/{body['id']}")).json()
+    assert detail["series"]["kind"] == "singleton"
+    assert detail["series"]["slug"]
+
+
+async def test_a_genre_thread_has_no_series(client, auth_headers, genre):
+    resp = await client.post(
+        "/api/threads/", json={"title": "Genre talk", "genre_slug": genre.slug}, headers=auth_headers
+    )
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["series_id"] is None
+    assert (await client.get(f"/api/threads/{resp.json()['id']}")).json()["series"] is None

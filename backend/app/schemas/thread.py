@@ -59,6 +59,7 @@ class ThreadOut(BaseModel):
     id: UUID
     title: str
     user_id: UUID
+    series_id: UUID | None = None
     work_id: UUID | None
     genre_id: UUID | None
     score: int
