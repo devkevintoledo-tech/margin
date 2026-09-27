@@ -194,6 +194,22 @@ thread constraints (`ck_threads_one_home`, `ck_threads_tag_needs_series`) are
 added `NOT VALID` because 10 legacy threads orphaned by the works migration have
 no home; the backfill reports them and leaves them alone.
 
+**Catalog releases** are the catalog's seed data. `python -m
+scripts.load_catalog_release <folder | tag>` (service:
+`services/catalog_loader.py`) verifies checksums and schema, then in one
+transaction upserts series, works, editions, `series_members` and
+`work_aliases` by their deterministic ids, stamping `catalog_release`. It
+*adopts* runtime works the release also holds (by OL id, alias, or
+`canonical_key` for heuristic works) with `merge_works`, retires runtime rooms
+that emptied into the room most of their books joined, carries tagged threads
+when a book changes rooms, and settles rows a newer release dropped (deleted
+when unreferenced, kept when a thread or shelf points at them, merged when an
+alias names a survivor). Loading a release twice is a no-op; an older one is
+refused without `--force`. Runtime code never moves a work out of a release
+room (`assign_series` returns early), and a search hit for an aliased OL id
+lands on the alias target. A room's page orders books by sub-series, then
+`series_members.position`, then `first_publish_year`.
+
 **Email**: routes depend on `email_sender_dep`, never on a concrete sender — that's the seam tests override via `app.dependency_overrides`. `get_email_sender()` picks `SmtpEmailSender` when `SMTP_HOST` is set and `ConsoleEmailSender` (logs the link) otherwise, so local dev needs no SMTP server.
 
 ### Frontend (`frontend/src/`)
@@ -285,8 +301,9 @@ settings, HTTP and ORM imports (`tests/test_pure_imports.py` enforces it).
 ## Known remaining gaps
 
 - **No token revocation**: `POST /auth/logout` is a stateless no-op — the frontend just clears the persisted JWT, and a stolen token stays valid until expiry. A password reset does not invalidate existing sessions either. Anything relying on server-side session invalidation needs a refresh/denylist design first.
-- **No admin merge/split UI**: `merge_works()` and `scripts.resolve_works
-  --upgrade` are the only repair tools; a mis-grouped work needs a shell.
+- **No admin merge/split UI**: catalog fixes are `pipeline/overrides/*.yaml`
+  entries picked up by the next release; runtime works still need
+  `merge_works()` / `scripts.resolve_works --upgrade` from a shell.
 - Content is immutable (no edit/delete for threads or posts). See `ROADMAP.md` for the tracked list.
 
 ## Environment
