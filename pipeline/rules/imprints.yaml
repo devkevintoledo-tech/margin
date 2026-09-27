@@ -1,0 +1,14 @@
+# Publisher imprints and lines that are never a series (spec §5.3, imprint
+# filter backstop). The >3-author-cluster rule catches most imprints; list
+# here the ones too small to trip it. Matched on series_key(name), so casing
+# and punctuation do not matter.
+- Penguin Classics
+- Oxford World's Classics
+- Everyman's Library
+- Vintage International
+- Modern Library
+- A Del Rey Book
+- Signet Classics
+- Bantam Classics
+- Tor Essentials
+- Harper Perennial Modern Classics
