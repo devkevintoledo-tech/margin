@@ -14,6 +14,8 @@ from collections import defaultdict
 from dataclasses import dataclass
 from typing import Sequence
 
+from pipeline._backend import clean_title
+
 _OL_NUMBER = re.compile(r"\d+")
 
 
@@ -24,8 +26,18 @@ class DupWork:
     title_key: str  # clean_title of the work title
     kind: str
     wd_items: frozenset[str]
-    edition_titles: frozenset[str]  # clean_title of each English edition's title
+    edition_titles: frozenset[str]  # edition_title_key of each English edition
     popularity: int  # readinglog_count + edition_count
+
+
+def edition_title_key(title: str | None, subtitle: str | None) -> str:
+    """An edition's title for the duplicate guard, subtitle included.
+
+    Open Library titles every edition of Brian Herbert's *House* books plain
+    "Dune"; only the subtitle ("House Atreides") tells them apart, so a key
+    without it would call three books one.
+    """
+    return clean_title(" ".join(t for t in (title, subtitle) if t))
 
 
 def _ol_number(ol_id: str) -> int:

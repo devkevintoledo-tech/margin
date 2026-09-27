@@ -41,3 +41,15 @@ def test_collections_never_merge():
 
 def test_different_author_clusters_never_merge():
     assert find_duplicates([dup("OL1W", author="OL4A"), dup("OL2W", author="OL5A")]) == {}
+
+
+def test_edition_subtitles_tell_same_titled_books_apart():
+    # The real records: every edition is titled plain "Dune"; only the subtitle differs.
+    from pipeline.group.duplicates import edition_title_key
+
+    works = [
+        dup("OL1W", "dune", "OL9A", editions=[edition_title_key("Dune", "House Atreides")]),
+        dup("OL2W", "dune", "OL9A", editions=[edition_title_key("Dune", "House Harkonnen")]),
+    ]
+    assert find_duplicates(works) == {}
+    assert edition_title_key("Red Rising", None) == "red rising"

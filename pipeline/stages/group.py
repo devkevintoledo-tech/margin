@@ -14,7 +14,7 @@ from pipeline.config import BuildContext
 from pipeline.db import swap_in, write_table
 from pipeline.group.authors import AuthorRec, cluster_authors
 from pipeline.group.decide import decide
-from pipeline.group.duplicates import DupWork, find_duplicates
+from pipeline.group.duplicates import DupWork, edition_title_key, find_duplicates
 from pipeline.group.nesting import rooms
 from pipeline.group.types import CONFIDENCE, PROVENANCE, GWork, WdMembership, WdSeries
 from pipeline.overrides import apply_identity, apply_series, load_overrides, series_rejects
@@ -86,7 +86,7 @@ def run(ctx: BuildContext) -> None:
     # 5.2 — duplicates, then identity overrides.
     dups = find_duplicates([
         DupWork(ol, primary(w), clean_title(w["title"]), w["kind"], frozenset(wd_items[ol]),
-                frozenset(clean_title(e["title"]) for e in by_work[ol]), w["readinglog_count"] + w["edition_count"])
+                frozenset(edition_title_key(e["title"], e["subtitle"]) for e in by_work[ol]), w["readinglog_count"] + w["edition_count"])
         for ol, w in works.items()
     ])
     plan = apply_identity(overrides, set(works), {e["ol_id"]: e["work_ol_id"] for e in editions}, dups)
