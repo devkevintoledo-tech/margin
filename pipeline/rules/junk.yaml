@@ -1,7 +1,7 @@
 # Junk rules for the select stage (spec §4.2). A work is dropped when any
 # pattern of a rule matches. Patterns are Python regexes matched
 # case-insensitively: `title` against the work's title, `subject` against each
-# subject line, `publisher` against each English edition's publisher.
+# subject line, `publisher` against every English edition's publisher (all must match).
 #
 # Every change must keep tests/test_junk.py::KEEP passing — "The Diary of a
 # Young Girl" and "Diary of a Wimpy Kid" are why no rule matches a bare "diary".

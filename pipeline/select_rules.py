@@ -30,8 +30,14 @@ class JunkRule:
         return (
             any(p.search(work.title) for p in self.title)
             or any(p.search(s) for p in self.subject for s in work.subjects)
-            or any(p.search(pub) for p in self.publisher for pub in work.publishers)
+            or self._every_publisher_matches(work.publishers)
         )
+
+    def _every_publisher_matches(self, publishers: tuple[str, ...]) -> bool:
+        # One reprint imprint (University Microfilms, GPO) among a work's
+        # editions says nothing about the book; every edition must carry one.
+        return bool(self.publisher and publishers) and all(
+            any(p.search(pub) for p in self.publisher) for pub in publishers)
 
 
 def _compile(patterns: list[str] | None) -> tuple[re.Pattern[str], ...]:

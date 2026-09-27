@@ -47,3 +47,10 @@ def test_junk_is_dropped_with_its_rule(candidate, reason):
 
 def test_unknown_page_count_is_kept():
     assert RULES.reason(work(max_pages=None)) is None
+
+
+def test_one_reprint_imprint_does_not_drop_a_work():
+    # University Microfilms reprinted thousands of classics on demand.
+    classic = work("Moby Dick", publishers=["University Microfilms International", "Penguin"])
+    assert RULES.reason(classic) is None
+    assert RULES.reason(work("Stellar Winds", publishers=["University Microfilms International"])) == "thesis"
