@@ -1,0 +1,46 @@
+# Junk rules for the select stage (spec §4.2). A work is dropped when any
+# pattern of a rule matches. Patterns are Python regexes matched
+# case-insensitively: `title` against the work's title, `subject` against each
+# subject line, `publisher` against each English edition's publisher.
+#
+# Every change must keep tests/test_junk.py::KEEP passing — "The Diary of a
+# Young Girl" and "Diary of a Wimpy Kid" are why no rule matches a bare "diary".
+min_pages: 40
+rules:
+  - name: calendar
+    title:
+      - '\bcalendars?\b'
+      - '\b(?:planner|desk diary|pocket diary)\b'
+      - '\b(?:19|20)\d\d\s+(?:diary|journal|planner)\b'
+    subject:
+      - '^calendars?$'
+      - '^diaries \(blank-books\)$'
+      - '^blank[- ]books?$'
+  - name: colouring_book
+    title:
+      - '\bcolou?ring\s+book\b'
+      - '\bcolou?ring\s+(?:and|&)\s+activity\b'
+    subject:
+      - '^colou?ring books?$'
+  - name: thesis
+    subject:
+      - '^(?:theses|dissertations)\b'
+      - '^dissertations, academic$'
+    publisher:
+      - '\buniversity microfilms\b'
+      - '\bproquest\b'
+  - name: government_document
+    subject:
+      - '^government publications\b'
+    publisher:
+      - '\bgovernment printing office\b'
+      - '\bstationery office\b'
+      - '^g\.?p\.?o\.?$'
+      - '^h\.?m\.?s\.?o\.?$'
+  - name: study_guide
+    title:
+      - '^(?:summary|analysis|study guide|workbook)\s+(?:of|for|&|and)\b'
+      - '\bstudy guide\b'
+      - '^(?:sparknotes|cliffsnotes|cliffs notes|bookrags)\b'
+    subject:
+      - '^study guides?$'
