@@ -87,3 +87,11 @@ def test_wikidata_overrules_the_adaptation_filter():
 
 def test_blocklisted_names_nobody_carries_are_not_reported():
     assert imprint_rejections({"OL1W": [c("ol:dune", 2)]}, {"OL1W": "OL1A"}, blocked=["ol:penguin classics"]) == {}
+
+
+def test_companions_by_other_authors_do_not_make_a_series_an_imprint():
+    # Four books by the author plus three companions by others: a series with
+    # adaptations for drop_adaptations to remove, not a publisher line.
+    cands = {f"OL{i}W": [c("ol:x", 2)] for i in range(7)}
+    primary = {**{f"OL{i}W": "OL1A" for i in range(4)}, "OL4W": "OL2A", "OL5W": "OL3A", "OL6W": "OL4A"}
+    assert imprint_rejections(cands, primary) == {}

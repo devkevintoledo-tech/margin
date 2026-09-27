@@ -16,14 +16,22 @@ MAX_AUTHOR_CLUSTERS = 3
 def imprint_rejections(cands: Mapping[str, Sequence[Candidate]],
                        primary: Mapping[str, str | None],
                        blocked: Iterable[str] = ()) -> dict[str, int]:
-    """``{series key: author clusters}`` for every rejected rung 2-4 series."""
-    clusters: dict[str, set[str]] = defaultdict(set)
+    """``{series key: author clusters}`` for every rejected rung 2-4 series.
+
+    Rejected: more than ``MAX_AUTHOR_CLUSTERS`` clusters with no cluster
+    holding half the works, or a blocklisted name.
+    """
+    works_by: dict[str, Counter[str]] = defaultdict(Counter)
     for work, cs in cands.items():
         author = primary.get(work)
         for c in cs:
             if c.rung > 1 and author is not None:
-                clusters[c.key].add(author)
-    rejected = {k: len(v) for k, v in clusters.items() if len(v) > MAX_AUTHOR_CLUSTERS}
+                works_by[c.key][author] += 1
+    clusters = {k: set(v) for k, v in works_by.items()}
+    # An author holding half the works makes it their series with companions
+    # by others (drop_adaptations removes those), not a publisher line.
+    rejected = {k: len(v) for k, v in works_by.items()
+                if len(v) > MAX_AUTHOR_CLUSTERS and 2 * max(v.values()) < sum(v.values())}
     for key in blocked:
         if key in clusters:
             rejected.setdefault(key, len(clusters[key]))
