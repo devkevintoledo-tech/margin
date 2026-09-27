@@ -19,6 +19,7 @@ class Decision:
     rejected: dict[str, int]  # imprint key -> author clusters
     decided_by: dict[str, int | None]  # work -> winning rung (None = singleton)
     known_series: set[str] = field(default_factory=set)  # every key the build has evidence for
+    folded: dict[str, str] = field(default_factory=dict)  # series key -> the key it folded into
 
 
 def _names(cands: Mapping[str, Sequence[Candidate]], wd_series: Mapping[str, WdSeries]) -> dict[str, str]:
@@ -78,4 +79,4 @@ def decide(works: Sequence[GWork], wd_memberships: Iterable[WdMembership],
 
     decided_by = {w: (min(m.rung for m in ms.values()) if ms else None) for w, ms in memberships.items()}
     known = {c.key for cs in cands.values() for c in cs} | set(fold.values()) | {f"wd:{q}" for q in wd_series}
-    return Decision(memberships, _names(cands, wd_series), rejected, decided_by, known)
+    return Decision(memberships, _names(cands, wd_series), rejected, decided_by, known, dict(fold))

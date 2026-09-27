@@ -8,8 +8,9 @@ to fix, not something to skip.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field, replace
 from pathlib import Path
+from contextlib import contextmanager
 from typing import Callable, Mapping, Union
 
 import yaml
@@ -27,12 +28,14 @@ class OverrideError(ValueError):
 class MergeWorks:
     survivor: str
     losers: tuple[str, ...]
+    where: str = field(default="", compare=False)  # "file.yaml[3]", for errors
 
 
 @dataclass(frozen=True)
 class SplitWork:
     work: str
     editions: tuple[str, ...]
+    where: str = field(default="", compare=False)  # "file.yaml[3]", for errors
 
     @property
     def new_work(self) -> str:
@@ -46,23 +49,27 @@ class SetSeries:
     series: str
     position: float | None = None
     name: str | None = None
+    where: str = field(default="", compare=False)  # "file.yaml[3]", for errors
 
 
 @dataclass(frozen=True)
 class RemoveFromSeries:
     work: str
     series: str
+    where: str = field(default="", compare=False)  # "file.yaml[3]", for errors
 
 
 @dataclass(frozen=True)
 class RejectSeries:
     series: str
+    where: str = field(default="", compare=False)  # "file.yaml[3]", for errors
 
 
 @dataclass(frozen=True)
 class RenameSeries:
     series: str
     name: str
+    where: str = field(default="", compare=False)  # "file.yaml[3]", for errors
 
 
 Override = Union[MergeWorks, SplitWork, SetSeries, RemoveFromSeries, RejectSeries, RenameSeries]
@@ -117,7 +124,7 @@ def load_overrides(directory: Path) -> list[Override]:
             if kind not in _PARSERS:
                 raise OverrideError(f"{where}: unknown override {kind!r}")
             try:
-                found.append(_PARSERS[kind](body))
+                found.append(replace(_PARSERS[kind](body), where=where))
             except OverrideError as exc:
                 raise OverrideError(f"{where}: {kind}: {exc}") from None
             except (KeyError, TypeError, ValueError, AttributeError) as exc:
@@ -146,28 +153,45 @@ def apply_identity(overrides: list[Override], works: set[str], edition_work: Map
     merged = dict(aliases)
     splits: list[SplitWork] = []
     for op in overrides:
-        if isinstance(op, MergeWorks):
-            for ol_id in (op.survivor, *op.losers):
-                if ol_id not in works:
-                    raise OverrideError(f"merge_works: unknown work {ol_id}")
-            survivor = _follow(merged, op.survivor)
-            for loser in op.losers:
-                loser = _follow(merged, loser)
-                if loser != survivor:
-                    merged[loser] = survivor
-        elif isinstance(op, SplitWork):
-            if op.work not in works:
-                raise OverrideError(f"split_work: unknown work {op.work}")
-            splits.append(op)
+        with _located(op):
+            _apply_identity_op(op, works, merged, splits)
     final = {loser: _follow(merged, loser) for loser in merged}
     moved = {e: final.get(w, w) for e, w in edition_work.items()}
     for op in splits:
-        owner = final.get(op.work, op.work)
-        for edition in op.editions:
-            if moved.get(edition) != owner:
-                raise OverrideError(f"split_work: edition {edition} is not an edition of {op.work}")
-            moved[edition] = op.new_work
+        with _located(op):
+            owner = final.get(op.work, op.work)
+            for edition in op.editions:
+                if moved.get(edition) != owner:
+                    raise OverrideError(f"split_work: edition {edition} is not an edition of {op.work}")
+                moved[edition] = op.new_work
     return IdentityPlan(final, splits, moved)
+
+
+def _apply_identity_op(op: Override, works: set[str], merged: dict[str, str], splits: list[SplitWork]) -> None:
+    if isinstance(op, MergeWorks):
+        for ol_id in (op.survivor, *op.losers):
+            if ol_id not in works:
+                raise OverrideError(f"merge_works: unknown work {ol_id}")
+        survivor = _follow(merged, op.survivor)
+        for loser in op.losers:
+            loser = _follow(merged, loser)
+            if loser != survivor:
+                merged[loser] = survivor
+    elif isinstance(op, SplitWork):
+        if op.work not in works:
+            raise OverrideError(f"split_work: unknown work {op.work}")
+        splits.append(op)
+
+
+@contextmanager
+def _located(op: Override):
+    """Prefix an error raised while applying ``op`` with its file and index."""
+    try:
+        yield
+    except OverrideError as exc:
+        if op.where:
+            raise OverrideError(f"{op.where}: {exc}") from None
+        raise
 
 
 def series_rejects(overrides: list[Override]) -> set[str]:
@@ -178,31 +202,44 @@ def apply_series(overrides: list[Override], decision: Decision, works: set[str],
                  resolve: Callable[[str], str] = lambda w: w) -> None:
     """Apply set/remove/rename (rejects were fed to ``decide``), validating each."""
     for op in overrides:
-        if isinstance(op, RejectSeries):
-            if op.series not in decision.known_series:
-                raise OverrideError(f"reject_series: no series {op.series} in this build")
-        elif isinstance(op, SetSeries):
-            work = resolve(op.work)
-            if work not in works:
-                raise OverrideError(f"set_series: unknown work {op.work}")
-            if op.series not in decision.known_series:
-                if not (op.series.startswith("ol:") and op.name):
-                    raise OverrideError(f"set_series: no series {op.series}; give a name to create an ol: series")
-                decision.known_series.add(op.series)
-                decision.names[op.series] = op.name
-            decision.memberships.setdefault(work, {})[op.series] = Membership(op.series, op.position, OVERRIDE_RUNG)
-            decision.decided_by[work] = OVERRIDE_RUNG
-        elif isinstance(op, RemoveFromSeries):
-            work = resolve(op.work)
-            if work not in works:
-                raise OverrideError(f"remove_from_series: unknown work {op.work}")
-            if op.series not in decision.known_series:
-                raise OverrideError(f"remove_from_series: no series {op.series} in this build")
-            ms = decision.memberships.get(work, {})
-            ms.pop(op.series, None)
-            if not ms:
-                decision.decided_by[work] = None
-        elif isinstance(op, RenameSeries):
-            if op.series not in decision.known_series:
-                raise OverrideError(f"rename_series: no series {op.series} in this build")
+        with _located(op):
+            _apply_series_op(op, decision, works, resolve)
+
+
+def _check_target(kind: str, series: str, decision: Decision) -> None:
+    if series in decision.folded:
+        raise OverrideError(f"{kind}: {series} was folded into {decision.folded[series]}; target that instead")
+    if series not in decision.known_series:
+        raise OverrideError(f"{kind}: no series {series} in this build")
+
+
+def _apply_series_op(op: Override, decision: Decision, works: set[str], resolve: Callable[[str], str]) -> None:
+    if isinstance(op, RejectSeries):
+        _check_target("reject_series", op.series, decision)
+    elif isinstance(op, SetSeries):
+        work = resolve(op.work)
+        if work not in works:
+            raise OverrideError(f"set_series: unknown work {op.work}")
+        if op.series in decision.folded:
+            _check_target("set_series", op.series, decision)
+        if op.series not in decision.known_series:
+            if not (op.series.startswith("ol:") and op.name):
+                raise OverrideError(f"set_series: no series {op.series}; give a name to create an ol: series")
+            decision.known_series.add(op.series)
             decision.names[op.series] = op.name
+        decision.memberships.setdefault(work, {})[op.series] = Membership(op.series, op.position, OVERRIDE_RUNG)
+        decision.decided_by[work] = OVERRIDE_RUNG
+    elif isinstance(op, RemoveFromSeries):
+        work = resolve(op.work)
+        if work not in works:
+            raise OverrideError(f"remove_from_series: unknown work {op.work}")
+        _check_target("remove_from_series", op.series, decision)
+        ms = decision.memberships.get(work, {})
+        if op.series not in ms:
+            raise OverrideError(f"remove_from_series: {op.work} is not a member of {op.series}")
+        del ms[op.series]
+        if not ms:
+            decision.decided_by[work] = None
+    elif isinstance(op, RenameSeries):
+        _check_target("rename_series", op.series, decision)
+        decision.names[op.series] = op.name

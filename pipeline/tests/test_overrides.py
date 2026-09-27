@@ -94,3 +94,24 @@ def test_rename_and_rejects():
     apply_series([RenameSeries("ol:dune", "Dune Chronicles")], d, {"OL1W"})
     assert d.names["ol:dune"] == "Dune Chronicles"
     assert series_rejects([RejectSeries("ol:x"), RenameSeries("ol:dune", "y")]) == {"ol:x"}
+
+
+def test_removing_a_work_that_is_not_a_member_fails():
+    from pipeline.overrides import RemoveFromSeries
+
+    with pytest.raises(OverrideError, match="not a member"):
+        apply_series([RemoveFromSeries("OL2W", "ol:dune")], decision(), {"OL1W", "OL2W"})
+
+
+def test_a_series_folded_away_cannot_be_targeted():
+    d = decision()
+    d.folded = {"ol:red rising saga": "ol:dune"}
+    d.known_series.add("ol:red rising saga")
+    with pytest.raises(OverrideError, match="folded into ol:dune"):
+        apply_series([RenameSeries("ol:red rising saga", "X")], d, {"OL1W"})
+
+
+def test_apply_time_errors_name_their_file_and_index(tmp_path):
+    ops = load_overrides(write(tmp_path, '- rename_series: {series: "ol:nope", name: X}\n', name="fixes.yaml"))
+    with pytest.raises(OverrideError, match=r"fixes\.yaml\[0\]"):
+        apply_series(ops, decision(), {"OL1W"})
