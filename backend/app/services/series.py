@@ -12,7 +12,7 @@ from sqlalchemy import event, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
-from app.models import Series, SeriesKind, SeriesSource, Thread, Work
+from app.models import Series, SeriesKind, SeriesProvenance, SeriesSource, Thread, Work
 from app.services.series_identity import (
     choose_container,
     parse_tags,
@@ -41,6 +41,7 @@ def singleton_series_for(work: Work) -> Series:
         slug=f"{slugify(work.title, max_length=60)}-{series_id.hex[:6]}",
         canonical_key=series_key(work.title),
         kind=SeriesKind.singleton,
+        provenance=SeriesProvenance.single,
     )
 
 
@@ -72,11 +73,26 @@ async def canonical_series(db: AsyncSession, series: Series) -> Series:
     return series
 
 
+_MAX_PARENT_HOPS = 5
+
+
 async def get_series_by_slug(db: AsyncSession, slug: str) -> Series | None:
     found = (
         await db.execute(select(Series).where(Series.slug == slug))
     ).scalar_one_or_none()
-    return await canonical_series(db, found) if found is not None else None
+    if found is None:
+        return None
+    series = await canonical_series(db, found)
+    # A catalog child series (Mistborn inside the Cosmere) holds no books of
+    # its own; its page is the room at the top of its chain.
+    for _ in range(_MAX_PARENT_HOPS):
+        if series.parent_series_id is None:
+            break
+        parent = await db.get(Series, series.parent_series_id)
+        if parent is None:
+            break
+        series = await canonical_series(db, parent)
+    return series
 
 
 async def unique_slug(db: AsyncSession, name: str) -> str:
@@ -151,6 +167,7 @@ async def series_for_subjects(db: AsyncSession, subjects: str | None) -> Series 
         slug=await unique_slug(db, name),
         canonical_key=series_key(name),
         kind=SeriesKind.series,
+        provenance=SeriesProvenance.ol_tag,
     )
     db.add(series)
     await db.flush()
@@ -185,10 +202,14 @@ async def assign_series(db: AsyncSession, work: Work) -> Series:
     """Put ``work`` in the room its subjects name, promoting a singleton.
 
     A work already in a real series is never moved to another automatically.
-    That would be a merge decision, like OL → OL work merges.
+    That would be a merge decision, like OL → OL work merges. Neither is a
+    work in a catalog release's room, singleton or not: the release decided
+    it from whole-catalog evidence, and only the next release changes it.
     """
-    target = await series_for_subjects(db, work.subjects)
     current = await db.get(Series, work.series_id) if work.series_id else None
+    if current is not None and current.catalog_release is not None:
+        return current
+    target = await series_for_subjects(db, work.subjects)
 
     if target is None:
         if current is None:

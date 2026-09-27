@@ -1,0 +1,4 @@
+# The golden set (spec §7.1): publish fails below 95% exact membership or
+# 95% exact order. See README.md for how to add an entry. Empty until curated —
+# which means publish refuses to run until it is.
+[]

@@ -19,6 +19,7 @@ from app.models.genre import Genre
 from app.models.shelf import Shelf
 from app.models.thread import Thread
 from app.models.series import Series
+from app.models.catalog import WorkAlias
 from app.models.work import Work, WorkKind, WorkProvenance, WorkSource
 from app.schemas.series import SeriesRef
 from app.services import open_library
@@ -324,6 +325,11 @@ async def upsert_work_from_ol(db: AsyncSession, ol: OLWork) -> Work:
             )
         )
     ).scalar_one_or_none()
+    if existing is None:
+        # A catalog release merged this OL id into another work; a search hit
+        # for it must land on that work, not stand up a duplicate beside it.
+        alias = await db.get(WorkAlias, ol.key)
+        existing = await db.get(Work, alias.work_id) if alias is not None else None
 
     work = await canonical_work(db, existing) if existing is not None else None
 
@@ -352,12 +358,16 @@ async def upsert_work_from_ol(db: AsyncSession, ol: OLWork) -> Work:
         await _absorb_heuristic_twin(db, work)
 
     # Refreshed on every ingest: popularity drifts upward over time, and a
-    # cover can appear on a work that had none.
-    work.ol_cover_id = ol.cover_id or work.ol_cover_id
-    work.ol_edition_count = ol.edition_count
-    work.readinglog_count = ol.readinglog_count
-    work.ratings_count = ol.ratings_count
-    work.subjects = subjects
+    # cover can appear on a work that had none. A release work is the
+    # catalog's: its counts are summed over merged duplicates and its subjects
+    # chosen by the pipeline, so one search doc (maybe an alias's) must not
+    # overwrite them. The next release refreshes it.
+    if work.catalog_release is None:
+        work.ol_cover_id = ol.cover_id or work.ol_cover_id
+        work.ol_edition_count = ol.edition_count
+        work.readinglog_count = ol.readinglog_count
+        work.ratings_count = ol.ratings_count
+        work.subjects = subjects
     # New tags on a re-ingest can promote a singleton into its series.
     await series_service.assign_series(db, work)
 
@@ -449,6 +459,11 @@ async def merge_works(db: AsyncSession, source: Work, target: Work) -> Work:
     )
 
     source.merged_into_id = target.id
+    # Tombstones already pointing at `source` follow it, so a chain never
+    # grows past one hop (canonical_work follows exactly one).
+    await db.execute(
+        update(Work).where(Work.merged_into_id == source.id).values(merged_into_id=target.id)
+    )
     # The tombstone's derived fields now describe editions it no longer owns:
     # left alone, load_work_presentation renders it with another work's cover
     # and an edition count of zero.

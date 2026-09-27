@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from typing import NamedTuple
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -7,7 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.models import Series, Shelf, Thread, User, Work
+from app.models import Series, SeriesMember, Shelf, Thread, User, Work
 from app.schemas.series import SeriesOut, SeriesThreadCreate, SeriesWorkOut
 from app.schemas.thread import ThreadOut, ThreadSummary
 from app.services.auth import get_current_user, get_current_user_optional
@@ -21,6 +22,7 @@ router = APIRouter(prefix="/series", tags=["series"])
 # First view of a series pays for Google Books on its members, which used to
 # happen on each work page. Capped so one huge series cannot stall a request.
 _ENRICH_CAP = 10
+_MAX_NESTING = 5
 
 
 async def _series_or_404(db: AsyncSession, slug: str) -> Series:
@@ -30,13 +32,65 @@ async def _series_or_404(db: AsyncSession, slug: str) -> Series:
     return series
 
 
-async def _members(db: AsyncSession, series: Series) -> list[Work]:
-    stmt = (
-        select(Work)
-        .where(Work.series_id == series.id, Work.merged_into_id.is_(None))
-        .order_by(Work.first_publish_year.asc().nulls_last(), Work.title)
-    )
-    return list((await db.execute(stmt)).scalars().all())
+class _Member(NamedTuple):
+    work: Work
+    position: float | None
+    subseries: Series | None  # None: a member of the room itself
+
+
+async def _members(db: AsyncSession, series: Series) -> list[_Member]:
+    """The room's books in reading order: sub-series, then position, then publication.
+
+    Each book is placed by its membership in the deepest series of the room's
+    tree, so *Mistborn* lists under its own heading inside the Cosmere. Books
+    in the room directly come first; sub-series follow in order of their
+    earliest book. Runtime series have no memberships and keep publication
+    order.
+    """
+    works = list((await db.execute(
+        select(Work).where(Work.series_id == series.id, Work.merged_into_id.is_(None))
+    )).scalars().all())
+    tree, depth, frontier = {series.id: series}, {series.id: 0}, [series.id]
+    for level in range(1, _MAX_NESTING + 1):
+        children = (await db.execute(select(Series).where(
+            Series.parent_series_id.in_(frontier), Series.merged_into_id.is_(None)))).scalars().all()
+        frontier = [c.id for c in children if c.id not in tree]
+        for child in children:
+            tree.setdefault(child.id, child)
+            depth.setdefault(child.id, level)
+        if not frontier:
+            break
+
+    placed: dict[UUID, SeriesMember] = {}
+    if works:
+        rows = (await db.execute(select(SeriesMember).where(
+            SeriesMember.work_id.in_([w.id for w in works]), SeriesMember.series_id.in_(list(tree))
+        ))).scalars().all()
+        for m in rows:
+            best = placed.get(m.work_id)
+            if best is None or (depth[m.series_id], tree[m.series_id].name) > (depth[best.series_id], tree[best.series_id].name):
+                placed[m.work_id] = m
+
+    members = []
+    for w in works:
+        m = placed.get(w.id)
+        child = tree[m.series_id] if m is not None and m.series_id != series.id else None
+        members.append(_Member(w, m.position if m is not None else None, child))
+
+    def book_order(m: _Member):
+        return (m.position is None, m.position or 0.0,
+                m.work.first_publish_year is None, m.work.first_publish_year or 0, m.work.title)
+
+    earliest: dict[UUID, tuple] = {}
+    for m in members:
+        if m.subseries is not None:
+            year = m.work.first_publish_year or 9999
+            earliest[m.subseries.id] = min(earliest.get(m.subseries.id, (9999, m.subseries.name)), (year, m.subseries.name))
+
+    def group_order(m: _Member):
+        return (0, ()) if m.subseries is None else (1, earliest[m.subseries.id])
+
+    return sorted(members, key=lambda m: (group_order(m), book_order(m)))
 
 
 @router.get("/{slug}", response_model=SeriesOut)
@@ -48,7 +102,8 @@ async def get_series(
     """A tombstoned slug answers with the survivor; the client redirects on
     seeing a different ``slug`` than it asked for."""
     series = await _series_or_404(db, slug)
-    works = await _members(db, series)
+    members = await _members(db, series)
+    works = [m.work for m in members]
     for work in [w for w in works if w.enriched_at is None][:_ENRICH_CAP]:
         await enrich_work(db, work)
         # Still unenriched means Google failed (enrich_work swallows it so the
@@ -81,8 +136,11 @@ async def get_series(
                 first_publish_year=w.first_publish_year,
                 cover_url=presentation[w.id].cover_url if w.id in presentation else None,
                 shelf_status=shelves.get(w.id),
+                position=m.position,
+                subseries=m.subseries.name if m.subseries is not None else None,
             )
-            for w in works
+            for m in members
+            for w in [m.work]
         ],
     )
 

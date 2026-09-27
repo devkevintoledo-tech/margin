@@ -59,6 +59,24 @@ npx playwright install         # one-time
 npm run test:e2e               # auth flow is network-free; thread/reply use live Google Books search
 ```
 
+### Catalog pipeline
+
+`pipeline/` builds the catalog offline from Open Library dumps and Wikidata and
+publishes a versioned release; production only loads releases. It has its own
+dependencies and never connects to the app database. From `pipeline/`:
+
+```bash
+python -m venv .venv && .venv/bin/pip install -r requirements.txt   # one-time
+.venv/bin/python -m pytest                                          # fixture dumps only, no network
+cd .. && pipeline/.venv/bin/python -m pipeline run --version 2026.10.1          # full build (~20 GB free disk)
+pipeline/.venv/bin/python -m pipeline run --from group --version 2026.10.1      # resume from a stage
+pipeline/.venv/bin/python -m pipeline golden-draft Q45875                       # draft a golden entry
+```
+
+Working state is `build/catalog.duckdb`; releases land in `releases/catalog-<version>/`
+(both git-ignored). `--upload` attaches the release to a GitHub Release via `gh`
+(NordVPN breaks `gh` — disconnect first).
+
 ### Subagents & roadmap
 
 Feature work is delegated to focused subagents in `.claude/agents/`: `backend-dev`, `frontend-dev`, `test-engineer`, and `code-reviewer`. The phased feature plan lives in `ROADMAP.md` (Phase 0 = test/hardening foundations is the current focus).
@@ -176,6 +194,22 @@ thread constraints (`ck_threads_one_home`, `ck_threads_tag_needs_series`) are
 added `NOT VALID` because 10 legacy threads orphaned by the works migration have
 no home; the backfill reports them and leaves them alone.
 
+**Catalog releases** are the catalog's seed data. `python -m
+scripts.load_catalog_release <folder | tag>` (service:
+`services/catalog_loader.py`) verifies checksums and schema, then in one
+transaction upserts series, works, editions, `series_members` and
+`work_aliases` by their deterministic ids, stamping `catalog_release`. It
+*adopts* runtime works the release also holds (by OL id, alias, or
+`canonical_key` for heuristic works) with `merge_works`, retires runtime rooms
+that emptied into the room most of their books joined, carries tagged threads
+when a book changes rooms, and settles rows a newer release dropped (deleted
+when unreferenced, kept when a thread or shelf points at them, merged when an
+alias names a survivor). Loading a release twice is a no-op; an older one is
+refused without `--force`. Runtime code never moves a work out of a release
+room (`assign_series` returns early), and a search hit for an aliased OL id
+lands on the alias target. A room's page orders books by sub-series, then
+`series_members.position`, then `first_publish_year`.
+
 **Email**: routes depend on `email_sender_dep`, never on a concrete sender — that's the seam tests override via `app.dependency_overrides`. `get_email_sender()` picks `SmtpEmailSender` when `SMTP_HOST` is set and `ConsoleEmailSender` (logs the link) otherwise, so local dev needs no SMTP server.
 
 ### Frontend (`frontend/src/`)
@@ -232,6 +266,31 @@ Read those before changing anything visual.
 - **No star ratings or user reviews.** This is a product decision, not an
   oversight — see `docs/visual-identity.md` §1 and `margin_spec.md`.
 
+### Catalog pipeline (`pipeline/`)
+
+Five stages, `fetch → select → extract → group → publish`, each reading only
+the previous stage's DuckDB tables and writing `tmp_*` tables it swaps in on
+success (`db.swap_in`), so a crash leaves no partial stage. The pipeline
+imports only the backend's **pure** rule modules (`work_identity`,
+`series_identity`, `text`) through `pipeline/_backend.py` — keep those free of
+settings, HTTP and ORM imports (`tests/test_pure_imports.py` enforces it).
+
+- **Grouping** lives in `pipeline/group/` as pure functions: author clusters,
+  duplicate works, the four-rung series ladder (Wikidata → OL tags → edition
+  `series` strings → title patterns), its guards (imprints, folding,
+  adaptations) and nesting. Stage modules are thin DuckDB wrappers around them.
+- **Rules and corrections are data**: `pipeline/rules/junk.yaml`,
+  `pipeline/rules/imprints.yaml`, and `pipeline/overrides/*.yaml`. An override
+  referencing anything the build does not hold fails the run.
+- **Ids are deterministic** (`ids.py`, `uuid5` over `MARGIN_NS`): never change
+  the namespace. Output is sorted by identity, and two runs over the same
+  inputs produce byte-identical Parquet (asserted in `test_end_to_end.py`).
+- **The release contract** is `pipeline/contract.py`; the loader's `COLUMNS`
+  must match it (`backend/tests/test_catalog_contract.py`). Change both and
+  bump `SCHEMA_VERSION` together.
+- **`publish` is gated** on `pipeline/golden/series.yaml`: it refuses to write
+  a release below 95% exact membership or 95% exact order.
+
 ## Conventions & gotchas
 
 - **API prefix**: all routers are mounted under `/api` in `main.py` (each router keeps its own resource prefix, e.g. `/api/auth/login`, `/api/genres/`). This matches the frontend's axios `baseURL: '/api'` and the vite dev proxy. New routers must be `include_router(..., prefix="/api")` and registered in `main.py`. The only non-`/api` route is `GET /` (returns the app name).
@@ -242,8 +301,9 @@ Read those before changing anything visual.
 ## Known remaining gaps
 
 - **No token revocation**: `POST /auth/logout` is a stateless no-op — the frontend just clears the persisted JWT, and a stolen token stays valid until expiry. A password reset does not invalidate existing sessions either. Anything relying on server-side session invalidation needs a refresh/denylist design first.
-- **No admin merge/split UI**: `merge_works()` and `scripts.resolve_works
-  --upgrade` are the only repair tools; a mis-grouped work needs a shell.
+- **No admin merge/split UI**: catalog fixes are `pipeline/overrides/*.yaml`
+  entries picked up by the next release; runtime works still need
+  `merge_works()` / `scripts.resolve_works --upgrade` from a shell.
 - Content is immutable (no edit/delete for threads or posts). See `ROADMAP.md` for the tracked list.
 
 ## Environment

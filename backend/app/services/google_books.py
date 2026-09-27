@@ -8,6 +8,8 @@ from typing import Any
 import httpx
 
 from app.config import settings
+# Re-exported: search, open_library and SearchQuery import it from here.
+from app.services.text import normalize  # noqa: F401
 
 # Maps a substring (checked against the lowercased category string) to a seeded
 # Genre slug. Order matters — more specific terms first; generic "fiction" last.
@@ -26,19 +28,6 @@ _CATEGORY_SLUGS: list[tuple[str, str]] = [
     ("fiction", "literary-fiction"),  # generic fiction fallback (last)
 ]
 
-
-def normalize(text: str | None) -> str:
-    """Canonicalize a string for duplicate matching.
-
-    NFKD-strip accents, lowercase, drop punctuation, collapse whitespace.
-    """
-    if not text:
-        return ""
-    decomposed = unicodedata.normalize("NFKD", text)
-    no_accents = "".join(c for c in decomposed if not unicodedata.combining(c))
-    lowered = no_accents.lower()
-    no_punct = re.sub(r"[^\w\s]", " ", lowered)
-    return re.sub(r"\s+", " ", no_punct).strip()
 
 
 def _category_to_slug(categories: list[str] | None) -> str | None:

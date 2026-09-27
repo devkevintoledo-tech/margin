@@ -20,6 +20,11 @@ class Settings(BaseSettings):
     FRONTEND_BASE_URL: str = "http://localhost:5173"
     PASSWORD_RESET_TOKEN_TTL_MINUTES: int = 30
 
+    # Catalog releases (scripts.load_catalog_release). A tag is fetched from
+    # <CATALOG_RELEASES_URL>/<tag>/<tag>.tar.gz into CATALOG_RELEASES_DIR.
+    CATALOG_RELEASES_URL: str = "https://github.com/devkevintoledo-tech/margin/releases/download"
+    CATALOG_RELEASES_DIR: str = "releases"
+
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
 
