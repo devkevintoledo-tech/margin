@@ -10,6 +10,8 @@ bcrypt==5.0.0
 authlib==1.3.0
 itsdangerous==2.2.0
 httpx==0.27.0
+# Catalog releases are Parquet (scripts.load_catalog_release).
+pyarrow==18.1.0
 aiosmtplib==3.0.2
 python-dotenv==1.0.1
 python-multipart==0.0.9
