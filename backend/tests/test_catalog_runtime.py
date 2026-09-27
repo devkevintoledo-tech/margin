@@ -56,3 +56,43 @@ async def test_a_search_hit_for_a_merged_ol_id_lands_on_the_release_work(db_sess
         edition_count=3, isbn_13s=frozenset(), subjects=("franchise:Red Rising",)))
     assert found.id == work.id
     assert await db_session.scalar(select(func.count()).select_from(Work)) == 1
+
+
+async def test_a_search_hit_leaves_a_release_works_catalog_data_alone(db_session):
+    # The release summed popularity across merged duplicates and chose the
+    # subjects the ranker indexes; one runtime search doc must not undo that.
+    work, _ = await _release_work(db_session, "OL30W", "Red Rising")
+    work.readinglog_count, work.subjects, work.ol_cover_id = 900, "franchise:Red Rising", 7
+    db_session.add(WorkAlias(ol_work_id="OL36W", work_id=work.id))
+    await db_session.flush()
+    await upsert_work_from_ol(db_session, OLWork(
+        key="OL36W", title="Red Rising", author="Pierce Brown", first_publish_year=2014, edition_count=3,
+        isbn_13s=frozenset(), subjects=("Mars",), readinglog_count=100, cover_id=99))
+    assert (work.readinglog_count, work.subjects, work.ol_cover_id) == (900, "franchise:Red Rising", 7)
+
+
+async def test_merging_a_tombstones_target_repoints_the_tombstone(db_session):
+    from app.services.works import merge_works
+
+    def w(ext, source=WorkSource.openlibrary):
+        return Work(source=source, external_id=ext, canonical_key=f"{ext}\x1fx", title=ext, author="X",
+                    kind=WorkKind.single, identity_provenance=WorkProvenance.isbn)
+
+    first, middle, last = w("h1", WorkSource.heuristic), w("OL2W"), w("OL3W")
+    db_session.add_all([first, middle, last])
+    await db_session.flush()
+    await merge_works(db_session, first, middle)
+    await merge_works(db_session, middle, last)
+    assert first.merged_into_id == last.id  # no two-hop chain
+
+
+async def test_a_child_series_slug_resolves_to_its_room(db_session):
+    from app.services.series import get_series_by_slug
+
+    _, room = await _release_work(db_session, "OL1W", "Elantris", kind=SeriesKind.series)
+    child = Series(source=SeriesSource.wikidata, external_id="wd:Q1", name="Mistborn", slug="mistborn",
+                   canonical_key="mistborn", kind=SeriesKind.series, provenance=SeriesProvenance.wikidata,
+                   catalog_release="2026.10.1", parent_series_id=room.id)
+    db_session.add(child)
+    await db_session.flush()
+    assert (await get_series_by_slug(db_session, "mistborn")).id == room.id

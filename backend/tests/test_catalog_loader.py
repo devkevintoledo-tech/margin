@@ -208,3 +208,36 @@ async def test_a_second_release_moves_tagged_threads_and_settles_absent_rows(db_
     assert (await db_session.get(Work, GAME)) is not None and stats.kept_works == 1
     assert await db_session.get(SeriesMember, (RR, GOLD)) is None
     assert (await db_session.get(Series, ASOIAF)) is not None  # still the kept book's room
+
+
+async def test_dropping_a_work_does_not_resurrect_the_runtime_work_it_adopted(db_session, write_release):
+    runtime = await runtime_work(db_session, "OL34W", title="Dark Age")  # nobody discussed it
+    await load_release(db_session, v1(write_release))
+    runtime_id = runtime.id
+    v2 = read_release(write_release("2026.11.1", series=SERIES, works=[w for w in WORKS if w["id"] != DARK],
+                                    series_members=[m for m in MEMBERS if m["work_id"] != DARK]))
+    await load_release(db_session, v2)
+    db_session.expire_all()
+    ghost = await db_session.get(Work, runtime_id)
+    assert ghost is None or ghost.merged_into_id is not None
+    live = await db_session.scalar(select(func.count()).select_from(Work).where(
+        Work.external_id.like("merged:%"), Work.merged_into_id.is_(None)))
+    assert live == 0
+
+
+async def test_a_singleton_joining_a_series_keeps_its_threads_about_its_book(db_session, write_release):
+    reader_id = (await user(db_session)).id
+    iron, single = uuid.uuid4(), uuid.uuid4()
+    lone = {"id": single, "name": "Iron Gold", "slug": "iron-gold", "key": "single:OL33W",
+            "source": "heuristic", "provenance": "single", "kind": "singleton"}
+    book = {"id": iron, "ol_work_id": "OL33W", "title": "Iron Gold", "author": "Pierce Brown"}
+    await load_release(db_session, read_release(write_release(
+        "2026.10.1", series=[*SERIES, lone], works=[*WORKS, {**book, "series_id": single}], editions=EDITIONS)))
+    db_session.add(Thread(title="Lyria?", user_id=reader_id, series_id=single))
+    await db_session.flush()
+    await load_release(db_session, read_release(write_release(
+        "2026.11.1", series=SERIES, works=[*WORKS, {**book, "series_id": RR}], editions=EDITIONS,
+        series_members=[*MEMBERS, {"series_id": RR, "work_id": iron, "position": 4.0}])))
+    db_session.expire_all()
+    thread = (await db_session.execute(select(Thread))).scalar_one()
+    assert (thread.series_id, thread.work_id) == (RR, iron)

@@ -248,12 +248,22 @@ _UPSERTS = (
 )
 
 
-async def retire_series(db: AsyncSession, old: uuid.UUID, survivor: uuid.UUID) -> int:
-    """Move a room's threads and remaining (tombstoned) works into ``survivor``, then tombstone it."""
+async def retire_series(db: AsyncSession, old: uuid.UUID, survivor: uuid.UUID,
+                        book: uuid.UUID | None = None) -> int:
+    """Move a room's threads and remaining (tombstoned) works into ``survivor``, then tombstone it.
+
+    ``book`` is a singleton's one work: its untagged threads were about that
+    book, so they are tagged with it rather than dropped into the series feed.
+    """
+    if book is not None:
+        await db.execute(text("UPDATE threads SET work_id = :w WHERE series_id = :old AND work_id IS NULL"),
+                         {"w": book, "old": old})
     moved = (await db.execute(text("UPDATE threads SET series_id = :new WHERE series_id = :old"),
                               {"new": survivor, "old": old})).rowcount or 0
     await db.execute(text("UPDATE works SET series_id = :new WHERE series_id = :old"), {"new": survivor, "old": old})
     await db.execute(text("UPDATE series SET merged_into_id = :new, parent_series_id = NULL WHERE id = :old"),
+                     {"new": survivor, "old": old})
+    await db.execute(text("UPDATE series SET merged_into_id = :new WHERE merged_into_id = :old"),
                      {"new": survivor, "old": old})
     return moved
 
@@ -298,6 +308,9 @@ async def _settle_absent(db: AsyncSession, version: str, stats: LoadStats,
         if referenced:
             stats.kept_works += 1
         else:
+            # Its tombstones (runtime works it adopted) go with it: merged_into_id
+            # is ON DELETE SET NULL, which would bring them back to life.
+            await db.execute(text("DELETE FROM works WHERE merged_into_id = :w"), {"w": work_id})
             await db.execute(text("DELETE FROM works WHERE id = :w"), {"w": work_id})
             stats.deleted_works += 1
 
@@ -310,6 +323,10 @@ async def _settle_absent(db: AsyncSession, version: str, stats: LoadStats,
             SELECT EXISTS (SELECT 1 FROM works WHERE series_id = :s) OR EXISTS (SELECT 1 FROM threads WHERE series_id = :s)
         """), {"s": series_id})
         if not used:
+            await db.execute(text("""
+                DELETE FROM series t WHERE t.merged_into_id = :s
+                  AND NOT EXISTS (SELECT 1 FROM works WHERE series_id = t.id)
+                  AND NOT EXISTS (SELECT 1 FROM threads WHERE series_id = t.id)"""), {"s": series_id})
             await db.execute(text("DELETE FROM series WHERE id = :s"), {"s": series_id})
             stats.deleted_series += 1
             continue
@@ -319,7 +336,9 @@ async def _settle_absent(db: AsyncSession, version: str, stats: LoadStats,
         rooms.pop(series_id, None)
         if rooms:
             survivor = min(rooms, key=lambda r: (-rooms[r], str(r)))
-            stats.moved_threads += await retire_series(db, series_id, survivor)
+            singleton = await db.scalar(text("SELECT kind = 'singleton' FROM series WHERE id = :s"), {"s": series_id})
+            book = former[0] if singleton and len(former) == 1 else None
+            stats.moved_threads += await retire_series(db, series_id, survivor, book)
             stats.retired_series += 1
 
 
