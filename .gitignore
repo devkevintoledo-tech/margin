@@ -22,3 +22,8 @@ playwright-report/
 .DS_Store
 .idea/
 .vscode/
+
+# Catalog pipeline working state and releases (published as GitHub Releases)
+/build/
+/releases/
+backend/releases/
