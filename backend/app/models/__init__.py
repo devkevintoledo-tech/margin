@@ -9,7 +9,8 @@ from app.models.vote import Vote
 from app.models.password_reset import PasswordResetToken
 from app.models.work import Work, WorkKind, WorkProvenance, WorkSource
 from app.models.search_query import SearchQuery
-from app.models.series import Series, SeriesKind, SeriesSource
+from app.models.series import Series, SeriesKind, SeriesProvenance, SeriesSource
+from app.models.catalog import CatalogRelease, MembershipConfidence, SeriesMember, WorkAlias
 
 __all__ = [
     "Base",
@@ -31,4 +32,9 @@ __all__ = [
     "Series",
     "SeriesKind",
     "SeriesSource",
+    "SeriesProvenance",
+    "CatalogRelease",
+    "MembershipConfidence",
+    "SeriesMember",
+    "WorkAlias",
 ]

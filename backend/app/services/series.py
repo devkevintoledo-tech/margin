@@ -12,7 +12,7 @@ from sqlalchemy import event, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
-from app.models import Series, SeriesKind, SeriesSource, Thread, Work
+from app.models import Series, SeriesKind, SeriesProvenance, SeriesSource, Thread, Work
 from app.services.series_identity import (
     choose_container,
     parse_tags,
@@ -41,6 +41,7 @@ def singleton_series_for(work: Work) -> Series:
         slug=f"{slugify(work.title, max_length=60)}-{series_id.hex[:6]}",
         canonical_key=series_key(work.title),
         kind=SeriesKind.singleton,
+        provenance=SeriesProvenance.single,
     )
 
 
@@ -151,6 +152,7 @@ async def series_for_subjects(db: AsyncSession, subjects: str | None) -> Series 
         slug=await unique_slug(db, name),
         canonical_key=series_key(name),
         kind=SeriesKind.series,
+        provenance=SeriesProvenance.ol_tag,
     )
     db.add(series)
     await db.flush()
