@@ -59,6 +59,24 @@ npx playwright install         # one-time
 npm run test:e2e               # auth flow is network-free; thread/reply use live Google Books search
 ```
 
+### Catalog pipeline
+
+`pipeline/` builds the catalog offline from Open Library dumps and Wikidata and
+publishes a versioned release; production only loads releases. It has its own
+dependencies and never connects to the app database. From `pipeline/`:
+
+```bash
+python -m venv .venv && .venv/bin/pip install -r requirements.txt   # one-time
+.venv/bin/python -m pytest                                          # fixture dumps only, no network
+cd .. && pipeline/.venv/bin/python -m pipeline run --version 2026.10.1          # full build (~20 GB free disk)
+pipeline/.venv/bin/python -m pipeline run --from group --version 2026.10.1      # resume from a stage
+pipeline/.venv/bin/python -m pipeline golden-draft Q45875                       # draft a golden entry
+```
+
+Working state is `build/catalog.duckdb`; releases land in `releases/catalog-<version>/`
+(both git-ignored). `--upload` attaches the release to a GitHub Release via `gh`
+(NordVPN breaks `gh` — disconnect first).
+
 ### Subagents & roadmap
 
 Feature work is delegated to focused subagents in `.claude/agents/`: `backend-dev`, `frontend-dev`, `test-engineer`, and `code-reviewer`. The phased feature plan lives in `ROADMAP.md` (Phase 0 = test/hardening foundations is the current focus).
@@ -231,6 +249,31 @@ Read those before changing anything visual.
   visually dominant; voting never does.
 - **No star ratings or user reviews.** This is a product decision, not an
   oversight — see `docs/visual-identity.md` §1 and `margin_spec.md`.
+
+### Catalog pipeline (`pipeline/`)
+
+Five stages, `fetch → select → extract → group → publish`, each reading only
+the previous stage's DuckDB tables and writing `tmp_*` tables it swaps in on
+success (`db.swap_in`), so a crash leaves no partial stage. The pipeline
+imports only the backend's **pure** rule modules (`work_identity`,
+`series_identity`, `text`) through `pipeline/_backend.py` — keep those free of
+settings, HTTP and ORM imports (`tests/test_pure_imports.py` enforces it).
+
+- **Grouping** lives in `pipeline/group/` as pure functions: author clusters,
+  duplicate works, the four-rung series ladder (Wikidata → OL tags → edition
+  `series` strings → title patterns), its guards (imprints, folding,
+  adaptations) and nesting. Stage modules are thin DuckDB wrappers around them.
+- **Rules and corrections are data**: `pipeline/rules/junk.yaml`,
+  `pipeline/rules/imprints.yaml`, and `pipeline/overrides/*.yaml`. An override
+  referencing anything the build does not hold fails the run.
+- **Ids are deterministic** (`ids.py`, `uuid5` over `MARGIN_NS`): never change
+  the namespace. Output is sorted by identity, and two runs over the same
+  inputs produce byte-identical Parquet (asserted in `test_end_to_end.py`).
+- **The release contract** is `pipeline/contract.py`; the loader's `COLUMNS`
+  must match it (`backend/tests/test_catalog_contract.py`). Change both and
+  bump `SCHEMA_VERSION` together.
+- **`publish` is gated** on `pipeline/golden/series.yaml`: it refuses to write
+  a release below 95% exact membership or 95% exact order.
 
 ## Conventions & gotchas
 
