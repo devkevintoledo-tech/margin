@@ -19,6 +19,7 @@ from app.models.genre import Genre
 from app.models.shelf import Shelf
 from app.models.thread import Thread
 from app.models.series import Series
+from app.models.catalog import WorkAlias
 from app.models.work import Work, WorkKind, WorkProvenance, WorkSource
 from app.schemas.series import SeriesRef
 from app.services import open_library
@@ -324,6 +325,11 @@ async def upsert_work_from_ol(db: AsyncSession, ol: OLWork) -> Work:
             )
         )
     ).scalar_one_or_none()
+    if existing is None:
+        # A catalog release merged this OL id into another work; a search hit
+        # for it must land on that work, not stand up a duplicate beside it.
+        alias = await db.get(WorkAlias, ol.key)
+        existing = await db.get(Work, alias.work_id) if alias is not None else None
 
     work = await canonical_work(db, existing) if existing is not None else None
 

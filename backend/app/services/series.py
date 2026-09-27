@@ -187,10 +187,14 @@ async def assign_series(db: AsyncSession, work: Work) -> Series:
     """Put ``work`` in the room its subjects name, promoting a singleton.
 
     A work already in a real series is never moved to another automatically.
-    That would be a merge decision, like OL → OL work merges.
+    That would be a merge decision, like OL → OL work merges. Neither is a
+    work in a catalog release's room, singleton or not: the release decided
+    it from whole-catalog evidence, and only the next release changes it.
     """
-    target = await series_for_subjects(db, work.subjects)
     current = await db.get(Series, work.series_id) if work.series_id else None
+    if current is not None and current.catalog_release is not None:
+        return current
+    target = await series_for_subjects(db, work.subjects)
 
     if target is None:
         if current is None:
