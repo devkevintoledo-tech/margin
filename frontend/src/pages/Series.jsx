@@ -16,6 +16,22 @@ import useAuthStore from '../store/auth'
  * shelf control — above one description and the whole series' discussion.
  * A singleton is the same page with the series chrome removed.
  */
+/** "#2", "#2.5" — a place in the series; nothing when the catalog has none. */
+export function formatPosition(position) {
+  return position == null ? null : `#${position}`
+}
+
+/** Consecutive books sharing a sub-series, in API order: [{ name, works }]. */
+function groupBySubseries(works) {
+  const groups = []
+  for (const work of works) {
+    const name = work.subseries ?? null
+    if (groups.length === 0 || groups[groups.length - 1].name !== name) groups.push({ name, works: [] })
+    groups[groups.length - 1].works.push(work)
+  }
+  return groups
+}
+
 function BookRow({ work, current, rowRef }) {
   const [coverFailed, setCoverFailed] = useState(false)
   return (
@@ -35,6 +51,9 @@ function BookRow({ work, current, rowRef }) {
         )}
       </div>
       <div className="flex flex-col gap-2 min-w-0">
+        {work.position != null && (
+          <p className="text-ink-dim text-xs tabular-nums">{formatPosition(work.position)}</p>
+        )}
         <h3 className="font-serif text-xl text-ink leading-tight">{work.title}</h3>
         <p className="text-user text-xs lowercase tracking-eyebrow">{work.author}</p>
         {work.first_publish_year && (
@@ -174,14 +193,25 @@ function Series() {
       </header>
 
       <ul aria-label="Books in this series" className="flex flex-col divide-y divide-line">
-        {series.works.map((work) => (
-          <BookRow
-            key={work.id}
-            work={work}
-            current={work.id === currentId}
-            rowRef={work.id === currentId ? currentRef : undefined}
-          />
-        ))}
+        {groupBySubseries(series.works).map((group) => {
+          const rows = group.works.map((work) => (
+            <BookRow
+              key={work.id}
+              work={work}
+              current={work.id === currentId}
+              rowRef={work.id === currentId ? currentRef : undefined}
+            />
+          ))
+          if (!group.name) return rows
+          // A sub-series inside the room (Mistborn in the Cosmere) gets a heading.
+          return (
+            <li key={`group-${group.name}`} className="flex flex-col pt-6">
+              {/* Serif: a series name is a book title here too. Dim, so it reads as a heading over books. */}
+              <h2 className="font-serif text-xl text-ink-dim border-b border-line pb-2">{group.name}</h2>
+              <ul aria-label={group.name} className="flex flex-col divide-y divide-line">{rows}</ul>
+            </li>
+          )
+        })}
       </ul>
 
       <section className="panel p-5 pt-6">
