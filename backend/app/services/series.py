@@ -12,7 +12,7 @@ from sqlalchemy import event, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
-from app.models import Series, SeriesKind, SeriesMember, SeriesProvenance, SeriesSource, Thread, Work
+from app.models import CatalogCorrection, CorrectionOp, Series, SeriesKind, SeriesMember, SeriesProvenance, SeriesSource, Thread, Work
 from app.services.series_identity import (
     choose_container,
     parse_tags,
@@ -200,16 +200,29 @@ async def _promote(db: AsyncSession, work: Work, singleton: Series, target: Seri
     await db.flush()
 
 
+async def _placed_by_librarian(db: AsyncSession, work: Work) -> bool:
+    return bool(await db.scalar(select(func.count()).select_from(CatalogCorrection).where(
+        CatalogCorrection.work_id == work.id,
+        CatalogCorrection.reverted_at.is_(None),
+        CatalogCorrection.op.in_((CorrectionOp.set_series, CorrectionOp.remove_from_series)),
+    )))
+
+
 async def assign_series(db: AsyncSession, work: Work) -> Series:
     """Put ``work`` in the room its subjects name, promoting a singleton.
 
     A work already in a real series is never moved to another automatically.
     That would be a merge decision, like OL → OL work merges. Neither is a
     work in a catalog release's room, singleton or not: the release decided
-    it from whole-catalog evidence, and only the next release changes it.
+    it from whole-catalog evidence, and only the next release changes it —
+    and neither is a work a librarian placed (an unreverted set_series or
+    remove_from_series correction).
     """
     current = await db.get(Series, work.series_id) if work.series_id else None
     if current is not None and current.catalog_release is not None:
+        return current
+    # A librarian put it here; a search re-ingest must not undo that.
+    if current is not None and await _placed_by_librarian(db, work):
         return current
     target = await series_for_subjects(db, work.subjects)
 
