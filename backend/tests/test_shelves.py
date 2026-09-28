@@ -132,3 +132,33 @@ async def test_shelf_post_and_put_have_documented_response_model(client):
         ["responses"]["200"]["content"]["application/json"]["schema"]
     )
     assert "$ref" in put_response_schema or "properties" in put_response_schema, put_response_schema
+
+
+async def test_profile_shelves_carry_the_work(client, auth_headers, work):
+    """A profile renders each shelf entry as a book card, so it needs the
+    work's title, author and series — and its id must be the work's, not the
+    shelf row's, or the card links nowhere."""
+    add = await client.post(
+        f"/api/works/{work.id}/shelf",
+        json={"status": "reading"},
+        headers=auth_headers,
+    )
+    assert add.status_code == 201, add.text
+    me = await client.get("/api/auth/me", headers=auth_headers)
+    username = me.json()["username"]
+
+    resp = await client.get(f"/api/users/{username}")
+    assert resp.status_code == 200, resp.text
+    shelves = resp.json()["shelves"]
+    assert shelves["want_to_read"] == [] and shelves["read"] == []
+    [entry] = shelves["reading"]
+    assert entry["id"] == str(work.id)
+    assert entry["title"] == "The Test Book"
+    assert entry["author"] == "A. Tester"
+    assert entry["shelf_status"] == "reading"
+    assert entry["series"]["slug"]
+
+
+async def test_profile_unknown_user_is_404(client):
+    resp = await client.get("/api/users/nobody-here")
+    assert resp.status_code == 404

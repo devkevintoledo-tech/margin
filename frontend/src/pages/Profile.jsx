@@ -66,18 +66,8 @@ function Profile() {
     )
   }
 
-  // Expect profile.shelves as { want_to_read: [], reading: [], read: [] }
-  // or profile.books as flat list with shelf_status field
+  // Each shelf is a list of works, shaped like search results.
   const shelves = profile.shelves || {}
-  if (!profile.shelves && profile.books) {
-    for (const book of profile.books) {
-      const s = book.shelf_status
-      if (s) {
-        shelves[s] = shelves[s] || []
-        shelves[s].push(book)
-      }
-    }
-  }
 
   const totalBooks = Object.values(shelves).reduce((acc, arr) => acc + (arr?.length || 0), 0)
 

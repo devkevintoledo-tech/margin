@@ -113,7 +113,7 @@ No moderation surface exists today (no roles, flags, or admin tools).
 | ⬜ | **Background jobs / queue** — async Google Books sync, notification fan-out. | new worker service |
 | ⬜ | **Email verification** — password reset already ships (`/auth/forgot-password`). | `backend/app/api/auth.py`, email service |
 | ⬜ | **Rate-limit `/api/works/search`** — much cheaper since local-first search: a repeat query makes no upstream call at all, so only a *cold* query costs anything (one 5s Open Library call, or the Google fallback). Still anonymous and still writes `works` rows, so a stream of distinct queries is unbounded work. | `backend/app/api/works.py`, `backend/app/services/search.py` |
-| ⬜ | **Profile shelves render empty cards** — `GET /api/users/{username}` returns shelf rows (shelf `id` + `work_id`, no title/author/cover) and `Profile.jsx` feeds them to `WorkCard`, which links to `/works/<shelf-id>`. Pre-dates work grouping. Return `WorkOut` rows instead. | `backend/app/api/users.py`, `frontend/src/pages/Profile.jsx` |
+| ✅ | **Profile shelves render real cards** — `GET /api/users/{username}` returns each shelf as `WorkOut` rows (newest first), so `Profile.jsx` cards show title, author, cover and link to the book's series. | `backend/app/api/users.py`, `frontend/src/pages/Profile.jsx` |
 | ⬜ | **Data export** — user shelf/post export. | new endpoint |
 | ⬜ | **Observability** — structured logging, metrics, error tracking. | `backend/app/main.py`, infra |
 
