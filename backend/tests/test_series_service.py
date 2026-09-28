@@ -134,3 +134,27 @@ async def test_merge_moves_a_singletons_threads_into_the_targets_room(db_session
     assert untagged.work_id == target.id
     assert source.series_id == target.series_id
     assert source_series.merged_into_id == target.series_id
+
+
+from datetime import datetime, timezone
+
+from app.services.series import placed_memberships, series_for_subjects, tree_memberships
+from tests.librarian_factories import make_member, make_series, make_work
+
+
+async def test_placed_membership_is_the_deepest_in_the_room_tree(db_session):
+    cosmere = await make_series(db_session, "Cosmere", release="2026.10.1")
+    mistborn = await make_series(db_session, "Mistborn", release="2026.10.1", parent=cosmere)
+    book = await make_work(db_session, "The Final Empire", series=cosmere, ol_id="OL1W")
+    await make_member(db_session, cosmere, book, 3.0)
+    deep = await make_member(db_session, mistborn, book, 1.0)
+    placed, tree = await placed_memberships(db_session, cosmere, [book.id])
+    assert placed[book.id] is deep and set(tree) == {cosmere.id, mistborn.id}
+    assert {m.series_id for m in await tree_memberships(db_session, cosmere, book.id)} == {cosmere.id, mistborn.id}
+
+
+async def test_a_dissolved_series_is_never_chosen_for_subjects(db_session):
+    red = await series_for_subjects(db_session, "franchise:Red Rising")
+    red.dissolved_at = datetime.now(timezone.utc)
+    await db_session.flush()
+    assert await series_for_subjects(db_session, "franchise:Red Rising") is None

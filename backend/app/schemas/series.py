@@ -4,7 +4,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.models.series import SeriesKind
+from app.models.series import SeriesKind, SeriesProvenance
 from app.models.shelf import ShelfStatus
 
 
@@ -31,12 +31,16 @@ class SeriesWorkOut(BaseModel):
     # The child series this book sits in (Mistborn inside the Cosmere), or
     # null when it belongs to the room directly.
     subseries: str | None = None
+    # Librarian edit mode only: marks rows a correction placed ('override').
+    provenance: SeriesProvenance | None = None
 
 
 class SeriesOut(BaseModel):
+    id: UUID
     slug: str
     name: str
     kind: SeriesKind
+    dissolved: bool = False
     # One description for the page: the singleton's own book, otherwise the
     # first member's. Per-book blurbs are deliberately absent.
     description: str | None = None
