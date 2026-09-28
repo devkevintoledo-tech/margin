@@ -16,6 +16,7 @@ const Register = React.lazy(() => import('./pages/Register'))
 const ForgotPassword = React.lazy(() => import('./pages/ForgotPassword'))
 const ResetPassword = React.lazy(() => import('./pages/ResetPassword'))
 const NotFound = React.lazy(() => import('./pages/NotFound'))
+const Librarian = React.lazy(() => import('./pages/Librarian'))
 
 function App() {
   // Validate any persisted token on load. useMe() is enabled only when a token
@@ -43,6 +44,7 @@ function App() {
           <Route path="/register" element={<Register />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/reset-password" element={<ResetPassword />} />
+          <Route path="/librarian" element={<Librarian />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </Suspense>
