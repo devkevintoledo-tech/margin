@@ -177,4 +177,54 @@ describe('Series page', () => {
     renderPage('/series/dark-age-a1b2c3')
     await waitFor(() => expect(screen.getByTestId('where')).toHaveTextContent('/series/red-rising'))
   })
+
+  it('offers edit mode only to librarians', async () => {
+    mockApi(SAGA)
+    renderPage('/series/red-rising?edit=1')
+    await screen.findByRole('list', { name: 'Books in this series' })
+    expect(screen.queryByRole('link', { name: '[edit]' })).toBeNull()
+    expect(screen.queryByRole('button', { name: /^move/ })).toBeNull()
+  })
+
+  it('shows row and header actions in edit mode, and marks librarian-placed books', async () => {
+    useAuthStore.setState({ token: 't', user: { id: 'u1', username: 'lib', is_librarian: true } })
+    mockApi({ ...SAGA, id: 's1', works: [{ ...SAGA.works[0], provenance: 'override' }, SAGA.works[1]] })
+    renderPage('/series/red-rising?edit=1')
+    const list = await screen.findByRole('list', { name: 'Books in this series' })
+    const [first] = within(list).getAllByRole('listitem')
+    for (const name of ['move', 'position', 'remove', 'merge into…', 'split']) {
+      expect(within(first).getByRole('button', { name: `${name} Red Rising` })).toBeInTheDocument()
+    }
+    expect(within(first).getByText('librarian-placed')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'rename series' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: '[done]' })).toBeInTheDocument()
+  })
+
+  it('reports a fix and undoes it', async () => {
+    useAuthStore.setState({ token: 't', user: { id: 'u1', username: 'lib', is_librarian: true } })
+    mockApi({ ...SAGA, id: 's1' })
+    client.post
+      .mockResolvedValueOnce({ data: { id: 'c1', op: 'remove_from_series', exportable: false,
+        runtime_only_reason: 'Red Rising is not in a catalog release', undoable: true, room_slug: 'golden-son-abc' } })
+      .mockResolvedValueOnce({ data: { id: 'c1', undoable: false, reverted_at: '2026-09-28T00:00:00Z' } })
+    renderPage('/series/red-rising?edit=1')
+    const list = await screen.findByRole('list', { name: 'Books in this series' })
+    await userEvent.click(within(list).getByRole('button', { name: 'remove Golden Son' }))
+    await userEvent.type(screen.getByLabelText('Reason'), 'not a sequel')
+    await userEvent.click(screen.getByRole('button', { name: 'Remove from series' }))
+
+    const status = await screen.findByRole('status')
+    expect(within(status).getByText(/runtime-only: Red Rising is not in a catalog release/)).toBeInTheDocument()
+    expect(within(status).getByRole('link', { name: /go to its page/ })).toHaveAttribute('href', '/series/golden-son-abc?edit=1')
+    await userEvent.click(within(status).getByRole('button', { name: 'undo' }))
+    expect(client.post).toHaveBeenLastCalledWith('/librarian/corrections/c1/revert')
+    expect(await within(status).findByText('undone')).toBeInTheDocument()
+  })
+
+  it('shows a dissolved series as a notice with no books and no new threads', async () => {
+    mockApi({ ...SAGA, id: 's1', dissolved: true, works: [] })
+    renderPage('/series/red-rising')
+    expect(await screen.findByText(/This series was dissolved/)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Start a Thread' })).toBeNull()
+  })
 })
