@@ -132,3 +132,57 @@ async def genre(db_session):
     await db_session.flush()
     await db_session.refresh(g)
     return g
+
+
+_ARROW = {"uuid": "string", "text": "string", "int": "int32", "bigint": "int64", "numeric": "float64"}
+
+
+@pytest.fixture
+def write_release(tmp_path):
+    """Write a catalog release folder the way the pipeline's publish stage does.
+
+    ``write_release("2026.10.1", works=[...], series=[...], ...)`` takes rows as
+    dicts; unspecified columns are filled with neutral values. Returns the folder.
+    """
+    import hashlib
+    import json
+
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    from app.services.catalog_loader import COLUMNS
+
+    defaults = {
+        "works": {"subtitle": None, "author": "A. Author", "first_publish_year": None, "kind": "single",
+                  "ol_cover_id": None, "ol_edition_count": 1, "readinglog_count": 0, "ratings_count": 0,
+                  "subjects": None, "representative_edition_id": None},
+        "editions": {"subtitle": None, "author": "A. Author", "publisher": None, "published_year": None,
+                     "isbn_13": None, "page_count": None, "cover_url": None, "language": "en"},
+        "series": {"source": "openlibrary", "provenance": "ol_tag", "kind": "series", "parent_series_id": None},
+        "series_members": {"position": None, "provenance": "ol_tag", "confidence": "medium"},
+        "work_aliases": {},
+    }
+
+    def write(version, **tables):
+        folder = tmp_path / f"catalog-{version}"
+        folder.mkdir()
+        files = {}
+        for name, columns in COLUMNS.items():
+            schema = pa.schema([(c, getattr(pa, _ARROW[t])()) for c, t in columns])
+            rows = []
+            for row in tables.get(name, []):
+                full = {**defaults[name], **row}
+                if name == "works":
+                    full.setdefault("canonical_key", f"{full['title'].lower()}\x1f{full['author'].lower()}")
+                if name == "series":
+                    full.setdefault("canonical_key", full["name"].lower())
+                    full.setdefault("key", f"ol:{full['name'].lower()}")
+                rows.append({c: (str(full[c]) if t == "uuid" and full.get(c) is not None else full.get(c))
+                             for c, t in columns})
+            pq.write_table(pa.Table.from_pylist(rows, schema=schema), folder / f"{name}.parquet")
+            files[f"{name}.parquet"] = hashlib.sha256((folder / f"{name}.parquet").read_bytes()).hexdigest()
+        (folder / "manifest.json").write_text(json.dumps(
+            {"version": version, "schema_version": 1, "files": files, "sources": [], "row_counts": {}}))
+        return folder
+
+    return write

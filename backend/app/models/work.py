@@ -141,6 +141,10 @@ class Work(Base):
         ),
         nullable=False,
     )
+    # The catalog release this row came from; null = created at runtime by search.
+    catalog_release: Mapped[str | None] = mapped_column(
+        ForeignKey("catalog_releases.version"), nullable=True, index=True
+    )
     # Tombstone pointer: a merged work keeps resolving so its URLs survive.
     merged_into_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("works.id", ondelete="SET NULL"), nullable=True, index=True

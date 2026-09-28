@@ -118,6 +118,45 @@ describe('Series page', () => {
     expect(first).not.toHaveAttribute('aria-current')
   })
 
+  it('shows each book\'s place in the series', async () => {
+    mockApi({ ...SAGA, works: [{ ...SAGA.works[0], position: 1 }, { ...SAGA.works[1], position: 2.5 }] })
+    renderPage('/series/red-rising')
+    const list = await screen.findByRole('list', { name: 'Books in this series' })
+    const [first, second] = within(list).getAllByRole('listitem')
+    expect(within(first).getByText('#1')).toBeInTheDocument()
+    expect(within(second).getByText('#2.5')).toBeInTheDocument()
+  })
+
+  it('shows no position when the catalog has none', async () => {
+    mockApi(SAGA)
+    renderPage('/series/red-rising')
+    const list = await screen.findByRole('list', { name: 'Books in this series' })
+    expect(within(list).queryByText(/^#/)).toBeNull()
+  })
+
+  it('groups books under their sub-series heading', async () => {
+    const book = (id, title, subseries, position) => ({
+      id, title, author: 'Brandon Sanderson', first_publish_year: 2006, cover_url: null,
+      shelf_status: null, position, subseries,
+    })
+    mockApi({
+      slug: 'cosmere', name: 'Cosmere', kind: 'series', description: null,
+      works: [
+        book('e', 'Elantris', null, null),
+        book('m1', 'Mistborn', 'Mistborn', 1),
+        book('m2', 'The Well of Ascension', 'Mistborn', 2),
+        book('s1', 'The Way of Kings', 'The Stormlight Archive', 1),
+      ],
+    })
+    renderPage('/series/cosmere')
+    const mistborn = await screen.findByRole('list', { name: 'Mistborn' })
+    expect(within(mistborn).getAllByRole('heading', { level: 3 }).map((h) => h.textContent)).toEqual([
+      'Mistborn', 'The Well of Ascension'])
+    expect(screen.getByRole('heading', { level: 2, name: 'The Stormlight Archive' })).toBeInTheDocument()
+    // A book in the room itself has no heading above it.
+    expect(screen.queryByRole('heading', { level: 2, name: 'Cosmere' })).toBeNull()
+  })
+
   it('ignores a ?book= that is not a member', async () => {
     mockApi(SAGA)
     renderPage('/series/red-rising?book=zzz')

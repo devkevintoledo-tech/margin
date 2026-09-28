@@ -9,6 +9,7 @@ from app.models import (
     AuthProvider,
     Series,
     SeriesKind,
+    SeriesProvenance,
     SeriesSource,
     Thread,
     User,
@@ -74,6 +75,7 @@ async def test_a_work_given_a_series_keeps_it(db_session):
         slug="red-rising",
         canonical_key="red rising",
         kind=SeriesKind.series,
+        provenance=SeriesProvenance.ol_tag,
     )
     db_session.add(series)
     await db_session.flush()

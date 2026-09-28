@@ -18,14 +18,21 @@ class UserLogin(BaseModel):
     password: str
 
 
-class UserOut(BaseModel):
+class PublicUserOut(BaseModel):
+    """What anyone may see about a user. Never add private fields here."""
+
     model_config = {"from_attributes": True}
 
     id: UUID
-    email: EmailStr
     username: str
     avatar_url: Optional[str] = None
     created_at: datetime
+
+
+class UserOut(PublicUserOut):
+    """The signed-in user's own account, as returned by auth routes."""
+
+    email: EmailStr
 
 
 class Token(BaseModel):

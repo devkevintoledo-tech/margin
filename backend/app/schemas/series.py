@@ -25,6 +25,12 @@ class SeriesWorkOut(BaseModel):
     first_publish_year: int | None = None
     cover_url: str | None = None
     shelf_status: ShelfStatus | None = None
+    # Place in the series, from the catalog: 2.0, or 2.5 for a novella. Null
+    # when unknown — the page falls back to publication order.
+    position: float | None = None
+    # The child series this book sits in (Mistborn inside the Cosmere), or
+    # null when it belongs to the room directly.
+    subseries: str | None = None
 
 
 class SeriesOut(BaseModel):

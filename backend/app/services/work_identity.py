@@ -11,7 +11,7 @@ from __future__ import annotations
 import hashlib
 import re
 
-from app.services.google_books import normalize
+from app.services.text import normalize
 
 # A parenthetical or bracketed group is always edition packaging:
 # "(Deluxe Slipcase Edition)", "[Hardcover]".

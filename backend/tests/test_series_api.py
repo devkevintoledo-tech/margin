@@ -6,7 +6,10 @@ from datetime import datetime, timezone
 import respx
 from httpx import Response
 
-from app.models import Series, Work
+from app.models import (
+    MembershipConfidence, Series, SeriesKind, SeriesMember, SeriesProvenance, SeriesSource, Work, WorkKind,
+    WorkProvenance, WorkSource,
+)
 from app.services.open_library import OLWork
 from app.services.works import upsert_work_from_ol
 
@@ -38,7 +41,8 @@ async def test_series_page_lists_books_in_publication_order(client, db_session):
     assert body["name"] == "Red Rising"
     assert [w["title"] for w in body["works"]] == ["Red Rising", "Golden Son", "Morning Star"]
     assert body["description"] == "About Red Rising."
-    assert set(body["works"][0]) == {"id", "title", "author", "first_publish_year", "cover_url", "shelf_status"}
+    assert set(body["works"][0]) == {"id", "title", "author", "first_publish_year", "cover_url", "shelf_status",
+                                     "position", "subseries"}
 
 
 async def test_series_page_reports_the_callers_shelf(client, db_session, auth_headers):
@@ -163,3 +167,52 @@ async def test_series_page_stops_enriching_when_google_fails(client, db_session)
     await client.get("/api/series/outage")
     assert route.call_count == one_lookup
     assert one_lookup <= 2
+
+
+async def _room(db, name, slug, parent=None, kind=SeriesKind.series):
+    s = Series(source=SeriesSource.wikidata, external_id=f"wd:{slug}", name=name, slug=slug,
+               canonical_key=name.lower(), kind=kind, provenance=SeriesProvenance.wikidata,
+               parent_series_id=parent.id if parent else None)
+    db.add(s)
+    await db.flush()
+    return s
+
+
+async def _book(db, room, title, year, member_of=None, position=None):
+    w = Work(source=WorkSource.openlibrary, external_id=f"OL{uuid.uuid4().hex[:8]}W", canonical_key=title.lower(),
+             title=title, author="Brandon Sanderson", first_publish_year=year, kind=WorkKind.single,
+             identity_provenance=WorkProvenance.isbn, series_id=room.id, enriched_at=datetime.now(timezone.utc))
+    db.add(w)
+    await db.flush()
+    if member_of is not None:
+        db.add(SeriesMember(series_id=member_of.id, work_id=w.id, position=position,
+                            provenance=SeriesProvenance.wikidata, confidence=MembershipConfidence.high))
+        await db.flush()
+    return w
+
+
+async def test_catalog_positions_beat_publication_year(client, db_session):
+    room = await _room(db_session, "Red Rising", "red-rising")
+    await _book(db_session, room, "Dark Age", 2015, room, 5)  # stored with the wrong year
+    await _book(db_session, room, "Red Rising", 2014, room, 1)
+    await _book(db_session, room, "Morning Star", 2016, room, 3)
+    body = (await client.get("/api/series/red-rising")).json()
+    assert [(w["title"], w["position"]) for w in body["works"]] == [
+        ("Red Rising", 1.0), ("Morning Star", 3.0), ("Dark Age", 5.0)]
+
+
+async def test_child_series_group_under_the_room(client, db_session):
+    cosmere = await _room(db_session, "Cosmere", "cosmere")
+    stormlight = await _room(db_session, "The Stormlight Archive", "stormlight", parent=cosmere)
+    mistborn = await _room(db_session, "Mistborn", "mistborn", parent=cosmere)
+    await _book(db_session, cosmere, "The Way of Kings", 2010, stormlight, 1)
+    await _book(db_session, cosmere, "The Well of Ascension", 2007, mistborn, 2)
+    await _book(db_session, cosmere, "Elantris", 2005, cosmere)
+    await _book(db_session, cosmere, "Mistborn", 2006, mistborn, 1)
+    await _book(db_session, cosmere, "Novella", 2016, mistborn, 2.5)
+    body = (await client.get("/api/series/cosmere")).json()
+    assert [(w["title"], w["subseries"], w["position"]) for w in body["works"]] == [
+        ("Elantris", None, None),
+        ("Mistborn", "Mistborn", 1.0), ("The Well of Ascension", "Mistborn", 2.0), ("Novella", "Mistborn", 2.5),
+        ("The Way of Kings", "The Stormlight Archive", 1.0),
+    ]
