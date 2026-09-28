@@ -2,7 +2,7 @@ import enum
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, Enum, String, text
+from sqlalchemy import Boolean, DateTime, Enum, String, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
@@ -28,6 +28,11 @@ class User(Base):
         Enum(AuthProvider, name="auth_provider_enum"), nullable=False
     )
     password_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # Trusted to fix the catalog (librarian tools). Set from a shell with
+    # `python -m scripts.grant_librarian`; a role enum can replace it later.
+    is_librarian: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=datetime.utcnow,

@@ -95,3 +95,10 @@ async def get_current_user_optional(
     if credentials is None:
         return None
     return await _load_user_from_token(credentials.credentials, db)
+
+
+async def require_librarian(user: User = Depends(get_current_user)) -> User:
+    """A signed-in librarian: 401 for anonymous (via get_current_user), 403 for a reader."""
+    if not user.is_librarian:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Librarians only.")
+    return user
