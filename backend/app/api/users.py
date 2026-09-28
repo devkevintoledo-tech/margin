@@ -7,13 +7,13 @@ from app.models.shelf import Shelf, ShelfStatus
 from app.models.user import User
 from app.models.work import Work
 from app.schemas.book import WorkOut, work_out
-from app.schemas.user import UserOut
+from app.schemas.user import PublicUserOut
 from app.services.works import load_work_presentation
 
 router = APIRouter(prefix="/users", tags=["users"])
 
 
-class UserWithShelves(UserOut):
+class UserWithShelves(PublicUserOut):
     shelves: dict[str, list[WorkOut]] = {s.value: [] for s in ShelfStatus}
 
 
@@ -49,7 +49,6 @@ async def get_user_profile(
     # the lazy `shelves` relationship and raise MissingGreenlet.
     return UserWithShelves(
         id=user.id,
-        email=user.email,
         username=user.username,
         avatar_url=user.avatar_url,
         created_at=user.created_at,

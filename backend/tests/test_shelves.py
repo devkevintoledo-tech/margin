@@ -162,3 +162,16 @@ async def test_profile_shelves_carry_the_work(client, auth_headers, work):
 async def test_profile_unknown_user_is_404(client):
     resp = await client.get("/api/users/nobody-here")
     assert resp.status_code == 404
+
+
+async def test_profile_does_not_expose_email(client, auth_headers):
+    """The profile is public and anonymous; an email address is private."""
+    me = await client.get("/api/auth/me", headers=auth_headers)
+    username = me.json()["username"]
+
+    resp = await client.get(f"/api/users/{username}")
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert "email" not in body
+    assert me.json()["email"] not in resp.text
+    assert body["username"] == username
