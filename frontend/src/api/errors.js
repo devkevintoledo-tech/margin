@@ -7,5 +7,7 @@ export function errorMessage(error, fallback = 'Something went wrong. Please try
   if (Array.isArray(detail)) {
     return detail[0]?.msg || 'Please check your input.'
   }
+  // Librarian merge/split confirmations answer { detail: { message, consequences } }.
+  if (detail && typeof detail.message === 'string') return detail.message
   return fallback
 }
