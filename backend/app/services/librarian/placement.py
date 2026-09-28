@@ -1,5 +1,7 @@
 """Where a book lives: move, reorder, rename (spec §5.2). Remove and dissolve are in Task 5."""
 
+from datetime import datetime, timezone
+
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -9,9 +11,9 @@ from app.models import (
 )
 from app.services.catalog_loader import retire_series
 from app.services.librarian.errors import Conflict, Invalid
-from app.services.librarian.keys import exported, release_series_key, series_key_of, work_key
+from app.services.librarian.keys import MissingKey, exported, release_series_key, series_key_of, work_key
 from app.services.librarian.record import clean_reason, ids, live_series, live_work, member_state, record
-from app.services.series import canonical_series, placed_memberships, tree_memberships, unique_slug
+from app.services.series import canonical_series, placed_memberships, singleton_series_for, tree_memberships, unique_slug
 from app.services.series_identity import new_series_key, release_series_id, series_key
 
 
@@ -196,4 +198,85 @@ async def rename_series(db: AsyncSession, user: User, series: Series, name: str,
         db, op=CorrectionOp.rename_series, user=user, reason=reason,
         payload={"series": str(series.id), "name": name}, entries=entries, runtime_only_reason=missing,
         snapshot={"old_name": old}, series=series,
+    )
+
+
+async def _singleton_for(db: AsyncSession, work: Work) -> tuple[Series, bool]:
+    """The book's own page: its old singleton brought back if it has one
+    (external_id is unique per source), otherwise a new one."""
+    old = (await db.execute(select(Series).where(
+        Series.source == SeriesSource.heuristic, Series.external_id == f"singleton:{work.id}"
+    ))).scalar_one_or_none()
+    if old is not None:
+        old.merged_into_id, old.dissolved_at, old.name = None, None, work.title
+        await db.flush()
+        return old, True
+    single = singleton_series_for(work)
+    db.add(single)
+    await db.flush()
+    return single, False
+
+
+async def _detach(db: AsyncSession, room: Series, work: Work) -> dict:
+    """Take ``work`` out of ``room`` onto its own page, with the threads about it."""
+    members = await tree_memberships(db, room, work.id)
+    state = {"work": str(work.id), "members": [member_state(m) for m in members]}
+    for m in members:
+        await db.delete(m)
+    single, revived = await _singleton_for(db, work)
+    state["threads"] = await _move_tagged_threads(db, work.id, room.id, single.id)
+    state["singleton"], state["revived"] = str(single.id), revived
+    work.series_id = single.id
+    await db.flush()
+    return state
+
+
+async def remove_from_series(db: AsyncSession, user: User, room: Series, work: Work, *,
+                             reason: str) -> CatalogCorrection:
+    reason = clean_reason(reason)
+    room, work = live_series(room), live_work(work)
+    if room.kind is SeriesKind.singleton:
+        raise Invalid("A single book's page cannot lose its book.")
+    if room.dissolved_at is not None:
+        raise Conflict(f"{room.name} was dissolved.")
+    if work.series_id != room.id:
+        raise Invalid(f"{work.title} is not in {room.name}.")
+    member_series = [await db.get(Series, m.series_id) for m in await tree_memberships(db, room, work.id)]
+
+    def build():
+        wk = work_key(work)
+        release_series_key(room)  # a room the build does not hold cannot be named
+        entries = [{"remove_from_series": {"work": wk, "series": release_series_key(s)}}
+                   for s in sorted(member_series, key=lambda s: s.external_id) if s.catalog_release is not None]
+        if not entries:
+            raise MissingKey(f"{work.title} has no catalog membership in {room.name}")
+        return entries
+
+    entries, missing = exported(build)
+    state = await _detach(db, room, work)
+    return await record(
+        db, op=CorrectionOp.remove_from_series, user=user, reason=reason,
+        payload={"work": str(work.id), "series": str(room.id)}, entries=entries,
+        runtime_only_reason=missing, snapshot=state, work=work, series=room,
+    )
+
+
+async def reject_series(db: AsyncSession, user: User, series: Series, *, reason: str) -> CatalogCorrection:
+    """Dissolve: every book goes to its own page; the room keeps its slug and its
+    untagged threads, shows no books and takes no new threads."""
+    reason = clean_reason(reason)
+    series = live_series(series)
+    if series.kind is SeriesKind.singleton:
+        raise Invalid("A single book's page cannot be dissolved.")
+    if series.dissolved_at is not None:
+        raise Conflict(f"{series.name} was already dissolved.")
+    entries, missing = exported(lambda: [{"reject_series": release_series_key(series)}])
+    works = (await db.execute(select(Work).where(
+        Work.series_id == series.id, Work.merged_into_id.is_(None)).order_by(Work.id))).scalars().all()
+    detached = [await _detach(db, series, w) for w in works]
+    series.dissolved_at = datetime.now(timezone.utc)
+    await db.flush()
+    return await record(
+        db, op=CorrectionOp.reject_series, user=user, reason=reason, payload={"series": str(series.id)},
+        entries=entries, runtime_only_reason=missing, snapshot={"members": detached}, series=series,
     )

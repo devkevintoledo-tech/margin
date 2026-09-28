@@ -167,3 +167,87 @@ async def test_rename_keeps_the_slug_and_exports_only_release_series(db_session)
         await rename_series(db_session, lib, runtime, " ", reason="r")
     with pytest.raises(Invalid, match="already"):
         await rename_series(db_session, lib, runtime, "Dune Chronicles", reason="r")
+
+
+from app.services.librarian.placement import reject_series, remove_from_series
+
+
+async def test_remove_gives_the_book_its_own_page_with_its_threads(db_session):
+    lib = await make_user(db_session, librarian=True)
+    a = await make_series(db_session, "Alpha", release=R)
+    x = await make_work(db_session, "Book X", series=a, ol_id="OL1W")
+    y = await make_work(db_session, "Book Y", series=a, ol_id="OL2W")
+    await make_member(db_session, a, x, 1.0)
+    await make_member(db_session, a, y, 2.0)
+    tagged = await make_thread(db_session, lib, a, x)
+    untagged = await make_thread(db_session, lib, a)
+
+    c = await remove_from_series(db_session, lib, a, x, reason="not part of Alpha")
+
+    own = await db_session.get(Series, await fresh(db_session, Work.series_id, x.id))
+    assert own.kind is SeriesKind.singleton and own.external_id == f"singleton:{x.id}"
+    assert await fresh(db_session, Thread.series_id, tagged.id) == own.id
+    assert await fresh(db_session, Thread.series_id, untagged.id) == a.id
+    assert await members_of(db_session, x) == set()
+    assert c.override == [{"remove_from_series": {"work": "OL1W", "series": "ol:alpha"}}]
+    assert c.snapshot["singleton"] == str(own.id) and c.snapshot["revived"] is False
+    assert c.snapshot["threads"] == [str(tagged.id)]
+
+
+async def test_remove_revives_the_books_old_singleton(db_session):
+    lib = await make_user(db_session, librarian=True)
+    x = await make_work(db_session, "Book X", ol_id="OL1W")
+    old_single = x.series_id
+    a = await make_series(db_session, "Alpha", release=R)
+    await make_work(db_session, "Book Y", series=a, ol_id="OL2W")
+    await set_series(db_session, lib, x, series=a, reason="joins Alpha")  # retires the singleton
+    assert await fresh(db_session, Series.merged_into_id, old_single) == a.id
+
+    c = await remove_from_series(db_session, lib, a, x, reason="it did not")
+
+    assert await fresh(db_session, Work.series_id, x.id) == old_single
+    assert await fresh(db_session, Series.merged_into_id, old_single) is None
+    assert c.snapshot["revived"] is True
+
+
+async def test_remove_from_a_runtime_series_is_runtime_only(db_session):
+    lib = await make_user(db_session, librarian=True)
+    runtime = await make_series(db_session, "Dune Saga")
+    x = await make_work(db_session, "Dune", series=runtime, ol_id="OL8W")
+    await make_work(db_session, "Dune Messiah", series=runtime, ol_id="OL9W")
+    c = await remove_from_series(db_session, lib, runtime, x, reason="r")
+    assert c.override is None and c.runtime_only_reason == "Dune Saga is not in a catalog release"
+
+
+async def test_remove_refuses_a_singleton_and_a_non_member(db_session):
+    lib = await make_user(db_session, librarian=True)
+    a = await make_series(db_session, "Alpha", release=R)
+    outsider = await make_work(db_session, "Outsider", ol_id="OL4W")
+    with pytest.raises(Invalid, match="not in"):
+        await remove_from_series(db_session, lib, a, outsider, reason="r")
+    single = await db_session.get(Series, outsider.series_id)
+    with pytest.raises(Invalid, match="single book"):
+        await remove_from_series(db_session, lib, single, outsider, reason="r")
+
+
+async def test_reject_dissolves_and_every_member_gets_its_own_page(db_session):
+    lib = await make_user(db_session, librarian=True)
+    imprint = await make_series(db_session, "Penguin Classics", release=R)
+    books = [await make_work(db_session, f"Classic {i}", series=imprint, ol_id=f"OL{i}0W") for i in range(3)]
+    for i, b in enumerate(books):
+        await make_member(db_session, imprint, b, float(i))
+    tagged = await make_thread(db_session, lib, imprint, books[0])
+    general = await make_thread(db_session, lib, imprint)
+
+    c = await reject_series(db_session, lib, imprint, reason="an imprint, not a series")
+
+    assert imprint.dissolved_at is not None and imprint.slug
+    for b in books:
+        room = await db_session.get(Series, await fresh(db_session, Work.series_id, b.id))
+        assert room.kind is SeriesKind.singleton
+    assert await fresh(db_session, Thread.series_id, general.id) == imprint.id
+    assert await fresh(db_session, Thread.series_id, tagged.id) != imprint.id
+    assert c.override == [{"reject_series": "ol:penguin classics"}]
+    assert len(c.snapshot["members"]) == 3 and c.work_id is None and c.series_id == imprint.id
+    with pytest.raises(Conflict, match="already dissolved"):
+        await reject_series(db_session, lib, imprint, reason="again")
