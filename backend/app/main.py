@@ -19,6 +19,7 @@ app = FastAPI(
         {"name": "threads", "description": "Create and fetch discussion threads."},
         {"name": "posts", "description": "Post and reply within a thread, vote."},
         {"name": "users", "description": "User profile and shelf views."},
+        {"name": "librarian", "description": "Catalog fixes by trusted users."},
     ],
 )
 
@@ -34,7 +35,7 @@ app.add_middleware(
 app.add_middleware(SessionMiddleware, secret_key=settings.SECRET_KEY)
 
 from app.api.auth import router as auth_router  # noqa: E402
-from app.api import genres, posts, series, threads, users, works  # noqa: E402
+from app.api import genres, librarian, posts, series, threads, users, works  # noqa: E402
 
 # All routers are mounted under /api to match the frontend client baseURL.
 # Each router already carries its own resource prefix (e.g. /auth, /works).
@@ -45,6 +46,7 @@ app.include_router(series.router, prefix="/api")
 app.include_router(threads.router, prefix="/api")
 app.include_router(posts.router, prefix="/api")
 app.include_router(users.router, prefix="/api")
+app.include_router(librarian.router, prefix="/api")
 
 
 @app.get("/")
