@@ -10,6 +10,7 @@ they are tested as a table.
 from __future__ import annotations
 
 import re
+import uuid
 import unicodedata
 from typing import Mapping, NamedTuple, Sequence
 
@@ -95,3 +96,20 @@ def slugify(name: str, max_length: int = 80) -> str:
             window = window[: window.rindex("-")]
         cleaned = window.strip("-")
     return cleaned or "series"
+
+
+# The catalog pipeline's namespace (pipeline/config.py MARGIN_NS). Never change
+# it: every release row id is derived from it. The pipeline suite asserts the two
+# are equal.
+CATALOG_NAMESPACE = uuid.UUID("7c1d0a4e-3b5f-4e2a-9d6c-8f4b2a1e0c37")
+
+
+def new_series_key(name: str) -> str:
+    """The pipeline key a librarian-named series exports under."""
+    return f"ol:{series_key(name)}"
+
+
+def release_series_id(key: str) -> uuid.UUID:
+    """The id a release gives the series with this key (pipeline ids.row_id), so a
+    series created in the app is the same row the next release upserts."""
+    return uuid.uuid5(CATALOG_NAMESPACE, f"series:{key}")
