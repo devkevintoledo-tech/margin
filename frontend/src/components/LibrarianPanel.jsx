@@ -167,7 +167,7 @@ function LibrarianPanel({ action, onClose, onDone }) {
   return (
     <div className="fixed inset-0 bg-bg/90 flex items-center justify-center z-50 p-4">
       <div ref={dialogRef} role="dialog" aria-modal="true" aria-label={title}
-           onKeyDown={trapTab} className="float w-full max-w-prose flex flex-col gap-4 p-5">
+           onKeyDown={trapTab} className="float w-full max-w-prose max-h-full overflow-y-auto flex flex-col gap-4 p-5">
         <div className="flex items-center justify-between">
           <h2 className="text-sm uppercase tracking-eyebrow text-ink">{title}</h2>
           <button type="button" onClick={onClose} aria-label="Close" className="text-ink-dim hover:text-danger">

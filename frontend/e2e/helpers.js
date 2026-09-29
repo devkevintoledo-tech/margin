@@ -52,3 +52,41 @@ export function grantLibrarian(user) {
     cwd: REPO, stdio: 'pipe',
   })
 }
+
+// Edit mode is sticky after roadmap item 01 and per-URL before it: click
+// [edit] only when the page is not already in edit mode.
+export async function ensureEditMode(page) {
+  const done = page.getByRole('button', { name: '[done]' })
+  if (!(await done.isVisible())) await page.getByRole('button', { name: '[edit]' }).click()
+  await expect(done).toBeVisible()
+}
+
+// Opens the first search result for `query` and moves its first book into
+// `saga`. `create` names a new series; otherwise `saga` must already exist.
+// Leaves the page on the saga's series page. Returns the moved book's title.
+export async function moveFirstResultInto(page, query, saga, { create = false, position } = {}) {
+  await openFirstSearchResult(page, query)
+  await ensureEditMode(page)
+  const books = page.getByRole('list', { name: 'Books in this series' })
+  const title = (await books.getByRole('heading', { level: 3 }).first().textContent()).trim()
+  await books.getByRole('button', { name: `move ${title}`, exact: true }).click()
+  await page.getByLabel('Find a series', { exact: true }).fill(saga)
+  const radio = create
+    ? page.getByRole('radio', { name: `new series: ${saga}` })
+    : page.getByRole('radio', { name: new RegExp(`^${saga}`) })
+  await radio.check()
+  if (position != null) await page.getByLabel('Position (optional)').fill(String(position))
+  await page.getByLabel('Reason', { exact: true }).fill('e2e: building a series')
+  await page.getByRole('button', { name: 'Move', exact: true }).click()
+  const status = page.getByRole('group', { name: 'Librarian fix result' })
+  await expect(status).toBeVisible()
+  // A singleton the move emptied redirects by itself; a book moved out of a
+  // real series needs the link.
+  const heading = page.getByRole('heading', { level: 1, name: saga })
+  const follow = status.getByRole('link', { name: /go to its page/ })
+  await expect(async () => {
+    if (await follow.isVisible()) await follow.click({ timeout: 1000 }).catch(() => {})
+    await expect(heading).toBeVisible({ timeout: 1000 })
+  }).toPass()
+  return title
+}
