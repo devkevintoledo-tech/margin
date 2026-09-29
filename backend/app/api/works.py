@@ -10,8 +10,10 @@ from app.database import get_db
 # Through the package, per CLAUDE.md: app.models.__init__ imports every model,
 # so Base.metadata is complete without importing Base directly for its side
 # effect.
-from app.models import Book, Shelf, Work
+from app.models import Book, Genre, Shelf, Work
 from app.schemas.book import ShelfIn, ShelfOut, WorkOut, work_out
+from app.schemas.genre import WorkGenresOut
+from app.services import genres as genres_service
 from app.services import search
 from app.services.auth import get_current_user, get_current_user_optional
 from app.services.works import canonical_work, load_work_presentation
@@ -162,3 +164,38 @@ async def remove_from_shelf(
         raise HTTPException(status_code=404, detail="Shelf entry not found")
 
     await db.delete(shelf)
+
+
+async def _genre_or_404(slug: str, db: AsyncSession) -> Genre:
+    genre = (await db.execute(select(Genre).where(Genre.slug == slug))).scalar_one_or_none()
+    if genre is None:
+        raise HTTPException(status_code=404, detail="Genre not found")
+    return genre
+
+
+@router.get("/{work_id}/genres", response_model=WorkGenresOut)
+async def get_work_genres(work_id: UUID, db: AsyncSession = Depends(get_db),
+                          current_user=Depends(get_current_user_optional)):
+    """The book's effective genres; for a librarian, also the vetoed ones."""
+    work = await _get_work_or_404(work_id, db)
+    return await genres_service.work_genres_payload(db, work, current_user)
+
+
+@router.put("/{work_id}/genres/{slug}", response_model=WorkGenresOut)
+async def vote_genre(work_id: UUID, slug: str, db: AsyncSession = Depends(get_db),
+                     current_user=Depends(get_current_user)):
+    """Tag the book with a genre from the taxonomy. Idempotent; at most 5 per reader per book."""
+    work, genre = await _get_work_or_404(work_id, db), await _genre_or_404(slug, db)
+    try:
+        work = await genres_service.vote(db, current_user, work, genre)
+    except genres_service.GenreRefused as exc:
+        raise HTTPException(status_code=422, detail=exc.message) from None
+    return await genres_service.work_genres_payload(db, work, current_user)
+
+
+@router.delete("/{work_id}/genres/{slug}", response_model=WorkGenresOut)
+async def unvote_genre(work_id: UUID, slug: str, db: AsyncSession = Depends(get_db),
+                       current_user=Depends(get_current_user)):
+    work, genre = await _get_work_or_404(work_id, db), await _genre_or_404(slug, db)
+    work = await genres_service.unvote(db, current_user, work, genre)
+    return await genres_service.work_genres_payload(db, work, current_user)

@@ -12,10 +12,24 @@ from __future__ import annotations
 from typing import Iterable, Mapping, Sequence
 from uuid import UUID
 
-from sqlalchemy import delete, select, text
+from sqlalchemy import Text, and_, cast, delete, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import aliased
 
-from app.models import INFERENCE_SOURCES, GenreInference, Work
+from app.models import (
+    INFERENCE_SOURCES,
+    CatalogCorrection,
+    CorrectionOp,
+    Genre,
+    GenreInference,
+    GenreVote,
+    User,
+    Work,
+    WorkGenre,
+    WorkKind,
+    effective_work_genres as ewg,
+)
+from app.schemas.genre import GenreRef, WorkGenreOut, WorkGenresOut
 from app.services.genre_inference import infer_genres, shipped_taxonomy
 
 # One statement pair for one work, many, or all (:all). Votes and inferences
@@ -147,3 +161,124 @@ async def absorb(db: AsyncSession, source: Work, target: Work) -> None:
     await repoint_vetoes(db, source.id, target.id)
     await db.execute(text("DELETE FROM work_genres WHERE work_id = :src"), params)
     await recompute(db, [target.id])
+
+
+MAX_GENRES_PER_READER = 5
+
+
+class GenreRefused(Exception):
+    """A vote the rules refuse. ``message`` is shown to the reader verbatim (422)."""
+
+    def __init__(self, message: str):
+        super().__init__(message)
+        self.message = message
+
+
+async def _live(db: AsyncSession, work: Work) -> Work:
+    # One hop, like canonical_work (tombstone chains are flattened on merge).
+    # Not imported from works.py: that module imports this one.
+    if work.merged_into_id is None:
+        return work
+    return await db.get(Work, work.merged_into_id) or work
+
+
+async def _vetoed(db: AsyncSession, work_id: UUID, genre_id: UUID) -> bool:
+    return bool(await db.scalar(select(WorkGenre.vetoed).where(
+        WorkGenre.work_id == work_id, WorkGenre.genre_id == genre_id)))
+
+
+async def _my_live_votes(db: AsyncSession, user_id: UUID, work_id: UUID) -> set[UUID]:
+    """The reader's votes that count: on live genres a librarian hasn't vetoed."""
+    rows = await db.execute(
+        select(GenreVote.genre_id)
+        .join(Genre, Genre.id == GenreVote.genre_id)
+        .join(WorkGenre, and_(WorkGenre.work_id == GenreVote.work_id, WorkGenre.genre_id == GenreVote.genre_id))
+        .where(GenreVote.user_id == user_id, GenreVote.work_id == work_id,
+               Genre.retired_at.is_(None), WorkGenre.vetoed.is_(False)))
+    return set(rows.scalars())
+
+
+async def vote(db: AsyncSession, user: User, work: Work, genre: Genre) -> Work:
+    work = await _live(db, work)
+    if work.kind is WorkKind.collection:
+        raise GenreRefused("Box sets and omnibuses take their books' genres, not their own.")
+    if genre.retired_at is not None:
+        raise GenreRefused(f"{genre.name} is no longer in the genre list.")
+    if await _vetoed(db, work.id, genre.id):
+        raise GenreRefused("A librarian removed this genre from this book.")
+    # Serialises one reader's concurrent votes on a book, so the cap holds.
+    await db.execute(select(Work.id).where(Work.id == work.id).with_for_update())
+    existing = await db.scalar(select(GenreVote.id).where(
+        GenreVote.user_id == user.id, GenreVote.work_id == work.id, GenreVote.genre_id == genre.id))
+    if existing is not None:
+        return work
+    if len(await _my_live_votes(db, user.id, work.id)) >= MAX_GENRES_PER_READER:
+        raise GenreRefused(f"You've tagged this book with {MAX_GENRES_PER_READER} genres; remove one first.")
+    db.add(GenreVote(user_id=user.id, work_id=work.id, genre_id=genre.id))
+    await recompute(db, [work.id])
+    return work
+
+
+async def unvote(db: AsyncSession, user: User, work: Work, genre: Genre) -> Work:
+    work = await _live(db, work)
+    await db.execute(delete(GenreVote).where(
+        GenreVote.user_id == user.id, GenreVote.work_id == work.id, GenreVote.genre_id == genre.id))
+    await recompute(db, [work.id])
+    return work
+
+
+async def work_genres_payload(db: AsyncSession, work: Work, user: User | None) -> WorkGenresOut:
+    parent = aliased(Genre)
+    rows = (await db.execute(
+        select(Genre.id, Genre.slug, Genre.name, parent.slug, ewg.c.score, WorkGenre.direct_votes, ewg.c.source)
+        .select_from(ewg)
+        .join(Genre, Genre.id == ewg.c.genre_id)
+        .outerjoin(parent, parent.id == Genre.parent_id)
+        .join(WorkGenre, and_(WorkGenre.work_id == ewg.c.work_id, WorkGenre.genre_id == ewg.c.genre_id))
+        .where(ewg.c.work_id == work.id)
+        .order_by(ewg.c.score.desc(), Genre.position, Genre.slug))).all()
+    mine = await _my_live_votes(db, user.id, work.id) if user is not None else None
+    genres = [
+        WorkGenreOut(slug=slug, name=name, parent_slug=parent_slug, score=score, direct_votes=direct,
+                     my_vote=None if mine is None else gid in mine)
+        for gid, slug, name, parent_slug, score, direct, _ in rows
+    ]
+    if user is not None and user.is_librarian:
+        genres += await _vetoed_rows(db, work.id)
+    return WorkGenresOut(source=rows[0][6] if rows else "none", genres=genres,
+                         my_vote_count=None if mine is None else len(mine))
+
+
+async def _vetoed_rows(db: AsyncSession, work_id: UUID) -> list[WorkGenreOut]:
+    parent = aliased(Genre)
+    rows = (await db.execute(
+        select(Genre.slug, Genre.name, parent.slug, WorkGenre.score, WorkGenre.direct_votes, CatalogCorrection.id)
+        .select_from(WorkGenre)
+        .join(Genre, Genre.id == WorkGenre.genre_id)
+        .outerjoin(parent, parent.id == Genre.parent_id)
+        .join(CatalogCorrection, and_(
+            CatalogCorrection.work_id == WorkGenre.work_id,
+            CatalogCorrection.op == CorrectionOp.veto_genre,
+            CatalogCorrection.reverted_at.is_(None),
+            CatalogCorrection.payload["genre_id"].astext == cast(WorkGenre.genre_id, Text)))
+        .where(WorkGenre.work_id == work_id, WorkGenre.vetoed.is_(True))
+        .order_by(Genre.position, Genre.slug))).all()
+    return [WorkGenreOut(slug=s, name=n, parent_slug=p, score=sc, direct_votes=d, vetoed=True, veto_id=cid)
+            for s, n, p, sc, d, cid in rows]
+
+
+async def top_genres(db: AsyncSession, work_ids: Sequence[UUID], limit: int = 3) -> dict[UUID, list[GenreRef]]:
+    """The top ``limit`` effective genres per work, in one query."""
+    if not work_ids:
+        return {}
+    rank = func.row_number().over(
+        partition_by=ewg.c.work_id, order_by=(ewg.c.score.desc(), Genre.position, Genre.slug)).label("rn")
+    ranked = (select(ewg.c.work_id, Genre.slug, Genre.name, rank)
+              .join(Genre, Genre.id == ewg.c.genre_id)
+              .where(ewg.c.work_id.in_(list(work_ids))).subquery())
+    rows = (await db.execute(select(ranked.c.work_id, ranked.c.slug, ranked.c.name)
+                             .where(ranked.c.rn <= limit).order_by(ranked.c.work_id, ranked.c.rn))).all()
+    out: dict[UUID, list[GenreRef]] = {}
+    for work_id, slug, name in rows:
+        out.setdefault(work_id, []).append(GenreRef(slug=slug, name=name))
+    return out

@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict
 
 from app.models.shelf import ShelfStatus
 from app.models.work import Work, WorkKind
+from app.schemas.genre import GenreRef
 from app.schemas.series import SeriesRef
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -60,6 +61,7 @@ class WorkOut(BaseModel):
     edition_count: int = 0
     shelf_status: ShelfStatus | None = None
     series: SeriesRef | None = None
+    top_genres: list[GenreRef] = []
 
 
 def work_out(
@@ -80,6 +82,7 @@ def work_out(
         edition_count=presentation.edition_count if presentation else 0,
         shelf_status=shelf_status,
         series=presentation.series if presentation else None,
+        top_genres=list(presentation.top_genres) if presentation else [],
     )
 
 

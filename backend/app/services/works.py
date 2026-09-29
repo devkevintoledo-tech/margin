@@ -20,6 +20,7 @@ from app.models.thread import Thread
 from app.models.series import Series
 from app.models.catalog import WorkAlias
 from app.models.work import Work, WorkKind, WorkProvenance, WorkSource
+from app.schemas.genre import GenreRef
 from app.schemas.series import SeriesRef
 from app.services import open_library
 from app.services import genres as genres_service
@@ -470,6 +471,7 @@ class WorkPresentation(NamedTuple):
     description: str | None
     edition_count: int
     series: SeriesRef | None
+    top_genres: tuple[GenreRef, ...] = ()
 
 
 async def load_work_presentation(
@@ -492,6 +494,7 @@ async def load_work_presentation(
       has 26 editions while we may have ingested none, and the number is shown
       as a fact about the book, not about our database.
     * series — the room the work's card links to; singletons included.
+    * top genres — up to three effective genres, the badges a result row shows.
 
     Kept out of the routes so both ``api/works.py`` and ``api/genres.py`` build
     the same shape, and out of the schema layer so nothing lazy-loads a
@@ -526,12 +529,14 @@ async def load_work_presentation(
         .where(Work.id.in_(work_ids))
     )
     rows = (await db.execute(stmt)).all()
+    tops = await genres_service.top_genres(db, work_ids)
     return {
         row[0]: WorkPresentation(
             cover_url=row[2] or ol_cover_url(row[1]),
             description=row[3] or row[4],
             edition_count=row[5] or row[6],
             series=SeriesRef(slug=row[7], name=row[8], kind=row[9]) if row[7] else None,
+            top_genres=tuple(tops.get(row[0], ())),
         )
         for row in rows
     }
