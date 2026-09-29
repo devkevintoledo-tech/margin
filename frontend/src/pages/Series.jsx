@@ -90,14 +90,16 @@ function ResultLine({ correction, currentSlug, onUndone }) {
   const revert = useRevertCorrection()
   const [state, setState] = useState(correction)
   return (
-    <div className="flex flex-col gap-2 border-b border-line pb-3">
-      <p role="status" aria-label="Librarian fix result" className="text-xs flex flex-wrap items-center gap-3">
-        {state.exportable
-          ? <span className="text-ok">exported</span>
-          : <span className="text-warning">runtime-only: {state.runtime_only_reason}</span>}
-        {state.reverted_at ? (
-          <span className="text-ink-dim">undone</span>
-        ) : state.undoable && (
+    // A group, not one live region: only the outcome is announced, not the controls.
+    <div role="group" aria-label="Librarian fix result" className="flex flex-col gap-2 border-b border-line pb-3">
+      <p className="text-xs flex flex-wrap items-center gap-3">
+        <span role="status">
+          {state.exportable
+            ? <span className="text-ok">exported</span>
+            : <span className="text-warning">runtime-only: {state.runtime_only_reason}</span>}
+          {state.reverted_at && <span className="text-ink-dim ml-3">undone</span>}
+        </span>
+        {!state.reverted_at && state.undoable && (
           <button type="button" className="btn-ghost text-xs" disabled={revert.isPending}
                   onClick={() => revert.mutate(state.id, { onSuccess: (c) => { setState({ ...state, ...c }); onUndone?.() } })}>
             undo
@@ -128,7 +130,12 @@ function Series() {
   const location = useLocation()
   const editing = !!user?.is_librarian && searchParams.get('edit') === '1'
   const [action, setAction] = useState(null) // { kind, work? } while the panel is open
-  const [result, setResult] = useState(location.state?.correction ?? null)
+  // The last fix, shown only on the pages it concerns: where it was made, and
+  // the room its book now lives in. The page component survives a slug change.
+  const [result, setResult] = useState(() => {
+    const correction = location.state?.correction
+    return correction ? { correction, pages: [slug, correction.room_slug] } : null
+  })
   const editHref = (() => {
     const next = new URLSearchParams(searchParams)
     if (editing) next.delete('edit')
@@ -145,7 +152,8 @@ function Series() {
   // A promoted singleton's old slug answers with its survivor.
   useEffect(() => {
     if (series && series.slug !== slug) {
-      navigate(`/series/${series.slug}?${searchParams}`, { replace: true })
+      const qs = searchParams.toString()
+      navigate(`/series/${series.slug}${qs ? `?${qs}` : ''}`, { replace: true })
     }
   }, [series, slug, navigate, searchParams])
 
@@ -239,7 +247,9 @@ function Series() {
           <Link to={editHref} className="text-xs text-accent hover:text-accent-hover">{editing ? '[done]' : '[edit]'}</Link>
         )}
       </div>
-      {result && <ResultLine key={result.id} correction={result} currentSlug={series.slug} />}
+      {result && result.pages.includes(series.slug) && (
+        <ResultLine key={result.correction.id} correction={result.correction} currentSlug={series.slug} />
+      )}
 
       <header className="flex flex-col gap-3 border-b border-line pb-6">
         {/* Serif is reserved for book titles; a series name is one. */}
@@ -339,7 +349,7 @@ function Series() {
         <LibrarianPanel
           action={{ ...action, series }}
           onClose={() => setAction(null)}
-          onDone={(correction) => { setAction(null); setResult(correction) }}
+          onDone={(correction) => { setAction(null); setResult({ correction, pages: [series.slug, correction.room_slug] }) }}
         />
       )}
     </main>
