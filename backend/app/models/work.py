@@ -55,6 +55,8 @@ class Work(Base):
     __table_args__ = (
         UniqueConstraint("source", "external_id", name="uq_works_source_external_id"),
         Index("ix_works_search_doc", "search_doc", postgresql_using="gin"),
+        Index("ix_works_author_doc", "author_doc", postgresql_using="gin"),
+        Index("ix_works_first_publish_year", "first_publish_year"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -141,6 +143,15 @@ class Work(Base):
             "setweight(to_tsvector('english', coalesce(subjects, '')), 'C')",
             persisted=True,
         ),
+        nullable=False,
+    )
+    # Author-only document for the search filter. 'simple', not 'english':
+    # names are not words to stem. Declared twice, like search_doc — here for
+    # create_all, in migration c7d2e4f6a8b1 for the real database — and the two
+    # expressions must stay identical.
+    author_doc: Mapped[str] = mapped_column(
+        TSVECTOR,
+        Computed("to_tsvector('simple', coalesce(author, ''))", persisted=True),
         nullable=False,
     )
     # The catalog release this row came from; null = created at runtime by search.

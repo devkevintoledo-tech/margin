@@ -1,6 +1,14 @@
 from app.models.base import Base
 from app.models.user import User, AuthProvider
-from app.models.genre import Genre
+from app.models.genre import (
+    EFFECTIVE_WORK_GENRES_VIEW,
+    INFERENCE_SOURCES,
+    Genre,
+    GenreInference,
+    GenreVote,
+    WorkGenre,
+    effective_work_genres,
+)
 from app.models.book import Book
 from app.models.shelf import Shelf, ShelfStatus
 from app.models.thread import Thread
@@ -18,6 +26,12 @@ __all__ = [
     "User",
     "AuthProvider",
     "Genre",
+    "GenreInference",
+    "GenreVote",
+    "WorkGenre",
+    "EFFECTIVE_WORK_GENRES_VIEW",
+    "INFERENCE_SOURCES",
+    "effective_work_genres",
     "Book",
     "Shelf",
     "ShelfStatus",
