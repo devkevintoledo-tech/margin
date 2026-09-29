@@ -464,7 +464,7 @@ test('a freshly fixed book shows who fixed it and when, in edit mode', async ({ 
   const saga = `E2E Marker ${Date.now()}`
   await page.getByLabel('Find a series').fill(saga)
   await page.getByRole('radio', { name: `new series: ${saga}` }).check()
-  await page.getByLabel('Reason').fill('e2e: marker')
+  await page.getByLabel('Reason', { exact: true }).fill('e2e: marker')
   await page.getByRole('button', { name: 'Move', exact: true }).click()
   const status = page.getByRole('group', { name: 'Librarian fix result' })
   const follow = status.getByRole('link', { name: /go to its page/ })

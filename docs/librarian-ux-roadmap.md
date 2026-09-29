@@ -264,3 +264,7 @@ _(Add dated notes here as items land: surprises, changed names, follow-ups.)_
     on `[data-work-row]`; `c` (cover) only when 06 has landed.
 - **2026-09-29 — 01 done (#15):** the `[edit]` toggle is a button now; e2e and
   later plans must use `getByRole('button', { name: '[edit]' })`.
+- **2026-09-29 — 02 (in review):** Playwright's `getByLabel('Reason')` is a
+  substring match and now also hits the `Quick reasons` group; every e2e
+  step must use `getByLabel('Reason', { exact: true })`. Plans 03, 07, 08, 11,
+  12 and 16 are updated to match.
