@@ -13,6 +13,7 @@ import VoteControl from '../components/VoteControl'
 import { relativeTime } from '../components/Post'
 import { useStatusBar } from '../store/status'
 import useAuthStore from '../store/auth'
+import useLibrarianStore from '../store/librarian'
 
 /**
  * A book's only page. A series lists its books — each with nothing but a
@@ -119,7 +120,7 @@ function ResultLine({ correction, currentSlug, onUndone }) {
 
 function Series() {
   const { slug } = useParams()
-  const [searchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = useSearchParams()
   const navigate = useNavigate()
   const user = useAuthStore((s) => s.user)
   const voteMutation = useVoteThread()
@@ -128,7 +129,12 @@ function Series() {
   const [filter, setFilter] = useState(null) // a work id, or null for all books
   const currentRef = useRef(null)
   const location = useLocation()
-  const editing = !!user?.is_librarian && searchParams.get('edit') === '1'
+  // Edit mode is sticky (store/librarian.js) and only ever a librarian's: a
+  // reader who inherits `editMode: true` on a shared browser sees nothing.
+  const isLibrarian = !!user?.is_librarian
+  const editMode = useLibrarianStore((s) => s.editMode)
+  const setEditMode = useLibrarianStore((s) => s.setEditMode)
+  const editing = isLibrarian && editMode
   const [action, setAction] = useState(null) // { kind, work? } while the panel is open
   // The last fix, shown only on the pages it concerns: where it was made, and
   // the room its book now lives in. The page component survives a slug change.
@@ -136,13 +142,6 @@ function Series() {
     const correction = location.state?.correction
     return correction ? { correction, pages: [slug, correction.room_slug] } : null
   })
-  const editHref = (() => {
-    const next = new URLSearchParams(searchParams)
-    if (editing) next.delete('edit')
-    else next.set('edit', '1')
-    const qs = next.toString()
-    return `/series/${slug}${qs ? `?${qs}` : ''}`
-  })()
 
   const { data: series, isLoading, isError } = useSeries(slug)
   // A fix can take the filtered book out of the room; the filter goes with it.
@@ -157,6 +156,18 @@ function Series() {
     }
   }, [series, slug, navigate, searchParams])
 
+  // ?edit=1 is a deep link into edit mode (fix-log and "go to its page" links).
+  // The store carries it from here, so the address drops it; otherwise a reload
+  // after [done] would turn edit mode back on. The state rides along: the
+  // "go to its page" link carries the fix report in it.
+  useEffect(() => {
+    if (!isLibrarian || searchParams.get('edit') !== '1') return
+    setEditMode(true)
+    const next = new URLSearchParams(searchParams)
+    next.delete('edit')
+    setSearchParams(next, { replace: true, state: location.state })
+  }, [isLibrarian, searchParams, setSearchParams, setEditMode, location.state])
+
   const bookParam = searchParams.get('book')
   const currentId = series?.works.some((w) => w.id === bookParam) ? bookParam : null
   useEffect(() => {
@@ -166,7 +177,7 @@ function Series() {
   const isSeries = series?.kind === 'series'
   const threadCount = threads?.length ?? 0
   useStatusBar({
-    mode: 'SERIES',
+    mode: editing ? 'EDIT' : 'SERIES',
     path: series ? `~/series/${series.slug}` : '~/series',
     facts: [`${threadCount} ${threadCount === 1 ? 'thread' : 'threads'}`],
   })
@@ -243,8 +254,11 @@ function Series() {
     <main className="max-w-shell mx-auto px-4 py-6 flex flex-col gap-10">
       <div className="flex items-center justify-between gap-3">
         <PathHeader segments={[{ label: 'series', to: '/' }, { label: series.name }]} />
-        {user?.is_librarian && (
-          <Link to={editHref} className="text-xs text-accent hover:text-accent-hover">{editing ? '[done]' : '[edit]'}</Link>
+        {isLibrarian && (
+          <button type="button" onClick={() => setEditMode(!editing)}
+                  className="text-xs text-accent hover:text-accent-hover transition-colors duration-fast">
+            {editing ? '[done]' : '[edit]'}
+          </button>
         )}
       </div>
       {result && result.pages.includes(series.slug) && (

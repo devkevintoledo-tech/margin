@@ -8,6 +8,8 @@ vi.mock('../api/client', () => ({ default: { get: vi.fn(), post: vi.fn(), put: v
 
 import client from '../api/client'
 import useAuthStore from '../store/auth'
+import useLibrarianStore from '../store/librarian'
+import useStatusStore from '../store/status'
 import Series from './Series'
 
 const SAGA = {
@@ -48,6 +50,7 @@ function Where() {
   return (
     <>
       <p data-testid="where">{loc.pathname}</p>
+      <p data-testid="search">{loc.search}</p>
       <button type="button" onClick={() => navigate('/series/elsewhere')}>go elsewhere</button>
     </>
   )
@@ -70,6 +73,8 @@ function renderPage(entry) {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  localStorage.clear()
+  useLibrarianStore.setState({ editMode: false })
   // Signed in, so ShelfButton renders its status rather than a login link.
   useAuthStore.setState({ token: 't', user: { id: 'u1', username: 'reader' } })
 })
@@ -188,7 +193,7 @@ describe('Series page', () => {
     mockApi(SAGA)
     renderPage('/series/red-rising?edit=1')
     await screen.findByRole('list', { name: 'Books in this series' })
-    expect(screen.queryByRole('link', { name: '[edit]' })).toBeNull()
+    expect(screen.queryByRole('button', { name: '[edit]' })).toBeNull()
     expect(screen.queryByRole('button', { name: /^move/ })).toBeNull()
   })
 
@@ -203,7 +208,7 @@ describe('Series page', () => {
     }
     expect(within(first).getByText('librarian-placed')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'rename series' })).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: '[done]' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '[done]' })).toBeInTheDocument()
   })
 
   it('reports a fix and undoes it', async () => {
@@ -304,5 +309,92 @@ describe('Series page', () => {
     await userEvent.click(screen.getByRole('button', { name: 'go elsewhere' }))
     await screen.findByRole('heading', { level: 1, name: 'Elsewhere' })
     expect(screen.queryByRole('group', { name: 'Librarian fix result' })).toBeNull()
+  })
+})
+
+describe('Sticky edit mode', () => {
+  const LIBRARIAN = { id: 'u1', username: 'lib', is_librarian: true }
+  const READER = { id: 'u2', username: 'reader' }
+
+  it('stays in edit mode on the next book', async () => {
+    useAuthStore.setState({ token: 't', user: LIBRARIAN })
+    useLibrarianStore.setState({ editMode: true })
+    mockApi({ ...SAGA, id: 's1' })
+    renderPage('/series/red-rising')
+    expect(await screen.findByRole('button', { name: 'move Red Rising' })).toBeInTheDocument()
+
+    mockApi({ ...SAGA, id: 's2', slug: 'elsewhere', name: 'Elsewhere' })
+    await userEvent.click(screen.getByRole('button', { name: 'go elsewhere' }))
+    await screen.findByRole('heading', { level: 1, name: 'Elsewhere' })
+    expect(screen.getByRole('button', { name: 'move Red Rising' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '[done]' })).toBeInTheDocument()
+  })
+
+  it('[edit] turns it on and [done] turns it off, without touching the address', async () => {
+    useAuthStore.setState({ token: 't', user: LIBRARIAN })
+    mockApi({ ...SAGA, id: 's1' })
+    renderPage('/series/red-rising')
+    await userEvent.click(await screen.findByRole('button', { name: '[edit]' }))
+    expect(useLibrarianStore.getState().editMode).toBe(true)
+    expect(screen.getByRole('button', { name: 'move Red Rising' })).toBeInTheDocument()
+    expect(screen.getByTestId('search')).toHaveTextContent(/^$/)
+
+    await userEvent.click(screen.getByRole('button', { name: '[done]' }))
+    expect(useLibrarianStore.getState().editMode).toBe(false)
+    expect(screen.queryByRole('button', { name: 'move Red Rising' })).toBeNull()
+    expect(screen.getByRole('button', { name: '[edit]' })).toBeInTheDocument()
+  })
+
+  it('?edit=1 turns it on and leaves the rest of the address alone', async () => {
+    useAuthStore.setState({ token: 't', user: LIBRARIAN })
+    mockApi({ ...SAGA, id: 's1' })
+    renderPage('/series/red-rising?book=b2&edit=1')
+    expect(await screen.findByRole('button', { name: 'move Golden Son' })).toBeInTheDocument()
+    expect(useLibrarianStore.getState().editMode).toBe(true)
+    await waitFor(() => expect(screen.getByTestId('search')).toHaveTextContent('?book=b2'))
+    const list = screen.getByRole('list', { name: 'Books in this series' })
+    expect(within(list).getAllByRole('listitem')[1]).toHaveAttribute('aria-current', 'true')
+  })
+
+  it('keeps a fix report carried in by a ?edit=1 link', async () => {
+    useAuthStore.setState({ token: 't', user: LIBRARIAN })
+    mockApi({ ...SAGA, id: 's1' })
+    const correction = { id: 'c9', op: 'set_series', exportable: true, undoable: true, room_slug: 'red-rising' }
+    renderPage({ pathname: '/series/red-rising', search: '?edit=1', state: { correction } })
+    await waitFor(() => expect(screen.getByTestId('search')).toHaveTextContent(/^$/))
+    const line = await screen.findByRole('group', { name: 'Librarian fix result' })
+    expect(within(line).getByRole('button', { name: 'undo' })).toBeInTheDocument()
+  })
+
+  it('never shows edit mode to a reader, even with it stored', async () => {
+    useAuthStore.setState({ token: 't', user: READER })
+    useLibrarianStore.setState({ editMode: true })
+    mockApi({ ...SAGA, id: 's1' })
+    renderPage('/series/red-rising')
+    await screen.findByRole('list', { name: 'Books in this series' })
+    expect(screen.queryByRole('button', { name: /^move/ })).toBeNull()
+    expect(screen.queryByRole('button', { name: '[edit]' })).toBeNull()
+    expect(screen.queryByRole('button', { name: '[done]' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'rename series' })).toBeNull()
+  })
+
+  it("a reader's ?edit=1 does not turn it on", async () => {
+    useAuthStore.setState({ token: 't', user: READER })
+    mockApi({ ...SAGA, id: 's1' })
+    renderPage('/series/red-rising?edit=1')
+    await screen.findByRole('list', { name: 'Books in this series' })
+    expect(useLibrarianStore.getState().editMode).toBe(false)
+    expect(screen.queryByRole('button', { name: /^move/ })).toBeNull()
+  })
+
+  it('names the mode in the status bar', async () => {
+    useAuthStore.setState({ token: 't', user: LIBRARIAN })
+    useLibrarianStore.setState({ editMode: true })
+    mockApi({ ...SAGA, id: 's1' })
+    renderPage('/series/red-rising')
+    await screen.findByRole('list', { name: 'Books in this series' })
+    await waitFor(() => expect(useStatusStore.getState().mode).toBe('EDIT'))
+    await userEvent.click(screen.getByRole('button', { name: '[done]' }))
+    await waitFor(() => expect(useStatusStore.getState().mode).toBe('SERIES'))
   })
 })
