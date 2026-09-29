@@ -105,7 +105,7 @@ No moderation surface exists today (no roles, flags, or admin tools).
 | Status | Feature | Touches |
 | --- | --- | --- |
 | ⬜ | **Roles & permissions** — `role` on `User`, admin dependency. Librarian tools start with an `is_librarian` flag that must not preclude this. | `backend/app/models/user.py`, `backend/app/services/auth.py` |
-| 🟡 | **Librarian tools** — in-app merge, split, move-to-series, reorder, rename, remove and dissolve from the series page, logged in `catalog_corrections`, undoable (except merge/split), and exported to `pipeline/overrides/` so releases keep them. Design approved, not yet planned. | [spec](docs/superpowers/specs/2026-09-28-librarian-tools-design.md), new `services/librarian.py`, `api/librarian.py` |
+| ✅ | **Librarian tools** — in-app merge, split, move-to-series, reorder, rename, remove and dissolve from the series page (`?edit=1`), logged in `catalog_corrections`, undoable (except merge/split), exported to `pipeline/overrides/z-librarian.yaml` by `scripts.export_overrides`; fix log at `/librarian`. | [spec](docs/superpowers/specs/2026-09-28-librarian-tools-design.md), [plan](docs/superpowers/plans/2026-09-28-librarian-tools.md), `services/librarian/`, `api/librarian.py`, `scripts/{grant_librarian,export_overrides}.py`, `pages/Series.jsx`, `pages/Librarian.jsx`, `components/LibrarianPanel.jsx` |
 | ⬜ | **Reporting / flagging** — report threads/posts; moderation queue. | new model + endpoints |
 | ⬜ | **Admin dashboard** — review reports, remove content, manage users. | new frontend area |
 | ⬜ | **Genre CRUD** — genres are seed-only via migration today; admin create/edit. | `backend/app/api/genres.py` |
