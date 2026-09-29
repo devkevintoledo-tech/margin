@@ -186,3 +186,15 @@ def write_release(tmp_path):
         return folder
 
     return write
+
+
+@pytest_asyncio.fixture
+async def taxonomy(db_session):
+    """The shipped taxonomy, synced: ``{slug: Genre}``. Opt-in — most tests need no genres."""
+    from sqlalchemy import select as _select
+
+    from app.services.genre_inference import shipped_taxonomy
+    from app.services.genre_taxonomy import sync_genres
+
+    await sync_genres(db_session, shipped_taxonomy())
+    return {g.slug: g for g in (await db_session.execute(_select(Genre))).scalars()}
