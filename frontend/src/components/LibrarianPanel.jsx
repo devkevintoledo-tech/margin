@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import { confirmationOf, useLibrarianAction, useWorkEditions } from '../api/librarian'
+import { confirmationOf, useLibrarianAction, useMergePreview, useWorkEditions } from '../api/librarian'
 import { errorMessage } from '../api/errors'
+import MergePreview from './librarian/MergePreview'
 import ReasonField from './librarian/ReasonField'
 import { SeriesPicker, WorkPicker } from './librarian/pickers'
 
@@ -22,6 +23,11 @@ function placeOf(pick, series) {
 }
 const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`
 
+/** [merges away, survives]: the row's book into the picked one, unless swapped. */
+function mergeSides(work, f) {
+  return f.swapped ? [f.into, work] : [work, f.into]
+}
+
 function request(action, f, confirm) {
   const { kind, work, series } = action
   const reason = f.reason.trim()
@@ -39,8 +45,10 @@ function request(action, f, confirm) {
       return { path: `series/${series.id}/position`, body: { reason, work_id: work.id, position } }
     case 'remove':
       return { path: `series/${series.id}/remove`, body: { reason, work_id: work.id } }
-    case 'merge':
-      return { path: `works/${work.id}/merge`, body: { reason, into_work_id: f.into?.id, confirm } }
+    case 'merge': {
+      const [from, to] = mergeSides(work, f)
+      return { path: `works/${from.id}/merge`, body: { reason, into_work_id: to?.id, confirm } }
+    }
     case 'split':
       return { path: `works/${work.id}/split`, body: { reason, edition_ids: f.editions, confirm } }
     case 'rename':
@@ -82,10 +90,11 @@ function EditionPicker({ editions, loaded, value, onChange }) {
 function Consequences({ action, fields, counts }) {
   const { work } = action
   if (action.kind === 'merge') {
+    const [from, to] = mergeSides(work, fields)
     return (
       <p className="text-sm text-ink">
-        <span className="font-serif italic">{work.title}</span> ({work.author}) will merge into{' '}
-        <span className="font-serif italic">{fields.into.title}</span> ({fields.into.author}).{' '}
+        <span className="font-serif italic">{from.title}</span> ({from.author}) will merge into{' '}
+        <span className="font-serif italic">{to.title}</span> ({to.author}).{' '}
         {plural(counts.threads, 'thread')} and {plural(counts.shelves, 'shelf entry', 'shelf entries')} move.{' '}
         <span className="text-danger">This cannot be undone.</span>
       </p>
@@ -120,10 +129,17 @@ function AddNotice({ pick, series }) {
   )
 }
 
+/** The preview, or why there is none. A refusal here is final for this pair. */
+function PreviewSlot({ query, onSwap }) {
+  if (query.isError) return <p className="alert-danger">{errorMessage(query.error)}</p>
+  if (!query.data) return <p className="text-ink-dim text-xs">loading preview</p>
+  return <MergePreview preview={query.data} onSwap={onSwap} />
+}
+
 function LibrarianPanel({ action, onClose, onDone }) {
   const { kind, work, series } = action
   const [fields, setFields] = useState({
-    reason: '', name: '', target: null, into: null, editions: [], pick: null,
+    reason: '', name: '', target: null, into: null, editions: [], pick: null, swapped: false,
     // Only a reorder starts from the current place; a move names its own.
     position: kind === 'position' && work?.position != null ? String(work.position) : '',
   })
@@ -131,10 +147,15 @@ function LibrarianPanel({ action, onClose, onDone }) {
   const mutation = useLibrarianAction()
   const editionsQuery = useWorkEditions(kind === 'split' ? work.id : null)
   const editions = editionsQuery.data ?? []
-  const set = (key) => (value) => {
+  const patch = (changes) => {
     if (mutation.isError) mutation.reset() // a refusal answered the old values, not these
-    setFields((f) => ({ ...f, [key]: value }))
+    setFields((f) => ({ ...f, ...changes }))
   }
+  const set = (key) => (value) => patch({ [key]: value })
+  const [from, to] = kind === 'merge' && fields.into ? mergeSides(work, fields) : [null, null]
+  const preview = useMergePreview(from?.id, to?.id)
+  // Counts from the server described the other direction; ask again.
+  const swap = () => { patch({ swapped: !fields.swapped }); setCounts(null) }
   const dialogRef = useRef(null)
   useEffect(() => {
     const opener = document.activeElement
@@ -153,9 +174,10 @@ function LibrarianPanel({ action, onClose, onDone }) {
     if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus() }
     else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus() }
   }
+  const subject = from ?? work // a swapped merge is about the picked book
   const title = kind === 'add'
     ? `Add a book to ${series.name}`
-    : `${TITLES[kind]}${work ? ` ${work.title}` : ` ${series.name}`}`
+    : `${TITLES[kind]}${subject ? ` ${subject.title}` : ` ${series.name}`}`
 
   const submit = (confirm) => {
     mutation.mutate(request(action, fields, confirm), {
@@ -177,6 +199,7 @@ function LibrarianPanel({ action, onClose, onDone }) {
 
         {counts ? (
           <div className="flex flex-col gap-3">
+            {kind === 'merge' && <PreviewSlot query={preview} onSwap={swap} />}
             <Consequences action={action} fields={fields} counts={counts} />
             <div className="flex gap-3">
               <button type="button" className="btn-primary text-xs" onClick={() => submit(true)} disabled={mutation.isPending}>
@@ -202,8 +225,10 @@ function LibrarianPanel({ action, onClose, onDone }) {
               </div>
             )}
             {kind === 'merge' && (
-              <WorkPicker label="Find the book to keep" exclude={work.id} value={fields.into} onChange={set('into')} />
+              <WorkPicker label="Find the book to keep" exclude={work.id} value={fields.into}
+                          onChange={(w) => patch({ into: w, swapped: false })} />
             )}
+            {kind === 'merge' && fields.into && <PreviewSlot query={preview} onSwap={swap} />}
             {kind === 'split' && <EditionPicker editions={editions} loaded={editionsQuery.isSuccess} value={fields.editions} onChange={set('editions')} />}
             {kind === 'rename' && (
               <div>
@@ -216,7 +241,8 @@ function LibrarianPanel({ action, onClose, onDone }) {
               <p className="alert-danger">{errorMessage(mutation.error)}</p>
             )}
             <button type="submit" className="btn-primary text-xs self-start"
-                    disabled={!ready(kind, fields, editions, series) || mutation.isPending}>
+                    disabled={!ready(kind, fields, editions, series) || mutation.isPending
+                              || (kind === 'merge' && !preview.isSuccess)}>
               {TITLES[kind]}
             </button>
           </form>
