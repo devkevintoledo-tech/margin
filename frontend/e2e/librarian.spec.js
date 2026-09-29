@@ -144,3 +144,34 @@ test('a librarian previews a merge side by side and swaps the survivor', async (
   await page.keyboard.press('Escape')
   await expect(dialog).toBeHidden()
 })
+
+// A librarian checks two search results, opens merge…, sees both side by
+// side with the first merging into the second, swaps, and backs out.
+test('a librarian selects two search results and previews their merge', async ({ page }) => {
+  const user = await registerViaUi(page)
+  grantLibrarian(user)
+  await page.reload()
+
+  await page.goto('/search?q=dune')
+  await page.getByRole('button', { name: 'select', exact: true }).click()
+  const boxes = page.getByRole('checkbox', { name: /^select / })
+  await expect(boxes.nth(1)).toBeVisible()
+  await boxes.nth(0).check()
+  await boxes.nth(1).check()
+  await expect(page).toHaveURL(/\/search\?q=dune$/) // selecting did not navigate
+  await expect(page.getByRole('status').filter({ hasText: 'selected' })).toHaveText('2 selected')
+
+  await page.getByRole('button', { name: 'merge…' }).click()
+  const dialog = page.getByRole('dialog')
+  const preview = dialog.getByRole('group', { name: 'Merge preview' })
+  const away = preview.getByRole('region', { name: /^merges away: / })
+  await expect(away).toBeVisible()
+  const awayName = await away.getAttribute('aria-label')
+
+  await preview.getByRole('button', { name: 'swap which book survives' }).click()
+  await expect(preview.getByRole('region', { name: awayName.replace('merges away', 'survives') })).toBeVisible()
+
+  await page.keyboard.press('Escape')
+  await expect(dialog).toBeHidden()
+  await expect(boxes.nth(0)).toBeChecked() // backing out keeps the picks
+})
