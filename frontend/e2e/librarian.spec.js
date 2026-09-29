@@ -9,7 +9,7 @@ test('a librarian moves a book into a new series and undoes it', async ({ page }
   await page.reload() // useMe refreshes the stored user, now a librarian
 
   await openFirstSearchResult(page, 'the left hand of darkness')
-  await page.getByRole('link', { name: '[edit]' }).click()
+  await page.getByRole('button', { name: '[edit]' }).click()
   const books = page.getByRole('list', { name: 'Books in this series' })
   const title = await books.getByRole('heading').first().textContent()
 
@@ -34,4 +34,29 @@ test('a librarian moves a book into a new series and undoes it', async ({ page }
 
   await status.getByRole('button', { name: 'undo' }).click()
   await expect(status.getByText('undone')).toBeVisible()
+})
+
+// Edit mode is sticky: on for the next book, still on after a reload, and
+// left from the navbar. Needs the full stack and live Open Library.
+test("a librarian's edit mode follows them to the next book", async ({ page }) => {
+  const user = await registerViaUi(page)
+  grantLibrarian(user)
+  await page.reload() // useMe refreshes the stored user, now a librarian
+
+  const books = page.getByRole('list', { name: 'Books in this series' })
+  const rowMove = books.getByRole('button', { name: /^move / }).first()
+
+  await openFirstSearchResult(page, 'the dispossessed')
+  await page.getByRole('button', { name: '[edit]' }).click()
+  await expect(rowMove).toBeVisible()
+  await expect(page.getByRole('status').filter({ hasText: 'EDIT' })).toBeVisible()
+
+  await openFirstSearchResult(page, 'a wizard of earthsea') // a full navigation
+  await expect(rowMove).toBeVisible()
+  await page.reload()
+  await expect(rowMove).toBeVisible()
+
+  await page.getByRole('button', { name: '[done editing]' }).click()
+  await expect(books.getByRole('button', { name: /^move / })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: '[edit]' })).toBeVisible()
 })
