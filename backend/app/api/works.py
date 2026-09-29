@@ -77,17 +77,35 @@ async def _to_work_outs(
     ]
 
 
+def _query_error(param: str, message: str) -> HTTPException:
+    # FastAPI's own 422 shape, so api/errors.js shows `msg` and a client can read `loc`.
+    return HTTPException(status_code=422, detail=[{"loc": ["query", param], "msg": message, "type": "value_error"}])
+
+
 @router.get("/search", response_model=list[WorkOut])
 async def search_works(
-    q: str = Query(..., min_length=1),
+    q: str | None = Query(None, description="Text query. Optional when any filter is set."),
+    genre: list[str] = Query([], description="Genre slug; repeat for several (all must match)."),
+    author: str | None = Query(None, max_length=200),
+    year_from: int | None = Query(None, ge=0, le=9999),
+    year_to: int | None = Query(None, ge=0, le=9999),
     db: AsyncSession = Depends(get_db),
 ):
-    """Answer from the local catalog, filling it from Open Library when cold.
+    """Answer from the local catalog, filling it from Open Library when ``q`` is cold.
 
-    No upstream call happens on a query the database has already resolved, so
-    the common case never leaves the process.
+    No upstream call happens on a query the database has already resolved, and
+    none ever happens for filters: a filter-only search is a local browse.
     """
-    works = await search.search(db, q)
+    filters = search.SearchFilters(
+        genres=tuple(dict.fromkeys(g.strip() for g in genre if g.strip())),
+        author=(author or "").strip() or None, year_from=year_from, year_to=year_to,
+    )
+    if not (q or "").strip() and not filters.active:
+        raise _query_error("q", "Search needs a query or a filter.")
+    try:
+        works = await search.search(db, q, filters)
+    except search.InvalidFilter as exc:
+        raise _query_error(exc.param, str(exc)) from None
     return await _to_work_outs(db, works)
 
 
