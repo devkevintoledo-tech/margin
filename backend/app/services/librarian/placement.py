@@ -2,7 +2,7 @@
 
 from datetime import datetime, timezone
 
-from sqlalchemy import func, select, update
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import (
@@ -12,7 +12,7 @@ from app.models import (
 from app.services.catalog_loader import retire_series
 from app.services.librarian.errors import Conflict, Invalid
 from app.services.librarian.keys import MissingKey, exported, release_series_key, series_key_of, work_key
-from app.services.librarian.record import clean_reason, ids, live_series, live_work, member_state, record
+from app.services.librarian.record import clean_reason, ids, live_series, live_work, locked, member_state, record
 from app.services.series import canonical_series, placed_memberships, singleton_series_for, tree_memberships, unique_slug
 from app.services.series_identity import new_series_key, release_series_id, series_key
 
@@ -53,8 +53,13 @@ async def _target_for_name(db: AsyncSession, name: str | None) -> tuple[Series, 
         await db.flush()
         return found, True
     if found is None:
+        # The same name under any key: a runtime tag series ("franchise:dune
+        # saga") is the series the librarian means, not a second one beside it.
         found = (await db.execute(select(Series).where(
-            Series.external_id == key, Series.kind == SeriesKind.series))).scalars().first()
+            or_(Series.external_id == key, Series.canonical_key == series_key(name)),
+            Series.kind == SeriesKind.series, Series.merged_into_id.is_(None),
+            Series.parent_series_id.is_(None), Series.dissolved_at.is_(None),
+        ).order_by(Series.catalog_release.is_(None), Series.id))).scalars().first()
     if found is not None:
         return await canonical_series(db, found), False
     series = Series(
@@ -107,7 +112,7 @@ async def _retire_if_empty(db: AsyncSession, room: Series, target: Series, work:
 async def set_series(db: AsyncSession, user: User, work: Work, *, reason: str, series: Series | None = None,
                      new_series_name: str | None = None, position: float | None = None) -> CatalogCorrection:
     reason = clean_reason(reason)
-    work = live_work(work)
+    work = live_work(await locked(db, work))
     if (series is None) == (new_series_name is None):
         raise Invalid("Pick a series, or name a new one, not both.")
     old_room = await db.get(Series, work.series_id)
@@ -167,7 +172,7 @@ async def set_series(db: AsyncSession, user: User, work: Work, *, reason: str, s
 async def set_position(db: AsyncSession, user: User, room: Series, work: Work, position: float | None, *,
                        reason: str) -> CatalogCorrection:
     reason = clean_reason(reason)
-    room, work = live_series(room), live_work(work)
+    room, work = live_series(room), live_work(await locked(db, work))
     if room.kind is SeriesKind.singleton:
         raise Invalid("A single book has no place in a series to set.")
     if work.series_id != room.id:
@@ -203,7 +208,7 @@ async def set_position(db: AsyncSession, user: User, room: Series, work: Work, p
 async def rename_series(db: AsyncSession, user: User, series: Series, name: str, *,
                         reason: str) -> CatalogCorrection:
     reason = clean_reason(reason)
-    series = live_series(series)
+    series = live_series(await locked(db, series))
     if series.kind is SeriesKind.singleton:
         raise Invalid("A single book's page takes its book's title; it cannot be renamed.")
     if series.dissolved_at is not None:
@@ -258,7 +263,7 @@ async def _detach(db: AsyncSession, room: Series, work: Work) -> dict:
 async def remove_from_series(db: AsyncSession, user: User, room: Series, work: Work, *,
                              reason: str) -> CatalogCorrection:
     reason = clean_reason(reason)
-    room, work = live_series(room), live_work(work)
+    room, work = live_series(room), live_work(await locked(db, work))
     if room.kind is SeriesKind.singleton:
         raise Invalid("A single book's page cannot lose its book.")
     if room.dissolved_at is not None:
@@ -292,7 +297,7 @@ async def reject_series(db: AsyncSession, user: User, series: Series, *, reason:
     """Dissolve: every book goes to its own page; the room keeps its slug and its
     untagged threads, shows no books and takes no new threads."""
     reason = clean_reason(reason)
-    series = live_series(series)
+    series = live_series(await locked(db, series))
     if series.kind is SeriesKind.singleton:
         raise Invalid("A single book's page cannot be dissolved.")
     if series.dissolved_at is not None:

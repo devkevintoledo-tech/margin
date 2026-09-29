@@ -10,16 +10,37 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models import CatalogCorrection, CorrectionOp, Series, SeriesMember, Thread, User, Work
 from app.services.librarian.errors import Conflict, Invalid
 from app.services.librarian.placement import _live_count
-from app.services.librarian.record import latest_for_subject, restore_member, uuids
+from app.services.librarian.record import SERIES_SUBJECT_OPS, latest_for_subject, locked, restore_member, uuids
 
 UNDOABLE = frozenset({CorrectionOp.set_series, CorrectionOp.set_position, CorrectionOp.rename_series,
                       CorrectionOp.remove_from_series, CorrectionOp.reject_series})
 _STALE = "The book or series changed since this fix; it can no longer be undone."
 
 
+async def _subject(db: AsyncSession, c: CatalogCorrection):
+    if c.op in SERIES_SUBJECT_OPS:
+        return await db.get(Series, c.series_id) if c.series_id else None
+    return await db.get(Work, c.work_id) if c.work_id else None
+
+
+async def undoable(db: AsyncSession, c: CatalogCorrection) -> bool:
+    """What the log's undo button shows: the latest live fix on a subject that
+    still exists. revert re-checks everything else."""
+    if c.op not in UNDOABLE or c.reverted_at is not None:
+        return False
+    subject = await _subject(db, c)
+    if subject is None or subject.merged_into_id is not None:
+        return False
+    latest = await latest_for_subject(db, c)
+    return latest is not None and latest.id == c.id
+
+
 async def revert(db: AsyncSession, user: User, correction: CatalogCorrection) -> CatalogCorrection:
     if correction.op not in UNDOABLE:
         raise Invalid("Merges and splits cannot be undone.")
+    # Serialise with any fix to the same subject, and with a second undo click.
+    await locked(db, await _subject(db, correction))
+    await locked(db, correction)
     if correction.reverted_at is not None:
         raise Conflict("This fix was already undone.")
     latest = await latest_for_subject(db, correction)
@@ -40,6 +61,13 @@ async def _require_threads_in(db: AsyncSession, thread_ids: list[UUID], room_id:
         raise Conflict(_STALE)
 
 
+async def _require_absent(db: AsyncSession, states: list[dict]) -> None:
+    """A membership undo would re-create already exists (a release re-added it)."""
+    for state in states:
+        if await db.get(SeriesMember, (UUID(state["series_id"]), UUID(state["work_id"]))) is not None:
+            raise Conflict(_STALE)
+
+
 async def _move_threads(db: AsyncSession, thread_ids: list[UUID], **values) -> None:
     if thread_ids:
         await db.execute(update(Thread).where(Thread.id.in_(thread_ids)).values(**values))
@@ -53,6 +81,7 @@ async def _undo_set_series(db: AsyncSession, c: CatalogCorrection) -> None:
     member = await db.get(SeriesMember, (target.id, work.id))
     if member is None:
         raise Conflict(_STALE)
+    await _require_absent(db, [*s["old_members"], *([s["prior_target_member"]] if s["prior_target_member"] else [])])
     moved = uuids(s["moved_threads"])
     await _require_threads_in(db, moved, target.id)
     known = moved + (uuids(s["retired"]["threads"]) if s["retired"] else [])
@@ -97,6 +126,9 @@ async def _undo_set_series(db: AsyncSession, c: CatalogCorrection) -> None:
 
 async def _undo_set_position(db: AsyncSession, c: CatalogCorrection) -> None:
     s = c.snapshot
+    work = await db.get(Work, c.work_id) if c.work_id else None
+    if work is None or work.merged_into_id is not None or work.series_id != c.series_id:
+        raise Conflict(_STALE)
     member = await db.get(SeriesMember, (UUID(s["member_series"]), c.work_id))
     if member is None or member.position != c.payload["position"]:
         raise Conflict(_STALE)
@@ -112,7 +144,7 @@ async def _undo_set_position(db: AsyncSession, c: CatalogCorrection) -> None:
 
 async def _undo_rename(db: AsyncSession, c: CatalogCorrection) -> None:
     series = await db.get(Series, c.series_id)
-    if series is None or series.name != c.payload["name"]:
+    if series is None or series.merged_into_id is not None or series.name != c.payload["name"]:
         raise Conflict(_STALE)
     series.name = c.snapshot["old_name"]
     await db.flush()
@@ -129,6 +161,7 @@ async def _check_reattach(db: AsyncSession, state: dict) -> tuple[Work, Series]:
     now = set((await db.execute(select(Thread.id).where(Thread.series_id == single.id))).scalars().all())
     if now != set(uuids(state["threads"])):
         raise Conflict(f"New discussion started on {work.title}'s own page since; undoing would move it.")
+    await _require_absent(db, state["members"])
     return work, single
 
 

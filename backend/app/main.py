@@ -1,5 +1,10 @@
-from fastapi import FastAPI
+import math
+
+from fastapi import FastAPI, Request
+from fastapi.encoders import jsonable_encoder
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from starlette.middleware.sessions import SessionMiddleware
 
 from app.config import Settings
@@ -33,6 +38,24 @@ app.add_middleware(
 
 # Required by Authlib for storing OAuth state
 app.add_middleware(SessionMiddleware, secret_key=settings.SECRET_KEY)
+
+def _finite(value):
+    """NaN and infinity as strings: JSON has no spelling for them."""
+    if isinstance(value, float) and not math.isfinite(value):
+        return str(value)
+    if isinstance(value, dict):
+        return {k: _finite(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_finite(v) for v in value]
+    return value
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_error(request: Request, exc: RequestValidationError) -> JSONResponse:
+    # FastAPI's own handler, except that a rejected NaN in the echoed input
+    # would make the 422 itself unserialisable (a 500).
+    return JSONResponse(status_code=422, content={"detail": jsonable_encoder(_finite(exc.errors()))})
+
 
 from app.api.auth import router as auth_router  # noqa: E402
 from app.api import genres, librarian, posts, series, threads, users, works  # noqa: E402

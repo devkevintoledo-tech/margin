@@ -14,8 +14,7 @@ from app.schemas.librarian import (
 from app.services import librarian
 from app.services.auth import require_librarian
 from app.services.librarian.errors import LibrarianError
-from app.services.librarian.record import latest_for_subject
-from app.services.librarian.undo import UNDOABLE
+from app.services.librarian.undo import undoable
 from app.services.works import canonical_work
 
 router = APIRouter(prefix="/librarian", tags=["librarian"])
@@ -52,13 +51,9 @@ async def correction_out(db: AsyncSession, c: CatalogCorrection) -> CorrectionOu
         subject, room_slug = work.title, (await db.get(Series, work.series_id)).slug
     elif c.series_id is not None and (series := await db.get(Series, c.series_id)) is not None:
         subject, room_slug = series.name, series.slug
-    undoable = False
-    if c.op in UNDOABLE and c.reverted_at is None:
-        latest = await latest_for_subject(db, c)
-        undoable = latest is not None and latest.id == c.id
     return CorrectionOut(
         id=c.id, op=c.op, reason=c.reason, created_at=c.created_at, user=user.username,
-        exportable=c.override is not None, runtime_only_reason=c.runtime_only_reason, undoable=undoable,
+        exportable=c.override is not None, runtime_only_reason=c.runtime_only_reason, undoable=await undoable(db, c),
         reverted_at=c.reverted_at, room_slug=room_slug, subject=subject,
     )
 
