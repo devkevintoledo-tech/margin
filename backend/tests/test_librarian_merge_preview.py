@@ -98,3 +98,53 @@ async def test_preview_refuses_what_merge_refuses(db_session):
         await merge_preview(db_session, a, c)
     with pytest.raises(Conflict, match="merged"):
         await merge_preview(db_session, c, a)
+
+
+def _path(source_id, into_id):
+    return f"/api/librarian/works/{source_id}/merge-preview?into={into_id}"
+
+
+async def test_route_refuses_anonymous_and_readers(client, db_session):
+    a = await make_work(db_session, "A", ol_id="OL1W")
+    b = await make_work(db_session, "B", ol_id="OL2W")
+    # HTTPBearer answers a missing header with 401 or 403 depending on the FastAPI
+    # version; the v1 permission test accepts both for the same reason.
+    assert (await client.get(_path(a.id, b.id))).status_code in (401, 403)
+    reader = headers_for(await make_user(db_session))
+    assert (await client.get(_path(a.id, b.id), headers=reader)).status_code == 403
+
+
+async def test_route_answers_the_preview(client, db_session):
+    lib, source, target, room, saga = await _duplicate_pair(db_session)
+    resp = await client.get(_path(source.id, target.id), headers=headers_for(lib))
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert set(body) == {"source", "target", "threads", "shelves", "editions"}
+    assert set(body["source"]) == {
+        "id", "title", "author", "first_publish_year", "cover_url", "description", "edition_count",
+        "thread_count", "shelf_count", "series_slug", "series_name"}
+    assert body["target"]["id"] == str(target.id) and body["target"]["series_name"] == "Dune Saga"
+    assert (body["threads"], body["shelves"], body["editions"]) == (2, 1, 2)
+
+    swapped = (await client.get(_path(target.id, source.id), headers=headers_for(lib))).json()
+    assert (swapped["source"]["id"], swapped["target"]["id"]) == (str(target.id), str(source.id))
+
+
+async def test_route_refusals_match_merge(client, db_session):
+    librarian = await make_user(db_session, librarian=True)
+    lib = headers_for(librarian)
+    a = await make_work(db_session, "A", ol_id="OL1W")
+    b = await make_work(db_session, "B", ol_id="OL2W")
+    c = await make_work(db_session, "C", ol_id="OL3W")
+    ANY = "00000000-0000-0000-0000-000000000000"
+
+    assert (await client.get(_path(ANY, b.id), headers=lib)).status_code == 404
+    assert (await client.get(_path(a.id, ANY), headers=lib)).status_code == 404
+    self_merge = await client.get(_path(a.id, a.id), headers=lib)
+    assert self_merge.status_code == 422 and "itself" in self_merge.json()["detail"]
+    missing_into = await client.get(f"/api/librarian/works/{a.id}/merge-preview", headers=lib)
+    assert missing_into.status_code == 422
+
+    await merge(db_session, librarian, a, b, reason="r", confirm=True)
+    assert (await client.get(_path(a.id, c.id), headers=lib)).status_code == 409
+    assert (await client.get(_path(c.id, a.id), headers=lib)).status_code == 409

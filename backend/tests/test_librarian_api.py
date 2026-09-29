@@ -19,7 +19,8 @@ WRITES = [
     (f"/api/librarian/series/{ANY}/dissolve", {"reason": "r"}),
     (f"/api/librarian/corrections/{ANY}/revert", {}),
 ]
-READS = ["/api/librarian/corrections", "/api/librarian/series-search?q=a", f"/api/librarian/works/{ANY}/editions"]
+READS = ["/api/librarian/corrections", "/api/librarian/series-search?q=a", f"/api/librarian/works/{ANY}/editions",
+         f"/api/librarian/works/{ANY}/merge-preview?into={ANY}"]
 
 
 async def test_every_route_refuses_readers_and_anonymous(client, db_session):

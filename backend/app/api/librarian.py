@@ -9,7 +9,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.models import Book, CatalogCorrection, Series, SeriesKind, User, Work
 from app.schemas.librarian import (
-    CorrectionOut, DissolveIn, EditionOut, MergeIn, MoveIn, PositionIn, RemoveIn, RenameIn, SeriesHit, SplitIn,
+    CorrectionOut, DissolveIn, EditionOut, MergeIn, MergePreviewOut, MoveIn, PositionIn, RemoveIn, RenameIn,
+    SeriesHit, SplitIn,
 )
 from app.services import librarian
 from app.services.auth import require_librarian
@@ -67,6 +68,15 @@ async def merge_work(work_id: UUID, body: MergeIn, db: AsyncSession = Depends(ge
     source, target = await _work(db, work_id), await _work(db, body.into_work_id)
     c = await _run(librarian.merge(db, user, source, target, reason=body.reason, confirm=body.confirm))
     return await correction_out(db, c)
+
+
+@router.get("/works/{work_id}/merge-preview", response_model=MergePreviewOut)
+async def preview_merge(work_id: UUID, into: UUID = Query(...), db: AsyncSession = Depends(get_db),
+                        user: User = Depends(require_librarian)):
+    """Both books as their pages show them, and what merging ``work_id`` into
+    ``into`` would move. Swapping the two ids swaps the survivor."""
+    source, target = await _work(db, work_id), await _work(db, into)
+    return await _run(librarian.merge_preview(db, source, target))
 
 
 @router.post("/works/{work_id}/split", **_CREATED)
