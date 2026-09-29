@@ -50,6 +50,11 @@ function Navbar() {
         <div className="flex items-center gap-4 ml-auto">
           {user ? (
             <>
+              {user.is_librarian && (
+                <Link to="/librarian" className="text-sm text-ink-dim hover:text-ink transition-colors duration-fast">
+                  librarian
+                </Link>
+              )}
               <Link to={`/profile/${user.username}`} className="flex items-center gap-2 group">
                 <span className="w-5 h-5 bg-user text-bg flex items-center justify-center text-xs font-bold shrink-0">
                   {user.username[0].toUpperCase()}

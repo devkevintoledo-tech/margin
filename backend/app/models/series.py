@@ -76,6 +76,9 @@ class Series(Base):
     merged_into_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("series.id", ondelete="SET NULL"), nullable=True, index=True
     )
+    # Set by a librarian's reject_series: the room keeps its slug and its
+    # untagged threads, but holds no books and takes no new threads.
+    dissolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=text("now()"), nullable=False
     )

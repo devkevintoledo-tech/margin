@@ -11,6 +11,7 @@ from app.models.work import Work, WorkKind, WorkProvenance, WorkSource
 from app.models.search_query import SearchQuery
 from app.models.series import Series, SeriesKind, SeriesProvenance, SeriesSource
 from app.models.catalog import CatalogRelease, MembershipConfidence, SeriesMember, WorkAlias
+from app.models.correction import CatalogCorrection, CorrectionOp
 
 __all__ = [
     "Base",
@@ -37,4 +38,6 @@ __all__ = [
     "MembershipConfidence",
     "SeriesMember",
     "WorkAlias",
+    "CatalogCorrection",
+    "CorrectionOp",
 ]

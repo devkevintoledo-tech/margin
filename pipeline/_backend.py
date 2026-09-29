@@ -16,10 +16,13 @@ if str(_BACKEND) not in sys.path:
     sys.path.insert(0, str(_BACKEND))
 
 from app.services.series_identity import (  # noqa: E402
+    CATALOG_NAMESPACE,
     SUBJECT_SEPARATOR,
     choose_container,
     join_subjects,
+    new_series_key,
     parse_tags,
+    release_series_id,
     series_key,
     slugify,
     tag_name,
@@ -34,6 +37,7 @@ from app.services.work_identity import (  # noqa: E402
 )
 
 __all__ = [
+    "CATALOG_NAMESPACE",
     "SUBJECT_SEPARATOR",
     "canonical_key",
     "choose_container",
@@ -41,9 +45,11 @@ __all__ = [
     "clean_title",
     "display_title",
     "join_subjects",
+    "new_series_key",
     "normalize",
     "normalize_isbn",
     "parse_tags",
+    "release_series_id",
     "series_key",
     "slugify",
     "tag_name",

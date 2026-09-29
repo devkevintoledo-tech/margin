@@ -93,6 +93,7 @@ The backend is **async end-to-end** — routes, services, and DB access all use 
 - **`Series`** — the discussion room and a book's only page. Every work has one (a singleton when nothing better is known); `SeriesMember` holds release-loaded order and sub-series, `WorkAlias` maps retired ids to survivors.
 - **`Thread`** — lives in exactly one of a series room or a genre, optionally tagged with one member book. **`Post`** — two-level replies. **`Vote`** — one ±1 per user per thread/post; scores are signed.
 - **`Shelf`** — a user's work with `want_to_read` / `reading` / `read`, unique per user/work.
+- **`CatalogCorrection`** — one librarian fix: op, reason, who, the pipeline override entries it exports as (or why it is runtime-only), and its undo snapshot.
 - **`User`**, **`Genre`**, **`SearchQuery`** (queries already resolved upstream), **`CatalogRelease`**, **`PasswordResetToken`** (SHA-256 hash only, with `expires_at` / `used_at`).
 
 ### Auth & sessions
@@ -119,6 +120,10 @@ GET    /api/genres/   /api/genres/{slug}   /api/genres/{slug}/works   /api/genre
 POST   /api/threads/   GET /api/threads/{id}   PUT /api/threads/{id}/vote
 POST   /api/posts/     PUT /api/posts/{id}/vote
 GET    /api/users/{username}            (public: no email)
+POST   /api/librarian/works/{id}/merge | split | move     GET /api/librarian/works/{id}/editions
+POST   /api/librarian/series/{id}/position | remove | rename | dissolve
+GET    /api/librarian/corrections   POST /api/librarian/corrections/{id}/revert
+GET    /api/librarian/series-search?q=...                 (librarian routes: is_librarian only)
 ```
 
 ## Testing
@@ -209,14 +214,15 @@ All run as `docker compose exec backend python -m scripts.<name>` and are idempo
 | `backfill_covers` | Repair covers on works ingested before local-first search. |
 | `repair_presentation` | Detach wrongly-attached editions and re-pick representatives under the language ladder. |
 | `backfill_cover_urls` | Upgrade legacy `cover_url` strings on `books` (https, no curl edge, full zoom). |
+| `grant_librarian` | `<username> [--revoke]`: set or clear the librarian flag. |
+| `export_overrides` | `[--out …] [--check]`: write unreverted in-app fixes to `pipeline/overrides/z-librarian.yaml` (deterministic; `--check` exits 1 when stale). Run against production, review and commit the file. |
 
 ## Development workflow
 
-Feature work is delegated to focused subagents in `.claude/agents/`: `backend-dev`, `frontend-dev`, `test-engineer`, `code-reviewer`. The phased feature plan lives in [`ROADMAP.md`](ROADMAP.md) (Phase 0 hardening is nearly done; librarian tools are the next designed feature). See [`CLAUDE.md`](CLAUDE.md) for conventions and gotchas.
+Feature work is delegated to focused subagents in `.claude/agents/`: `backend-dev`, `frontend-dev`, `test-engineer`, `code-reviewer`. The phased feature plan lives in [`ROADMAP.md`](ROADMAP.md) (Phase 0 hardening is nearly done; librarian tools have shipped). See [`CLAUDE.md`](CLAUDE.md) for conventions and gotchas.
 
 ## Known gaps
 
 - **No token revocation** — logout clears the JWT client-side only; a stolen token stays valid until it expires. Same for password reset: existing sessions are not invalidated when the password changes.
 - **Content is immutable** — no edit/delete endpoints for threads or posts.
-- **No in-app catalog fixes** — merges and series corrections need `pipeline/overrides/*.yaml` or `merge_works()` from a shell until librarian tools ship.
 - **Not yet built** — thread sorting/filtering, profile editing, author pages, and everything in the spec's social layer (follows, feed, notifications). See [`ROADMAP.md`](ROADMAP.md) for the tracked list.

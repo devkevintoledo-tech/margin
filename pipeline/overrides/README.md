@@ -18,3 +18,11 @@ do not matter).
 An entry that names a work or series the build does not hold fails the run:
 a stale override is a bug to fix, not something to skip. Say why in a comment
 above each entry — the next reader cannot see the report you were looking at.
+
+## `z-librarian.yaml`
+
+Written by `python -m scripts.export_overrides` (from `backend/`) from fixes
+librarians made in the app; never edit it by hand. Its name sorts it last, so
+an in-app fix wins over a hand-written one. When a release no longer holds a
+book it names, the build fails like any stale override: undo the fix in the
+app and export again, or delete the entry.

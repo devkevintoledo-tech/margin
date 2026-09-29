@@ -8,12 +8,12 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.models import Series, SeriesMember, Shelf, Thread, User, Work
+from app.models import Series, SeriesProvenance, Shelf, Thread, User, Work
 from app.schemas.series import SeriesOut, SeriesThreadCreate, SeriesWorkOut
 from app.schemas.thread import ThreadOut, ThreadSummary
 from app.services.auth import get_current_user, get_current_user_optional
 from app.services.enrichment import enrich_work
-from app.services.series import get_series_by_slug
+from app.services.series import get_series_by_slug, placed_memberships
 from app.services.threads import create_thread, thread_out, thread_summaries
 from app.services.works import canonical_work, load_work_presentation
 
@@ -22,7 +22,6 @@ router = APIRouter(prefix="/series", tags=["series"])
 # First view of a series pays for Google Books on its members, which used to
 # happen on each work page. Capped so one huge series cannot stall a request.
 _ENRICH_CAP = 10
-_MAX_NESTING = 5
 
 
 async def _series_or_404(db: AsyncSession, slug: str) -> Series:
@@ -36,6 +35,7 @@ class _Member(NamedTuple):
     work: Work
     position: float | None
     subseries: Series | None  # None: a member of the room itself
+    provenance: SeriesProvenance | None
 
 
 async def _members(db: AsyncSession, series: Series) -> list[_Member]:
@@ -50,32 +50,13 @@ async def _members(db: AsyncSession, series: Series) -> list[_Member]:
     works = list((await db.execute(
         select(Work).where(Work.series_id == series.id, Work.merged_into_id.is_(None))
     )).scalars().all())
-    tree, depth, frontier = {series.id: series}, {series.id: 0}, [series.id]
-    for level in range(1, _MAX_NESTING + 1):
-        children = (await db.execute(select(Series).where(
-            Series.parent_series_id.in_(frontier), Series.merged_into_id.is_(None)))).scalars().all()
-        frontier = [c.id for c in children if c.id not in tree]
-        for child in children:
-            tree.setdefault(child.id, child)
-            depth.setdefault(child.id, level)
-        if not frontier:
-            break
-
-    placed: dict[UUID, SeriesMember] = {}
-    if works:
-        rows = (await db.execute(select(SeriesMember).where(
-            SeriesMember.work_id.in_([w.id for w in works]), SeriesMember.series_id.in_(list(tree))
-        ))).scalars().all()
-        for m in rows:
-            best = placed.get(m.work_id)
-            if best is None or (depth[m.series_id], tree[m.series_id].name) > (depth[best.series_id], tree[best.series_id].name):
-                placed[m.work_id] = m
+    placed, tree = await placed_memberships(db, series, [w.id for w in works])
 
     members = []
     for w in works:
         m = placed.get(w.id)
         child = tree[m.series_id] if m is not None and m.series_id != series.id else None
-        members.append(_Member(w, m.position if m is not None else None, child))
+        members.append(_Member(w, m.position if m else None, child, m.provenance if m else None))
 
     def book_order(m: _Member):
         return (m.position is None, m.position or 0.0,
@@ -123,10 +104,13 @@ async def get_series(
         shelves = {row.work_id: row.status for row in rows}
 
     first = presentation.get(works[0].id) if works else None
+    librarian = current_user is not None and current_user.is_librarian
     return SeriesOut(
+        id=series.id,
         slug=series.slug,
         name=series.name,
         kind=series.kind,
+        dissolved=series.dissolved_at is not None,
         description=first.description if first else None,
         works=[
             SeriesWorkOut(
@@ -138,6 +122,7 @@ async def get_series(
                 shelf_status=shelves.get(w.id),
                 position=m.position,
                 subseries=m.subseries.name if m.subseries is not None else None,
+                provenance=m.provenance if librarian else None,
             )
             for m in members
             for w in [m.work]
@@ -171,6 +156,9 @@ async def create_series_thread(
     current_user: User = Depends(get_current_user),
 ) -> ThreadOut:
     series = await _series_or_404(db, slug)
+    if series.dissolved_at is not None:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT,
+                            detail="This series was dissolved; its books have their own pages now.")
     work_id = None
     if payload.work_id is not None:
         # Canonicalize first: a stale tab can hold a merged member's id.

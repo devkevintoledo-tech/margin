@@ -40,6 +40,8 @@ class WorkProvenance(str, enum.Enum):
     isbn = "isbn"
     title_author = "title_author"
     heuristic = "heuristic"
+    # A librarian's split_work: the identity is the split's `OL…W~OL…M` id.
+    override = "override"
 
 
 class Work(Base):

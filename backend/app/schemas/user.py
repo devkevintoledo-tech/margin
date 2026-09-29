@@ -33,6 +33,8 @@ class UserOut(PublicUserOut):
     """The signed-in user's own account, as returned by auth routes."""
 
     email: EmailStr
+    # Decides what the frontend renders; the API enforces it (require_librarian).
+    is_librarian: bool = False
 
 
 class Token(BaseModel):

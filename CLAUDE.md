@@ -93,7 +93,7 @@ view of its page, attaching only volumes whose `canonical_key` matches one of
 the work's `identity_keys` (its stored key, or the key recomputed from its own
 title — some works drifted apart from the key they were created under) —
 Google answers a title+author query with everything the author wrote, so an
-unattached volume is not evidence that it belongs; `covers.py` HEADs a cover URL to reject Google's placeholder; `works.py` owns the resolution ladder, `upsert_work_from_ol`, representative-edition selection and `merge_works`; `work_identity.py` holds the pure string rules the others build on; `series_identity.py` holds the pure series-tag rules (parsing `franchise:`/`series:` subjects, choosing the container, slugs); `series.py` is the only writer of `series` rows — it gives any work flushed without one a singleton, promotes a singleton when its tags later name a series, and provides `absorb_series`, which `merge_works` runs before rewriting thread tags; `threads.py` owns the one thread-listing query (series feed, its per-book filter, genre feed) and thread creation; `auth.py` holds JWT (python-jose, HS256), bcrypt password hashing, reset-token generation/hashing, and the `get_current_user` / `get_current_user_optional` dependencies; `email.py` provides the `EmailSender` ABC with SMTP and console implementations.
+unattached volume is not evidence that it belongs; `covers.py` HEADs a cover URL to reject Google's placeholder; `works.py` owns the resolution ladder, `upsert_work_from_ol`, representative-edition selection and `merge_works`; `work_identity.py` holds the pure string rules the others build on; `series_identity.py` holds the pure series-tag rules (parsing `franchise:`/`series:` subjects, choosing the container, slugs); `series.py` is the only writer of `series` rows outside librarian fixes — it gives any work flushed without one a singleton, promotes a singleton when its tags later name a series, and provides `absorb_series`, which `merge_works` runs before rewriting thread tags; `threads.py` owns the one thread-listing query (series feed, its per-book filter, genre feed) and thread creation; `auth.py` holds JWT (python-jose, HS256), bcrypt password hashing, reset-token generation/hashing, and the `get_current_user` / `get_current_user_optional` dependencies; `email.py` provides the `EmailSender` ABC with SMTP and console implementations; `librarian/` holds the librarian tools (`keys`, `record`, `placement`, `identity`, `undo`, `export`) and is the only writer of `catalog_corrections` — each op applies its change through the services above and records its override entries and undo snapshot in the op's own transaction. `override` is a *list* of pipeline §5.4 entries because a move exports its `remove_from_series` entries before its `set_series`; a fix whose keys the next build may not hold (a heuristic work, a Google edition, a series outside any release) is recorded with `runtime_only_reason` instead. `require_librarian` (in `auth.py`) gates `api/librarian.py`: 401 anonymous, 403 for a reader.
 - **`scripts/`** — standalone maintenance entrypoints run with `python -m
   scripts.<name>` (e.g. `backfill_cover_urls`, `repair_presentation`, which
   detaches editions enrichment wrongly attached and re-picks every
@@ -141,6 +141,9 @@ series is never moved to another automatically; that is a merge decision. A
 promoted singleton is tombstoned (`merged_into_id`) so its slug keeps resolving
 to the survivor. `works.subjects` is stored one subject per line
 (`join_subjects`), because the old space-joined form erased tag boundaries.
+`assign_series` also leaves a work alone while it has an unreverted
+`set_series`/`remove_from_series` correction; a dissolved series (`dissolved_at`)
+is never chosen and takes no threads.
 
 A work may have **zero editions**: Open Library's search response carries
 everything a work row stores, so search ingests works without touching `books`
@@ -301,9 +304,11 @@ settings, HTTP and ORM imports (`tests/test_pure_imports.py` enforces it).
 ## Known remaining gaps
 
 - **No token revocation**: `POST /auth/logout` is a stateless no-op — the frontend just clears the persisted JWT, and a stolen token stays valid until expiry. A password reset does not invalidate existing sessions either. Anything relying on server-side session invalidation needs a refresh/denylist design first.
-- **No admin merge/split UI**: catalog fixes are `pipeline/overrides/*.yaml`
-  entries picked up by the next release; runtime works still need
-  `merge_works()` / `scripts.resolve_works --upgrade` from a shell.
+- Librarian tools cover merge/split/move/reorder/rename/remove/dissolve in-app;
+  `python -m scripts.export_overrides` writes them to
+  `pipeline/overrides/z-librarian.yaml`, which a person reviews and commits.
+  Librarians are granted with `python -m scripts.grant_librarian`. Merge and
+  split cannot be undone, and there is no role system beyond the flag.
 - Content is immutable (no edit/delete for threads or posts). See `ROADMAP.md` for the tracked list.
 
 ## Environment

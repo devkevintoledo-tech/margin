@@ -1,11 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useSeries, useSeriesThreads } from '../api/series'
 import { useVoteThread } from '../api/threads'
+import { useRevertCorrection } from '../api/librarian'
+import { errorMessage } from '../api/errors'
 import ShelfButton from '../components/ShelfButton'
 import PathHeader from '../components/PathHeader'
 import DataTable from '../components/DataTable'
 import ThreadModal from '../components/ThreadModal'
+import LibrarianPanel from '../components/LibrarianPanel'
 import VoteControl from '../components/VoteControl'
 import { relativeTime } from '../components/Post'
 import { useStatusBar } from '../store/status'
@@ -32,7 +35,7 @@ function groupBySubseries(works) {
   return groups
 }
 
-function BookRow({ work, current, rowRef }) {
+function BookRow({ work, current, rowRef, editing, isSeries, onAction }) {
   const [coverFailed, setCoverFailed] = useState(false)
   return (
     <li
@@ -54,14 +57,61 @@ function BookRow({ work, current, rowRef }) {
         {work.position != null && (
           <p className="text-ink-dim text-xs tabular-nums">{formatPosition(work.position)}</p>
         )}
+        {editing && work.provenance === 'override' && (
+          <span className="text-xs">
+            <span aria-hidden="true" className="text-warning">■</span>
+            <span className="sr-only">librarian-placed</span>
+          </span>
+        )}
         <h3 className="font-serif text-xl text-ink leading-tight">{work.title}</h3>
         <p className="text-user text-xs lowercase tracking-eyebrow">{work.author}</p>
         {work.first_publish_year && (
           <p className="text-ink-dim text-xs tabular-nums">{work.first_publish_year}</p>
         )}
         <ShelfButton workId={work.id} currentStatus={work.shelf_status} />
+        {editing && (
+          <div className="flex flex-wrap gap-x-3 text-xs" aria-label={`Fix ${work.title}`}>
+            {(isSeries ? ['move', 'position', 'remove', 'merge into…', 'split'] : ['move', 'merge into…', 'split']).map((name) => (
+              <button key={name} type="button" className="btn-ghost text-xs" onClick={() => onAction(name)}
+                      aria-label={`${name} ${work.title}`}>
+                {name}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
     </li>
+  )
+}
+
+const KIND_OF = { 'merge into…': 'merge' }
+
+function ResultLine({ correction, currentSlug, onUndone }) {
+  const revert = useRevertCorrection()
+  const [state, setState] = useState(correction)
+  return (
+    <div className="flex flex-col gap-2 border-b border-line pb-3">
+      <p role="status" aria-label="Librarian fix result" className="text-xs flex flex-wrap items-center gap-3">
+        {state.exportable
+          ? <span className="text-ok">exported</span>
+          : <span className="text-warning">runtime-only: {state.runtime_only_reason}</span>}
+        {state.reverted_at ? (
+          <span className="text-ink-dim">undone</span>
+        ) : state.undoable && (
+          <button type="button" className="btn-ghost text-xs" disabled={revert.isPending}
+                  onClick={() => revert.mutate(state.id, { onSuccess: (c) => { setState({ ...state, ...c }); onUndone?.() } })}>
+            undo
+          </button>
+        )}
+        {state.room_slug && state.room_slug !== currentSlug && !state.reverted_at && (
+          <Link to={`/series/${state.room_slug}?edit=1`} state={{ correction: state }} className="text-path hover:text-accent">
+            go to its page
+          </Link>
+        )}
+      </p>
+      {/* The server re-checks undo: a newer fix or a changed catalog refuses it. */}
+      {revert.isError && <p className="alert-danger text-xs">{errorMessage(revert.error)}</p>}
+    </div>
   )
 }
 
@@ -75,9 +125,22 @@ function Series() {
   const [expanded, setExpanded] = useState(false)
   const [filter, setFilter] = useState(null) // a work id, or null for all books
   const currentRef = useRef(null)
+  const location = useLocation()
+  const editing = !!user?.is_librarian && searchParams.get('edit') === '1'
+  const [action, setAction] = useState(null) // { kind, work? } while the panel is open
+  const [result, setResult] = useState(location.state?.correction ?? null)
+  const editHref = (() => {
+    const next = new URLSearchParams(searchParams)
+    if (editing) next.delete('edit')
+    else next.set('edit', '1')
+    const qs = next.toString()
+    return `/series/${slug}${qs ? `?${qs}` : ''}`
+  })()
 
   const { data: series, isLoading, isError } = useSeries(slug)
-  const { data: threads, isLoading: threadsLoading } = useSeriesThreads(series?.slug, filter)
+  // A fix can take the filtered book out of the room; the filter goes with it.
+  const bookFilter = series?.works.some((w) => w.id === filter) ? filter : null
+  const { data: threads, isLoading: threadsLoading } = useSeriesThreads(series?.slug, bookFilter)
 
   // A promoted singleton's old slug answers with its survivor.
   useEffect(() => {
@@ -157,11 +220,11 @@ function Series() {
     <button
       key={id ?? 'all'}
       type="button"
-      aria-pressed={filter === id}
+      aria-pressed={bookFilter === id}
       onClick={() => setFilter(id)}
       className={`text-xs px-1 transition-colors duration-fast ${
         // Underlined as well as coloured: nothing means anything by colour alone.
-        filter === id ? 'text-accent underline underline-offset-4' : 'text-ink-dim hover:text-accent'
+        bookFilter === id ? 'text-accent underline underline-offset-4' : 'text-ink-dim hover:text-accent'
       }`}
     >
       {label}
@@ -170,7 +233,13 @@ function Series() {
 
   return (
     <main className="max-w-shell mx-auto px-4 py-6 flex flex-col gap-10">
-      <PathHeader segments={[{ label: 'series', to: '/' }, { label: series.name }]} />
+      <div className="flex items-center justify-between gap-3">
+        <PathHeader segments={[{ label: 'series', to: '/' }, { label: series.name }]} />
+        {user?.is_librarian && (
+          <Link to={editHref} className="text-xs text-accent hover:text-accent-hover">{editing ? '[done]' : '[edit]'}</Link>
+        )}
+      </div>
+      {result && <ResultLine key={result.id} correction={result} currentSlug={series.slug} />}
 
       <header className="flex flex-col gap-3 border-b border-line pb-6">
         {/* Serif is reserved for book titles; a series name is one. */}
@@ -179,6 +248,15 @@ function Series() {
           <p className="text-ink-dim text-xs tabular-nums">
             {series.works.length} {series.works.length === 1 ? 'book' : 'books'} in this series
           </p>
+        )}
+        {editing && isSeries && !series.dissolved && (
+          <div className="flex gap-3 text-xs">
+            <button type="button" className="btn-ghost text-xs" onClick={() => setAction({ kind: 'rename' })}>rename series</button>
+            <button type="button" className="btn-ghost text-xs" onClick={() => setAction({ kind: 'dissolve' })}>dissolve series</button>
+          </div>
+        )}
+        {series.dissolved && (
+          <p className="alert-muted">This series was dissolved; its books have their own pages now.</p>
         )}
         {series.description && (
           <div className="flex flex-col gap-1 max-w-prose">
@@ -200,6 +278,9 @@ function Series() {
               work={work}
               current={work.id === currentId}
               rowRef={work.id === currentId ? currentRef : undefined}
+              editing={editing && !series.dissolved}
+              isSeries={isSeries}
+              onAction={(name) => setAction({ kind: KIND_OF[name] ?? name, work })}
             />
           ))
           if (!group.name) return rows
@@ -225,7 +306,7 @@ function Series() {
           ) : (
             <span />
           )}
-          {user && (
+          {user && !series.dissolved && (
             <button onClick={() => setShowModal(true)} className="btn-secondary text-xs">
               Start a Thread
             </button>
@@ -249,9 +330,16 @@ function Series() {
         <ThreadModal
           seriesSlug={series.slug}
           books={isSeries ? series.works.map((w) => ({ id: w.id, title: w.title })) : []}
-          defaultBookId={filter ?? currentId ?? ''}
+          defaultBookId={bookFilter ?? currentId ?? ''}
           onClose={() => setShowModal(false)}
           onCreated={(thread) => navigate(`/series/${series.slug}/threads/${thread.id}`)}
+        />
+      )}
+      {action && (
+        <LibrarianPanel
+          action={{ ...action, series }}
+          onClose={() => setAction(null)}
+          onDone={(correction) => { setAction(null); setResult(correction) }}
         />
       )}
     </main>

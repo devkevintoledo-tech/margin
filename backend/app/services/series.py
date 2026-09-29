@@ -12,7 +12,7 @@ from sqlalchemy import event, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
-from app.models import Series, SeriesKind, SeriesProvenance, SeriesSource, Thread, Work
+from app.models import CatalogCorrection, CorrectionOp, Series, SeriesKind, SeriesMember, SeriesProvenance, SeriesSource, Thread, Work
 from app.services.series_identity import (
     choose_container,
     parse_tags,
@@ -157,7 +157,9 @@ async def series_for_subjects(db: AsyncSession, subjects: str | None) -> Series 
         )
     ).scalar_one_or_none()
     if existing is not None:
-        return await canonical_series(db, existing)
+        found = await canonical_series(db, existing)
+        # A librarian dissolved it: its books stay on their own pages.
+        return None if found.dissolved_at is not None else found
 
     name = tag_name(tag)
     series = Series(
@@ -198,16 +200,29 @@ async def _promote(db: AsyncSession, work: Work, singleton: Series, target: Seri
     await db.flush()
 
 
+async def _placed_by_librarian(db: AsyncSession, work: Work) -> bool:
+    return bool(await db.scalar(select(func.count()).select_from(CatalogCorrection).where(
+        CatalogCorrection.work_id == work.id,
+        CatalogCorrection.reverted_at.is_(None),
+        CatalogCorrection.op.in_((CorrectionOp.set_series, CorrectionOp.remove_from_series)),
+    )))
+
+
 async def assign_series(db: AsyncSession, work: Work) -> Series:
     """Put ``work`` in the room its subjects name, promoting a singleton.
 
     A work already in a real series is never moved to another automatically.
     That would be a merge decision, like OL → OL work merges. Neither is a
     work in a catalog release's room, singleton or not: the release decided
-    it from whole-catalog evidence, and only the next release changes it.
+    it from whole-catalog evidence, and only the next release changes it —
+    and neither is a work a librarian placed (an unreverted set_series or
+    remove_from_series correction).
     """
     current = await db.get(Series, work.series_id) if work.series_id else None
     if current is not None and current.catalog_release is not None:
+        return current
+    # A librarian put it here; a search re-ingest must not undo that.
+    if current is not None and await _placed_by_librarian(db, work):
         return current
     target = await series_for_subjects(db, work.subjects)
 
@@ -254,3 +269,48 @@ async def absorb_series(db: AsyncSession, source: Work, target: Work) -> None:
         src.merged_into_id = target.series_id
     source.series_id = target.series_id
     await db.flush()
+
+
+_MAX_NESTING = 5
+
+
+async def room_tree(db: AsyncSession, room: Series) -> tuple[dict[uuid.UUID, Series], dict[uuid.UUID, int]]:
+    """The room and every live series nested under it, with each one's depth."""
+    tree, depth, frontier = {room.id: room}, {room.id: 0}, [room.id]
+    for level in range(1, _MAX_NESTING + 1):
+        children = (await db.execute(select(Series).where(
+            Series.parent_series_id.in_(frontier), Series.merged_into_id.is_(None)))).scalars().all()
+        frontier = [c.id for c in children if c.id not in tree]
+        for child in children:
+            tree.setdefault(child.id, child)
+            depth.setdefault(child.id, level)
+        if not frontier:
+            break
+    return tree, depth
+
+
+async def placed_memberships(
+    db: AsyncSession, room: Series, work_ids: list[uuid.UUID]
+) -> tuple[dict[uuid.UUID, SeriesMember], dict[uuid.UUID, Series]]:
+    """Each work's membership the room's page places it by: the deepest series
+    of the tree, so *Mistborn* lists under its own heading inside the Cosmere."""
+    tree, depth = await room_tree(db, room)
+    placed: dict[uuid.UUID, SeriesMember] = {}
+    if work_ids:
+        rows = (await db.execute(select(SeriesMember).where(
+            SeriesMember.work_id.in_(work_ids), SeriesMember.series_id.in_(list(tree))
+        ))).scalars().all()
+        for m in rows:
+            best = placed.get(m.work_id)
+            if best is None or (depth[m.series_id], tree[m.series_id].name) > (
+                depth[best.series_id], tree[best.series_id].name
+            ):
+                placed[m.work_id] = m
+    return placed, tree
+
+
+async def tree_memberships(db: AsyncSession, room: Series, work_id: uuid.UUID) -> list[SeriesMember]:
+    tree, _ = await room_tree(db, room)
+    return list((await db.execute(select(SeriesMember).where(
+        SeriesMember.work_id == work_id, SeriesMember.series_id.in_(list(tree))
+    ).order_by(SeriesMember.series_id))).scalars().all())

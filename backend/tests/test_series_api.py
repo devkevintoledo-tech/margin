@@ -42,7 +42,7 @@ async def test_series_page_lists_books_in_publication_order(client, db_session):
     assert [w["title"] for w in body["works"]] == ["Red Rising", "Golden Son", "Morning Star"]
     assert body["description"] == "About Red Rising."
     assert set(body["works"][0]) == {"id", "title", "author", "first_publish_year", "cover_url", "shelf_status",
-                                     "position", "subseries"}
+                                     "position", "subseries", "provenance"}
 
 
 async def test_series_page_reports_the_callers_shelf(client, db_session, auth_headers):
@@ -216,3 +216,32 @@ async def test_child_series_group_under_the_room(client, db_session):
         ("Mistborn", "Mistborn", 1.0), ("The Well of Ascension", "Mistborn", 2.0), ("Novella", "Mistborn", 2.5),
         ("The Way of Kings", "The Stormlight Archive", 1.0),
     ]
+
+
+from datetime import datetime, timezone
+
+from tests.librarian_factories import headers_for, make_member, make_series, make_user, make_work
+
+
+async def test_series_page_carries_id_dissolved_and_librarian_provenance(client, db_session):
+    saga = await make_series(db_session, "Saga", release="2026.10.1")
+    book = await make_work(db_session, "Saga One", series=saga, ol_id="OL5W")
+    await make_member(db_session, saga, book, 1.0)
+    reader, librarian = await make_user(db_session), await make_user(db_session, librarian=True)
+
+    as_reader = (await client.get(f"/api/series/{saga.slug}", headers=headers_for(reader))).json()
+    assert as_reader["id"] == str(saga.id) and as_reader["dissolved"] is False
+    assert as_reader["works"][0]["provenance"] is None
+
+    as_librarian = (await client.get(f"/api/series/{saga.slug}", headers=headers_for(librarian))).json()
+    assert as_librarian["works"][0]["provenance"] == "ol_tag"
+
+
+async def test_a_dissolved_series_takes_no_new_threads(client, db_session):
+    saga = await make_series(db_session, "Gone")
+    saga.dissolved_at = datetime.now(timezone.utc)
+    user = await make_user(db_session)
+    await db_session.flush()
+    resp = await client.post(f"/api/series/{saga.slug}/threads", json={"title": "hi"}, headers=headers_for(user))
+    assert resp.status_code == 409, resp.text
+    assert (await client.get(f"/api/series/{saga.slug}")).json()["dissolved"] is True
