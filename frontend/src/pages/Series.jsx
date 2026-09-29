@@ -71,7 +71,7 @@ function BookRow({ work, current, rowRef, editing, isSeries, onAction }) {
           <p className="text-ink-dim text-xs tabular-nums">{work.first_publish_year}</p>
         )}
         <ShelfButton workId={work.id} currentStatus={work.shelf_status} />
-        <GenreLine workId={work.id} title={work.title} />
+        <GenreLine workId={work.id} title={work.title} editing={editing} />
         {editing && (
           <div className="flex flex-wrap gap-x-3 text-xs" aria-label={`Fix ${work.title}`}>
             {(isSeries ? ['move', 'position', 'remove', 'merge into…', 'split'] : ['move', 'merge into…', 'split']).map((name) => (

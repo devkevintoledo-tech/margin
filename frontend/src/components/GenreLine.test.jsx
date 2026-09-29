@@ -86,3 +86,50 @@ describe('GenreLine', () => {
     await waitFor(() => expect(screen.getByText('19')).toBeInTheDocument())
   })
 })
+
+const WITH_VETO = {
+  ...READERS,
+  genres: [...READERS.genres,
+    { slug: 'horror', name: 'Horror', parent_slug: null, score: 2, direct_votes: 2, my_vote: false,
+      vetoed: true, veto_id: 'c1' }],
+}
+
+function renderEditing() {
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  return render(
+    <QueryClientProvider client={qc}>
+      <MemoryRouter><GenreLine workId="w1" title="Dune" editing /></MemoryRouter>
+    </QueryClientProvider>,
+  )
+}
+
+describe('GenreLine in edit mode', () => {
+  beforeEach(() => useAuthStore.setState({ user: { id: 'l', username: 'lib', is_librarian: true }, token: 't' }))
+
+  it('shows vetoed genres struck through with undo, only in edit mode', async () => {
+    mock(WITH_VETO)
+    renderEditing()
+    const vetoed = await screen.findByText('horror')
+    expect(vetoed).toHaveClass('line-through', 'text-warning')
+    client.post.mockResolvedValue({ data: {} })
+    await userEvent.click(screen.getByRole('button', { name: 'undo veto of horror' }))
+    expect(client.post).toHaveBeenCalledWith('/librarian/corrections/c1/revert')
+  })
+
+  it('vetoes a genre with a reason', async () => {
+    mock(READERS)
+    client.post.mockResolvedValue({ data: { id: 'c2' } })
+    renderEditing()
+    await userEvent.click(await screen.findByRole('button', { name: 'veto grimdark' }))
+    await userEvent.click(screen.getByRole('button', { name: 'troll tagging' }))
+    await userEvent.click(screen.getByRole('button', { name: 'veto' }))
+    expect(client.post).toHaveBeenCalledWith('/librarian/works/w1/genres/grimdark/veto', { reason: 'troll tagging' })
+  })
+
+  it('never shows vetoed genres outside edit mode', async () => {
+    mock(WITH_VETO)
+    renderLine()
+    await screen.findByRole('link', { name: 'grimdark' })
+    expect(screen.queryByText('horror')).toBeNull()
+  })
+})

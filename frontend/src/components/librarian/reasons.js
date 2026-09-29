@@ -14,6 +14,7 @@ export const REASONS = {
   rename: ['official series name', 'fix spelling', 'drop the publisher imprint'],
   dissolve: ['not a real series', 'publisher imprint', 'marketing label'],
   cover: ['wrong language', 'low quality', 'wrong book'],
+  veto_genre: ['wrong genre', 'troll tagging', 'too broad for this book'],
 }
 
 const SEPARATOR = ': '

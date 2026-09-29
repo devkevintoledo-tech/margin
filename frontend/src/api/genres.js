@@ -85,3 +85,16 @@ export function useGenreThreads(slug) {
     enabled: !!slug,
   })
 }
+
+export function useVetoGenre(workId) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ slug, reason }) =>
+      client.post(`/librarian/works/${workId}/genres/${slug}/veto`, { reason }).then((r) => r.data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['work-genres', workId] })
+      queryClient.invalidateQueries({ queryKey: ['genres'] })
+      queryClient.invalidateQueries({ queryKey: ['librarian', 'corrections'] })
+    },
+  })
+}
