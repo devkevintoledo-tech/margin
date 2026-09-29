@@ -1,12 +1,21 @@
 import { fireEvent, render, screen } from '@testing-library/react'
-import { MemoryRouter } from 'react-router-dom'
-import { describe, expect, it } from 'vitest'
+import userEvent from '@testing-library/user-event'
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
+import { describe, expect, it, vi } from 'vitest'
 import WorkCard from './WorkCard'
 
-function renderCard(work) {
+function Where() {
+  return <p data-testid="where">{useLocation().pathname}</p>
+}
+
+function renderCard(work, props = {}) {
   return render(
-    <MemoryRouter>
-      <WorkCard work={work} />
+    <MemoryRouter initialEntries={['/search']}>
+      <Where />
+      <Routes>
+        <Route path="/search" element={<WorkCard work={work} {...props} />} />
+        <Route path="*" element={<p>elsewhere</p>} />
+      </Routes>
     </MemoryRouter>,
   )
 }
@@ -75,5 +84,35 @@ describe('WorkCard', () => {
     fireEvent.error(screen.getByRole('img', { name: 'Red Rising' }))
     expect(screen.queryByRole('img')).not.toBeInTheDocument()
     expect(screen.getAllByText('Red Rising').length).toBeGreaterThan(0)
+  })
+
+  it('in select mode it is a checkbox named by title and author, not a link', () => {
+    renderCard(inSeries, { selected: false, onSelect: vi.fn() })
+    expect(screen.queryByRole('link')).toBeNull()
+    expect(screen.getByRole('checkbox', { name: 'select Red Rising by Pierce Brown' })).not.toBeChecked()
+  })
+
+  it('in select mode a click on the cover selects and does not navigate', async () => {
+    const onSelect = vi.fn()
+    renderCard(inSeries, { selected: false, onSelect })
+    await userEvent.click(screen.getByRole('img', { name: 'Red Rising' }))
+    expect(onSelect).toHaveBeenCalledWith(inSeries)
+    expect(screen.getByTestId('where')).toHaveTextContent('/search')
+  })
+
+  it('toggles from the keyboard with Space', async () => {
+    const onSelect = vi.fn()
+    renderCard(inSeries, { selected: false, onSelect })
+    await userEvent.tab()
+    expect(screen.getByRole('checkbox')).toHaveFocus()
+    await userEvent.keyboard(' ')
+    expect(onSelect).toHaveBeenCalledTimes(1)
+  })
+
+  it('says a selected card is selected, in words as well as the frame', () => {
+    renderCard(inSeries, { selected: true, onSelect: vi.fn() })
+    expect(screen.getByRole('checkbox')).toBeChecked()
+    expect(screen.getByText('selected')).toBeInTheDocument()
+    expect(screen.getByRole('img', { name: 'Red Rising' }).parentElement).toHaveClass('border-accent')
   })
 })
