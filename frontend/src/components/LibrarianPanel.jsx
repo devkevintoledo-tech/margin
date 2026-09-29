@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { confirmationOf, useLibrarianAction, useSeriesSearch, useWorkEditions } from '../api/librarian'
 import { useSearchWorks } from '../api/works'
 import { errorMessage } from '../api/errors'
+import ReasonField from './librarian/ReasonField'
 
 /**
  * One librarian fix, as a float over the series page: the fields the action
@@ -227,11 +228,7 @@ function LibrarianPanel({ action, onClose, onDone }) {
                 <input id="lib-name" className="input" value={fields.name} onChange={(e) => set('name')(e.target.value)} />
               </div>
             )}
-            <div>
-              <label className="label" htmlFor="lib-reason">Reason</label>
-              <textarea id="lib-reason" rows={2} className="input" value={fields.reason}
-                        onChange={(e) => set('reason')(e.target.value)} />
-            </div>
+            <ReasonField kind={kind} value={fields.reason} onChange={set('reason')} />
             {mutation.isError && !confirmationOf(mutation.error) && (
               <p className="alert-danger">{errorMessage(mutation.error)}</p>
             )}
