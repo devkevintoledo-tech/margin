@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import useAuthStore from '../store/auth'
+import useLibrarianStore from '../store/librarian'
 import client from '../api/client'
 
 function Navbar() {
@@ -8,6 +9,8 @@ function Navbar() {
   const navigate = useNavigate()
   const user = useAuthStore((s) => s.user)
   const logout = useAuthStore((s) => s.logout)
+  const editMode = useLibrarianStore((s) => s.editMode)
+  const setEditMode = useLibrarianStore((s) => s.setEditMode)
 
   const handleSearch = (e) => {
     e.preventDefault()
@@ -50,6 +53,13 @@ function Navbar() {
         <div className="flex items-center gap-4 ml-auto">
           {user ? (
             <>
+              {user.is_librarian && editMode && (
+                // Edit mode is sticky, so it can be left from any page, not only a series.
+                <button type="button" onClick={() => setEditMode(false)}
+                        className="text-xs text-accent hover:text-accent-hover transition-colors duration-fast">
+                  [done editing]
+                </button>
+              )}
               {user.is_librarian && (
                 <Link to="/librarian" className="text-sm text-ink-dim hover:text-ink transition-colors duration-fast">
                   librarian
@@ -66,6 +76,7 @@ function Navbar() {
               <button
                 onClick={async () => {
                   try { await client.post('/auth/logout') } catch { /* JWT is stateless — clear locally regardless */ }
+                  setEditMode(false) // the next person on this browser starts out of edit mode
                   logout()
                 }}
                 className="text-xs text-ink-dim hover:text-danger transition-colors duration-fast uppercase tracking-eyebrow"
