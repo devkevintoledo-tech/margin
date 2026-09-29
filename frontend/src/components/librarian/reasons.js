@@ -21,10 +21,14 @@ export function reasonsFor(kind) {
   return REASONS[kind] ?? []
 }
 
-/** The preset ``value`` starts from — exactly it, or it followed by ": detail". */
+/**
+ * The preset ``value`` starts from — exactly it, or it followed by ":" and a
+ * detail. The detail may be only begun (``"duplicate record: "``), which is
+ * what the field holds while the librarian is typing one.
+ */
 export function presetIn(value, presets) {
   const typed = value.trim()
-  return presets.find((p) => typed === p || typed.startsWith(`${p}${SEPARATOR}`)) ?? null
+  return presets.find((p) => typed === p || typed.startsWith(`${p}:`)) ?? null
 }
 
 /**
@@ -36,6 +40,6 @@ export function applyPreset(value, preset, presets) {
   const typed = value.trim()
   const current = presetIn(typed, presets)
   if (current === preset) return value
-  const detail = current ? typed.slice(current.length + SEPARATOR.length) : typed
+  const detail = current ? typed.slice(current.length + 1).trim() : typed
   return detail ? `${preset}${SEPARATOR}${detail}` : preset
 }

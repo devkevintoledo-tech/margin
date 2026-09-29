@@ -57,4 +57,16 @@ describe('quick reasons', () => {
     expect(presetIn('duplicate records everywhere', MERGE)).toBeNull()
     expect(presetIn('', MERGE)).toBeNull()
   })
+
+  it('knows a preset whose detail is only begun', () => {
+    expect(presetIn('duplicate record: ', MERGE)).toBe('duplicate record')
+    expect(presetIn('duplicate record:', MERGE)).toBe('duplicate record')
+    expect(presetIn('duplicate record:x', MERGE)).toBe('duplicate record')
+  })
+
+  it('never doubles a preset whose detail is only begun', () => {
+    expect(applyPreset('duplicate record: ', 'same book, different edition', MERGE)).toBe('same book, different edition')
+    expect(applyPreset('duplicate record: ', 'duplicate record', MERGE)).toBe('duplicate record: ')
+    expect(applyPreset('duplicate record:x', 'same book, different edition', MERGE)).toBe('same book, different edition: x')
+  })
 })
