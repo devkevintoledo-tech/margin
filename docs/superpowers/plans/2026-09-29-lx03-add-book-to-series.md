@@ -12,7 +12,7 @@
 
 **Roadmap item:** 03 — tick in docs/librarian-ux-roadmap.md when merged
 
-- [ ] **Merged** (PR: ___)
+- [x] **Merged** (PR: [#17](https://github.com/devkevintoledo-tech/margin/pull/17))
 
 ## Global Constraints
 

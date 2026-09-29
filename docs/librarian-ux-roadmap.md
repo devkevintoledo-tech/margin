@@ -30,8 +30,8 @@ Status: ⬜ not started · 🟡 in progress · ✅ done · ⏸ parked
 | # | Item | Plan | Depends on | Status | Branch | Done | PR |
 |---|---|---|---|---|---|---|---|
 | 01 | Sticky edit mode | [plan](superpowers/plans/2026-09-29-lx01-sticky-edit-mode.md) | — | ✅ | feat/librarian-lx01-sticky-edit-mode | 2026-09-29 | #15 |
-| 02 | Quick reasons | [plan](superpowers/plans/2026-09-29-lx02-quick-reasons.md) | — | 🟡 | feat/librarian-lx02-quick-reasons | | |
-| 03 | Add a book from the series page | [plan](superpowers/plans/2026-09-29-lx03-add-book-to-series.md) | — | ⬜ | | | |
+| 02 | Quick reasons | [plan](superpowers/plans/2026-09-29-lx02-quick-reasons.md) | — | ✅ | feat/librarian-lx02-quick-reasons | 2026-09-29 | #16 |
+| 03 | Add a book from the series page | [plan](superpowers/plans/2026-09-29-lx03-add-book-to-series.md) | — | ✅ | feat/librarian-lx03-add-book | 2026-09-29 | #17 |
 | 04 | Side-by-side merge preview | [plan](superpowers/plans/2026-09-29-lx04-merge-preview.md) | — | ⬜ | | | |
 | 05 | Merge from search results | [plan](superpowers/plans/2026-09-29-lx05-merge-from-search.md) | 04 | ⬜ | | | |
 | 06 | Cover picker | [plan](superpowers/plans/2026-09-29-lx06-cover-picker.md) | — | ⬜ | | | |
@@ -264,7 +264,20 @@ _(Add dated notes here as items land: surprises, changed names, follow-ups.)_
     on `[data-work-row]`; `c` (cover) only when 06 has landed.
 - **2026-09-29 — 01 done (#15):** the `[edit]` toggle is a button now; e2e and
   later plans must use `getByRole('button', { name: '[edit]' })`.
-- **2026-09-29 — 02 (in review):** Playwright's `getByLabel('Reason')` is a
+- **2026-09-29 — 02 done (#16):** Playwright's `getByLabel('Reason')` is a
   substring match and now also hits the `Quick reasons` group; every e2e
   step must use `getByLabel('Reason', { exact: true })`. Plans 03, 07, 08, 11,
   12 and 16 are updated to match.
+- **2026-09-29 — 02:** `ReasonField` takes `kind`, `value`, `onChange`, `id`
+  (default `lib-reason`); a new kind adds its presets to `REASONS` in
+  `components/librarian/reasons.js`; a chip with typed text yields
+  `<preset>: <text>`, and a bare `<preset>:` still counts as that preset.
+- **2026-09-29 — 03 done (#17):** `WorkPicker` shows `in <series>` for hits in a real
+  series, and both pickers name their results radiogroup `` `${label}: results` ``
+  (label-derived, so two pickers never share a name). That name contains the
+  label, so in Playwright every picker lookup must be exact —
+  `getByLabel('Find a series', { exact: true })` — as with `Reason`. The "already
+  in another series" check reads `WorkOut.series` from `/works/search`; no
+  endpoint was added. `LibrarianPanel`'s float now scrolls within the viewport
+  (`max-h-full overflow-y-auto`): a long result list had pushed its submit
+  button off screen.

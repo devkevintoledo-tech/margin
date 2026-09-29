@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
-import { confirmationOf, useLibrarianAction, useSeriesSearch, useWorkEditions } from '../api/librarian'
-import { useSearchWorks } from '../api/works'
+import { confirmationOf, useLibrarianAction, useWorkEditions } from '../api/librarian'
 import { errorMessage } from '../api/errors'
 import ReasonField from './librarian/ReasonField'
+import { SeriesPicker, WorkPicker } from './librarian/pickers'
 
 /**
  * One librarian fix, as a float over the series page: the fields the action
@@ -11,19 +11,16 @@ import ReasonField from './librarian/ReasonField'
  */
 const TITLES = {
   move: 'Move', position: 'Set position', remove: 'Remove from series', merge: 'Merge',
-  split: 'Split', rename: 'Rename', dissolve: 'Dissolve',
+  split: 'Split', rename: 'Rename', dissolve: 'Dissolve', add: 'Add book',
+}
+
+/** Where the picked book lives now, relative to this series. */
+function placeOf(pick, series) {
+  if (!pick?.series) return 'own'
+  if (pick.series.slug === series.slug) return 'here'
+  return pick.series.kind === 'series' ? 'elsewhere' : 'own'
 }
 const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`
-
-/** ``value`` once it has stopped changing for ``ms``. */
-function useDebounced(value, ms = 300) {
-  const [settled, setSettled] = useState(value)
-  useEffect(() => {
-    const timer = setTimeout(() => setSettled(value), ms)
-    return () => clearTimeout(timer)
-  }, [value, ms])
-  return settled
-}
 
 function request(action, f, confirm) {
   const { kind, work, series } = action
@@ -34,6 +31,10 @@ function request(action, f, confirm) {
       return { path: `works/${work.id}/move`, body: {
         reason, ...(f.target?.id ? { series_id: f.target.id } : { new_series_name: f.target?.name }),
         ...(position === null ? {} : { position }) } }
+    case 'add':
+      // The v1 move, pointed at this series: the picked book is the subject.
+      return { path: `works/${f.pick.id}/move`, body: {
+        reason, series_id: series.id, ...(position === null ? {} : { position }) } }
     case 'position':
       return { path: `series/${series.id}/position`, body: { reason, work_id: work.id, position } }
     case 'remove':
@@ -49,62 +50,14 @@ function request(action, f, confirm) {
   }
 }
 
-function ready(kind, f, editions) {
+function ready(kind, f, editions, series) {
   if (!f.reason.trim()) return false
+  if (kind === 'add') return !!f.pick && placeOf(f.pick, series) !== 'here'
   if (kind === 'move') return !!f.target
   if (kind === 'merge') return !!f.into
   if (kind === 'split') return f.editions.length > 0 && f.editions.length < editions.length
   if (kind === 'rename') return !!f.name.trim()
   return true
-}
-
-function SeriesPicker({ value, onChange }) {
-  const [q, setQ] = useState('')
-  const { data: hits = [] } = useSeriesSearch(q)
-  const named = q.trim()
-  return (
-    <div className="flex flex-col gap-2">
-      <label className="label" htmlFor="lib-series">Find a series</label>
-      <input id="lib-series" className="input" value={q} onChange={(e) => setQ(e.target.value)} />
-      <div role="radiogroup" aria-label="Series" className="flex flex-col gap-1 text-sm">
-        {hits.map((s) => (
-          <label key={s.id} className="flex items-center gap-2">
-            <input type="radio" name="lib-series" checked={value?.id === s.id} onChange={() => onChange(s)} />
-            <span className="font-serif text-ink">{s.name}</span>
-            <span className="text-ink-dim tabular-nums">{plural(s.book_count, 'book')}</span>
-          </label>
-        ))}
-        {named.length > 1 && !hits.some((s) => s.name.toLowerCase() === named.toLowerCase()) && (
-          <label className="flex items-center gap-2">
-            <input type="radio" name="lib-series" checked={!value?.id && value?.name === named}
-                   onChange={() => onChange({ name: named })} />
-            <span className="text-warning">new series: {named}</span>
-          </label>
-        )}
-      </div>
-    </div>
-  )
-}
-
-function WorkPicker({ exclude, value, onChange }) {
-  const [q, setQ] = useState('')
-  // A cold search reaches Open Library and ingests what it finds: never per keystroke.
-  const { data: works = [] } = useSearchWorks(useDebounced(q.trim()))
-  return (
-    <div className="flex flex-col gap-2">
-      <label className="label" htmlFor="lib-work">Find the book to keep</label>
-      <input id="lib-work" className="input" value={q} onChange={(e) => setQ(e.target.value)} />
-      <div role="radiogroup" aria-label="Book to keep" className="flex flex-col gap-1 text-sm">
-        {works.filter((w) => w.id !== exclude).map((w) => (
-          <label key={w.id} className="flex items-center gap-2">
-            <input type="radio" name="lib-work" checked={value?.id === w.id} onChange={() => onChange(w)} />
-            <span className="font-serif text-ink">{w.title}</span>
-            <span className="text-user text-xs">{w.author}</span>
-          </label>
-        ))}
-      </div>
-    </div>
-  )
 }
 
 function EditionPicker({ editions, loaded, value, onChange }) {
@@ -147,10 +100,30 @@ function Consequences({ action, fields, counts }) {
   )
 }
 
+function AddNotice({ pick, series }) {
+  const place = placeOf(pick, series)
+  if (place === 'here') {
+    return (
+      <p className="alert-muted">
+        <span className="font-serif italic">{pick.title}</span> is already in{' '}
+        <span className="font-serif">{series.name}</span>.
+      </p>
+    )
+  }
+  if (place !== 'elsewhere') return null
+  return (
+    <p className="text-warning text-sm">
+      <span className="font-serif italic">{pick.title}</span> is in{' '}
+      <span className="font-serif">{pick.series.name}</span> now. Adding it here takes it out of{' '}
+      <span className="font-serif">{pick.series.name}</span>, with the threads tagged with it.
+    </p>
+  )
+}
+
 function LibrarianPanel({ action, onClose, onDone }) {
   const { kind, work, series } = action
   const [fields, setFields] = useState({
-    reason: '', name: '', target: null, into: null, editions: [],
+    reason: '', name: '', target: null, into: null, editions: [], pick: null,
     // Only a reorder starts from the current place; a move names its own.
     position: kind === 'position' && work?.position != null ? String(work.position) : '',
   })
@@ -180,7 +153,9 @@ function LibrarianPanel({ action, onClose, onDone }) {
     if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus() }
     else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus() }
   }
-  const title = `${TITLES[kind]}${work ? ` ${work.title}` : ` ${series.name}`}`
+  const title = kind === 'add'
+    ? `Add a book to ${series.name}`
+    : `${TITLES[kind]}${work ? ` ${work.title}` : ` ${series.name}`}`
 
   const submit = (confirm) => {
     mutation.mutate(request(action, fields, confirm), {
@@ -192,7 +167,7 @@ function LibrarianPanel({ action, onClose, onDone }) {
   return (
     <div className="fixed inset-0 bg-bg/90 flex items-center justify-center z-50 p-4">
       <div ref={dialogRef} role="dialog" aria-modal="true" aria-label={title}
-           onKeyDown={trapTab} className="float w-full max-w-prose flex flex-col gap-4 p-5">
+           onKeyDown={trapTab} className="float w-full max-w-prose max-h-full overflow-y-auto flex flex-col gap-4 p-5">
         <div className="flex items-center justify-between">
           <h2 className="text-sm uppercase tracking-eyebrow text-ink">{title}</h2>
           <button type="button" onClick={onClose} aria-label="Close" className="text-ink-dim hover:text-danger">
@@ -212,15 +187,23 @@ function LibrarianPanel({ action, onClose, onDone }) {
           </div>
         ) : (
           <form className="flex flex-col gap-3" onSubmit={(e) => { e.preventDefault(); submit(false) }}>
+            {kind === 'add' && (
+              <>
+                <WorkPicker label="Find the book to add" value={fields.pick} onChange={set('pick')} />
+                {fields.pick && <AddNotice pick={fields.pick} series={series} />}
+              </>
+            )}
             {kind === 'move' && <SeriesPicker value={fields.target} onChange={set('target')} />}
-            {(kind === 'move' || kind === 'position') && (
+            {(kind === 'move' || kind === 'position' || kind === 'add') && (
               <div>
-                <label className="label" htmlFor="lib-position">{kind === 'move' ? 'Position (optional)' : 'Position (blank clears)'}</label>
+                <label className="label" htmlFor="lib-position">{kind === 'position' ? 'Position (blank clears)' : 'Position (optional)'}</label>
                 <input id="lib-position" type="number" step="any" className="input" value={fields.position}
                        onChange={(e) => set('position')(e.target.value)} />
               </div>
             )}
-            {kind === 'merge' && <WorkPicker exclude={work.id} value={fields.into} onChange={set('into')} />}
+            {kind === 'merge' && (
+              <WorkPicker label="Find the book to keep" exclude={work.id} value={fields.into} onChange={set('into')} />
+            )}
             {kind === 'split' && <EditionPicker editions={editions} loaded={editionsQuery.isSuccess} value={fields.editions} onChange={set('editions')} />}
             {kind === 'rename' && (
               <div>
@@ -233,7 +216,7 @@ function LibrarianPanel({ action, onClose, onDone }) {
               <p className="alert-danger">{errorMessage(mutation.error)}</p>
             )}
             <button type="submit" className="btn-primary text-xs self-start"
-                    disabled={!ready(kind, fields, editions) || mutation.isPending}>
+                    disabled={!ready(kind, fields, editions, series) || mutation.isPending}>
               {TITLES[kind]}
             </button>
           </form>

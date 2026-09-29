@@ -6,6 +6,7 @@
  */
 export const REASONS = {
   move: ['wrong series', 'belongs to this series', 'part of a sub-series'],
+  add: ['belongs to this series', 'missing from this series'],
   position: ['publication order', 'wrong number', "the author's reading order"],
   remove: ['not part of this series', 'standalone book', 'companion, not numbered'],
   merge: ['duplicate record', 'same book, different edition', 'translation of the same book'],

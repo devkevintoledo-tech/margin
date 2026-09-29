@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { grantLibrarian, openFirstSearchResult, registerViaUi } from './helpers'
+import { ensureEditMode, grantLibrarian, moveFirstResultInto, openFirstSearchResult, registerViaUi } from './helpers'
 
 // A librarian moves a book into a new series, lands on the new room, sees the
 // book there, and undoes the move. Needs the full stack and live Open Library.
@@ -15,7 +15,7 @@ test('a librarian moves a book into a new series and undoes it', async ({ page }
 
   await books.getByRole('button', { name: `move ${title}`, exact: true }).click()
   const saga = `E2E Saga ${Date.now()}`
-  await page.getByLabel('Find a series').fill(saga)
+  await page.getByLabel('Find a series', { exact: true }).fill(saga)
   await page.getByRole('radio', { name: `new series: ${saga}` }).check()
   await page.getByLabel('Reason', { exact: true }).fill('e2e: checking the move flow')
   await page.getByRole('button', { name: 'Move', exact: true }).click()
@@ -75,7 +75,7 @@ test('a librarian gives a reason with one click', async ({ page }) => {
 
   await books.getByRole('button', { name: `move ${title}`, exact: true }).click()
   const saga = `E2E Reasons ${Date.now()}`
-  await page.getByLabel('Find a series').fill(saga)
+  await page.getByLabel('Find a series', { exact: true }).fill(saga)
   await page.getByRole('radio', { name: `new series: ${saga}` }).check()
   const chip = page.getByRole('group', { name: 'Quick reasons' }).getByRole('button', { name: 'belongs to this series' })
   await chip.click()
@@ -89,4 +89,32 @@ test('a librarian gives a reason with one click', async ({ page }) => {
   await expect(table.getByText('belongs to this series').first()).toBeVisible()
   await table.getByRole('button', { name: `undo ${title}` }).first().click()
   await expect(table.getByText('undone').first()).toBeVisible()
+})
+
+// A librarian builds a one-book series, then adds a second book from the
+// series header. Needs the full stack and live Open Library.
+test('a librarian adds a book from the series page and undoes it', async ({ page }) => {
+  const user = await registerViaUi(page)
+  grantLibrarian(user)
+  await page.reload()
+
+  const saga = `E2E Add ${Date.now()}`
+  await moveFirstResultInto(page, 'the left hand of darkness', saga, { create: true })
+  await ensureEditMode(page)
+
+  await page.getByRole('button', { name: 'add a book' }).click()
+  await page.getByLabel('Find the book to add', { exact: true }).fill('the dispossessed')
+  const hit = page.getByRole('radio', { name: /Dispossessed/ }).first()
+  await hit.check()
+  await page.getByLabel('Reason', { exact: true }).fill('e2e: checking add a book')
+  await page.getByRole('button', { name: 'Add book' }).click()
+
+  const status = page.getByRole('group', { name: 'Librarian fix result' })
+  await expect(status).toBeVisible()
+  const books = page.getByRole('list', { name: 'Books in this series' })
+  await expect(books.getByRole('heading', { level: 3, name: /Dispossessed/ })).toBeVisible()
+
+  await status.getByRole('button', { name: 'undo' }).click()
+  await expect(status.getByText('undone')).toBeVisible()
+  await expect(books.getByRole('heading', { level: 3, name: /Dispossessed/ })).toHaveCount(0)
 })
