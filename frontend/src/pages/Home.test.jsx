@@ -42,6 +42,15 @@ describe('Home', () => {
     expect(client.get).toHaveBeenCalledWith('/genres/')
   })
 
+  it('lists up to three subgenres under each parent', async () => {
+    client.get.mockResolvedValue({
+      data: [{ slug: 'fantasy', name: 'Fantasy', description: 'd', children: [{ slug: 'grimdark', name: 'Grimdark' }] }],
+    })
+    renderPage()
+
+    expect(await screen.findByRole('link', { name: 'grimdark' })).toHaveAttribute('href', '/genres/grimdark')
+  })
+
   it('shows the fallback genres while the API is unavailable', () => {
     client.get.mockReturnValue(new Promise(() => {}))
     renderPage()

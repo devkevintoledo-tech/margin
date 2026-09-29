@@ -60,3 +60,28 @@ function useGenreToggle(workId, on) {
 
 export const useVoteGenre = (workId) => useGenreToggle(workId, true)
 export const useUnvoteGenre = (workId) => useGenreToggle(workId, false)
+
+export function useGenre(slug) {
+  return useQuery({
+    queryKey: ['genres', slug],
+    queryFn: () => client.get(`/genres/${slug}`).then((r) => r.data),
+    enabled: !!slug,
+  })
+}
+
+export function useGenreWorks(slug, sort = 'top') {
+  return useQuery({
+    queryKey: ['genres', slug, 'works', sort],
+    queryFn: () => client.get(`/genres/${slug}/works`, { params: { sort } }).then((r) => r.data),
+    enabled: !!slug,
+  })
+}
+
+// Keyed like api/threads.js invalidates it: ['genres', roomSlug, 'threads'].
+export function useGenreThreads(slug) {
+  return useQuery({
+    queryKey: ['genres', slug, 'threads'],
+    queryFn: () => client.get(`/genres/${slug}/threads`).then((r) => r.data),
+    enabled: !!slug,
+  })
+}
