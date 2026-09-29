@@ -12,7 +12,7 @@ def test_identity_rules_import_without_settings_or_http():
     env = {k: v for k, v in os.environ.items() if k not in ("DATABASE_URL", "SECRET_KEY")}
     code = (
         "import sys\n"
-        "import app.services.work_identity, app.services.series_identity, app.services.text\n"
+        "import app.services.work_identity, app.services.series_identity, app.services.text, app.services.genre_inference\n"
         "leaked = {'app.config', 'httpx', 'sqlalchemy'} & set(sys.modules)\n"
         "assert not leaked, leaked\n"
     )
