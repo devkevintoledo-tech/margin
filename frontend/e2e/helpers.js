@@ -1,3 +1,6 @@
+import { execSync } from 'node:child_process'
+import { fileURLToPath } from 'node:url'
+import path from 'node:path'
 import { expect } from '@playwright/test'
 
 // Unique-per-run identity so reruns never collide on the unique email/username.
@@ -39,4 +42,13 @@ export async function openFirstSearchResult(page, query = 'dune') {
   const firstWork = page.locator('a[href^="/series/"]').first()
   await firstWork.click()
   await expect(page).toHaveURL(/\/series\//)
+}
+
+const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
+
+// Librarians are granted from a shell (spec §3); e2e does the same through compose.
+export function grantLibrarian(user) {
+  execSync(`docker compose exec -T backend python -m scripts.grant_librarian ${user.username}`, {
+    cwd: REPO, stdio: 'pipe',
+  })
 }
