@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
-import { confirmationOf, useLibrarianAction, useSeriesSearch, useWorkEditions } from '../api/librarian'
-import { useSearchWorks } from '../api/works'
+import { confirmationOf, useLibrarianAction, useWorkEditions } from '../api/librarian'
 import { errorMessage } from '../api/errors'
 import ReasonField from './librarian/ReasonField'
+import { SeriesPicker, WorkPicker } from './librarian/pickers'
 
 /**
  * One librarian fix, as a float over the series page: the fields the action
@@ -14,16 +14,6 @@ const TITLES = {
   split: 'Split', rename: 'Rename', dissolve: 'Dissolve',
 }
 const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`
-
-/** ``value`` once it has stopped changing for ``ms``. */
-function useDebounced(value, ms = 300) {
-  const [settled, setSettled] = useState(value)
-  useEffect(() => {
-    const timer = setTimeout(() => setSettled(value), ms)
-    return () => clearTimeout(timer)
-  }, [value, ms])
-  return settled
-}
 
 function request(action, f, confirm) {
   const { kind, work, series } = action
@@ -56,55 +46,6 @@ function ready(kind, f, editions) {
   if (kind === 'split') return f.editions.length > 0 && f.editions.length < editions.length
   if (kind === 'rename') return !!f.name.trim()
   return true
-}
-
-function SeriesPicker({ value, onChange }) {
-  const [q, setQ] = useState('')
-  const { data: hits = [] } = useSeriesSearch(q)
-  const named = q.trim()
-  return (
-    <div className="flex flex-col gap-2">
-      <label className="label" htmlFor="lib-series">Find a series</label>
-      <input id="lib-series" className="input" value={q} onChange={(e) => setQ(e.target.value)} />
-      <div role="radiogroup" aria-label="Series" className="flex flex-col gap-1 text-sm">
-        {hits.map((s) => (
-          <label key={s.id} className="flex items-center gap-2">
-            <input type="radio" name="lib-series" checked={value?.id === s.id} onChange={() => onChange(s)} />
-            <span className="font-serif text-ink">{s.name}</span>
-            <span className="text-ink-dim tabular-nums">{plural(s.book_count, 'book')}</span>
-          </label>
-        ))}
-        {named.length > 1 && !hits.some((s) => s.name.toLowerCase() === named.toLowerCase()) && (
-          <label className="flex items-center gap-2">
-            <input type="radio" name="lib-series" checked={!value?.id && value?.name === named}
-                   onChange={() => onChange({ name: named })} />
-            <span className="text-warning">new series: {named}</span>
-          </label>
-        )}
-      </div>
-    </div>
-  )
-}
-
-function WorkPicker({ exclude, value, onChange }) {
-  const [q, setQ] = useState('')
-  // A cold search reaches Open Library and ingests what it finds: never per keystroke.
-  const { data: works = [] } = useSearchWorks(useDebounced(q.trim()))
-  return (
-    <div className="flex flex-col gap-2">
-      <label className="label" htmlFor="lib-work">Find the book to keep</label>
-      <input id="lib-work" className="input" value={q} onChange={(e) => setQ(e.target.value)} />
-      <div role="radiogroup" aria-label="Book to keep" className="flex flex-col gap-1 text-sm">
-        {works.filter((w) => w.id !== exclude).map((w) => (
-          <label key={w.id} className="flex items-center gap-2">
-            <input type="radio" name="lib-work" checked={value?.id === w.id} onChange={() => onChange(w)} />
-            <span className="font-serif text-ink">{w.title}</span>
-            <span className="text-user text-xs">{w.author}</span>
-          </label>
-        ))}
-      </div>
-    </div>
-  )
 }
 
 function EditionPicker({ editions, loaded, value, onChange }) {
@@ -220,7 +161,9 @@ function LibrarianPanel({ action, onClose, onDone }) {
                        onChange={(e) => set('position')(e.target.value)} />
               </div>
             )}
-            {kind === 'merge' && <WorkPicker exclude={work.id} value={fields.into} onChange={set('into')} />}
+            {kind === 'merge' && (
+              <WorkPicker label="Find the book to keep" exclude={work.id} value={fields.into} onChange={set('into')} />
+            )}
             {kind === 'split' && <EditionPicker editions={editions} loaded={editionsQuery.isSuccess} value={fields.editions} onChange={set('editions')} />}
             {kind === 'rename' && (
               <div>

@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-- [ ] **Roadmap item:** 02 — tick in docs/librarian-ux-roadmap.md when merged
+- [x] **Roadmap item:** 02 — tick in docs/librarian-ux-roadmap.md when merged
 
 **Goal:** Every librarian fix still needs a reason, but the common ones are one click away: preset chips per action kind sit above the reason field, a chip fills the field, and the librarian can still type.
 
