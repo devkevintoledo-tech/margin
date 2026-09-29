@@ -19,6 +19,9 @@ class Settings(BaseSettings):
     MAIL_FROM: str = "no-reply@margin.app"
     FRONTEND_BASE_URL: str = "http://localhost:5173"
     PASSWORD_RESET_TOKEN_TTL_MINUTES: int = 30
+    # Sessions are stateless JWTs with no revocation, so this lifetime is the
+    # window a stolen token stays usable. Keep it short.
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
 
     # Catalog releases (scripts.load_catalog_release). A tag is fetched from
     # <CATALOG_RELEASES_URL>/<tag>/<tag>.tar.gz into CATALOG_RELEASES_DIR.

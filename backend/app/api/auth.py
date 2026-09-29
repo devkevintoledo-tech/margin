@@ -200,8 +200,12 @@ async def reset_password(payload: ResetPasswordRequest, db: AsyncSession = Depen
     return MessageResponse(message="Password updated.")
 
 
-@router.post("/logout")
+@router.post("/logout", response_model=MessageResponse)
 async def logout():
+    """Sessions are stateless JWTs: there is nothing to revoke server-side.
+
+    The client discards its token; a copy stays valid until it expires
+    (``ACCESS_TOKEN_EXPIRE_MINUTES``)."""
     return {"message": "logged out"}
 
 
