@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict
 
 from app.models.shelf import ShelfStatus
 from app.models.work import Work, WorkKind
+from app.schemas.genre import GenreRef
 from app.schemas.series import SeriesRef
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -39,7 +40,6 @@ class BookOut(BaseModel):
     maturity_rating: str | None = None
     info_link: str | None = None
     preview_link: str | None = None
-    genre_id: UUID | None
     shelf_status: ShelfStatus | None = None
 
 
@@ -56,12 +56,18 @@ class WorkOut(BaseModel):
     author: str
     first_publish_year: int | None = None
     kind: WorkKind
-    genre_id: UUID | None = None
     cover_url: str | None = None
     description: str | None = None
     edition_count: int = 0
     shelf_status: ShelfStatus | None = None
     series: SeriesRef | None = None
+    top_genres: list[GenreRef] = []
+
+
+class GenreWorkOut(WorkOut):
+    """A book on a genre page; ``inferred`` when no reader has voted its genres yet."""
+
+    inferred: bool = False
 
 
 def work_out(
@@ -77,22 +83,13 @@ def work_out(
         author=work.author,
         first_publish_year=work.first_publish_year,
         kind=work.kind,
-        genre_id=work.genre_id,
         cover_url=presentation.cover_url if presentation else None,
         description=presentation.description if presentation else None,
         edition_count=presentation.edition_count if presentation else 0,
         shelf_status=shelf_status,
         series=presentation.series if presentation else None,
+        top_genres=list(presentation.top_genres) if presentation else [],
     )
-
-
-class GenreOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: UUID
-    name: str
-    slug: str
-    description: str | None
 
 
 class ShelfIn(BaseModel):

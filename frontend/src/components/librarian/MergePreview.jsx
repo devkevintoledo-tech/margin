@@ -54,7 +54,7 @@ function Side({ side, label, tone }) {
  * request about the current pair is in flight.
  */
 function MergePreview({ preview, onSwap, swapDisabled = false }) {
-  const { source, target, threads, shelves, editions } = preview
+  const { source, target, threads, shelves, editions, genre_votes = 0 } = preview
   return (
     <div role="group" aria-label="Merge preview" className="flex flex-col gap-3">
       <div className="grid grid-cols-2 gap-5">
@@ -64,8 +64,8 @@ function MergePreview({ preview, onSwap, swapDisabled = false }) {
       </div>
       <div className="flex flex-wrap items-center gap-3">
         <p className="text-sm text-ink">
-          {plural(threads, 'thread')}, {plural(shelves, 'shelf entry', 'shelf entries')} and{' '}
-          {plural(editions, 'edition')} move to the survivor.
+          {plural(threads, 'thread')}, {plural(shelves, 'shelf entry', 'shelf entries')},{' '}
+          {plural(genre_votes, 'genre vote')} and {plural(editions, 'edition')} move to the survivor.
         </p>
         {onSwap && (
           <button type="button" className="btn-ghost text-xs" onClick={onSwap} disabled={swapDisabled}

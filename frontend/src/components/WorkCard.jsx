@@ -48,6 +48,13 @@ function WorkCard({ work, selected = false, onSelect }) {
             <span className="text-path">{series.name}</span>
           </p>
         )}
+        {/* Plain text, not links: the whole card is already one. */}
+        {work.top_genres?.length > 0 && (
+          <p className="text-xs lowercase line-clamp-1">
+            <span className="text-ink-dim">genres </span>
+            <span className="text-path">{work.top_genres.map((g) => g.slug).join(' · ')}</span>
+          </p>
+        )}
         {/* Search collapses many editions into one card; saying so keeps the
             smaller result count legible rather than mysterious. */}
         {edition_count > 1 && (

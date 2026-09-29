@@ -7,10 +7,10 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.models import Book, CatalogCorrection, Series, SeriesKind, User, Work
+from app.models import Book, CatalogCorrection, Genre, Series, SeriesKind, User, Work
 from app.schemas.librarian import (
     CorrectionOut, DissolveIn, EditionOut, MergeIn, MergePreviewOut, MoveIn, PositionIn, RemoveIn, RenameIn,
-    SeriesHit, SplitIn,
+    SeriesHit, SplitIn, VetoIn,
 )
 from app.services import librarian
 from app.services.auth import require_librarian
@@ -184,3 +184,15 @@ async def series_search(q: str = Query(..., min_length=1), db: AsyncSession = De
         ).order_by(Series.name).limit(10)
     )).all()
     return [SeriesHit(id=s.id, slug=s.slug, name=s.name, book_count=n) for s, n in rows]
+
+
+@router.post("/works/{work_id}/genres/{slug}/veto", **_CREATED)
+async def veto_work_genre(work_id: UUID, slug: str, body: VetoIn, db: AsyncSession = Depends(get_db),
+                          user: User = Depends(require_librarian)):
+    """Hide a genre on a book from readers, with a reason. Undo via the corrections log."""
+    work = await _work(db, work_id)
+    genre = (await db.execute(select(Genre).where(Genre.slug == slug))).scalar_one_or_none()
+    if genre is None:
+        raise HTTPException(status_code=404, detail="Unknown genre.")
+    c = await _run(librarian.veto_genre(db, user, work, genre, reason=body.reason))
+    return await correction_out(db, c)

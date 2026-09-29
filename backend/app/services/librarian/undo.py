@@ -8,12 +8,14 @@ from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import CatalogCorrection, CorrectionOp, Series, SeriesMember, Thread, User, Work
+from app.services import genres as genres_service
 from app.services.librarian.errors import Conflict, Invalid
 from app.services.librarian.placement import _live_count
 from app.services.librarian.record import SERIES_SUBJECT_OPS, latest_for_subject, locked, restore_member, uuids
 
 UNDOABLE = frozenset({CorrectionOp.set_series, CorrectionOp.set_position, CorrectionOp.rename_series,
-                      CorrectionOp.remove_from_series, CorrectionOp.reject_series})
+                      CorrectionOp.remove_from_series, CorrectionOp.reject_series,
+                      CorrectionOp.veto_genre})
 _STALE = "The book or series changed since this fix; it can no longer be undone."
 
 
@@ -50,6 +52,8 @@ async def revert(db: AsyncSession, user: User, correction: CatalogCorrection) ->
     correction.reverted_at = datetime.now(timezone.utc)
     correction.reverted_by_id = user.id
     await db.flush()
+    if correction.op is CorrectionOp.veto_genre:
+        await genres_service.recompute(db, [correction.work_id])
     return correction
 
 
@@ -193,10 +197,19 @@ async def _undo_reject(db: AsyncSession, c: CatalogCorrection) -> None:
         await _reattach(db, series, state, work, single)
 
 
+async def _undo_veto(db: AsyncSession, c: CatalogCorrection) -> None:
+    work = await db.get(Work, c.work_id) if c.work_id else None
+    if work is None or work.merged_into_id is not None:
+        raise Conflict(_STALE)
+    # Nothing to restore: the veto never touched a vote. revert() sets
+    # reverted_at, then the summary is recomputed.
+
+
 _REVERT = {
     CorrectionOp.set_series: _undo_set_series,
     CorrectionOp.set_position: _undo_set_position,
     CorrectionOp.rename_series: _undo_rename,
     CorrectionOp.remove_from_series: _undo_remove,
     CorrectionOp.reject_series: _undo_reject,
+    CorrectionOp.veto_genre: _undo_veto,
 }

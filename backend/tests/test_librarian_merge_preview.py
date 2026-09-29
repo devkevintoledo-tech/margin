@@ -73,7 +73,8 @@ async def test_preview_counts_are_the_confirmation_counts_and_nothing_changes(db
 
     with pytest.raises(NeedsConfirmation) as asked:
         await merge(db_session, lib, source, target, reason="same book")
-    assert asked.value.consequences == {"threads": out.threads, "shelves": out.shelves, "editions": out.editions}
+    assert asked.value.consequences == {"threads": out.threads, "shelves": out.shelves, "editions": out.editions,
+                                       "genre_votes": out.genre_votes}
     assert await fresh(db_session, Work.merged_into_id, source.id) is None
     assert await db_session.scalar(select(func.count()).select_from(CatalogCorrection)) == 0
 
@@ -119,7 +120,7 @@ async def test_route_answers_the_preview(client, db_session):
     resp = await client.get(_path(source.id, target.id), headers=headers_for(lib))
     assert resp.status_code == 200, resp.text
     body = resp.json()
-    assert set(body) == {"source", "target", "threads", "shelves", "editions"}
+    assert set(body) == {"source", "target", "threads", "shelves", "editions", "genre_votes"}
     assert set(body["source"]) == {
         "id", "title", "author", "first_publish_year", "cover_url", "description", "edition_count",
         "thread_count", "shelf_count", "series_slug", "series_name"}

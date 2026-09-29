@@ -93,7 +93,7 @@ view of its page, attaching only volumes whose `canonical_key` matches one of
 the work's `identity_keys` (its stored key, or the key recomputed from its own
 title — some works drifted apart from the key they were created under) —
 Google answers a title+author query with everything the author wrote, so an
-unattached volume is not evidence that it belongs; `covers.py` HEADs a cover URL to reject Google's placeholder; `works.py` owns the resolution ladder, `upsert_work_from_ol`, representative-edition selection and `merge_works`; `work_identity.py` holds the pure string rules the others build on; `series_identity.py` holds the pure series-tag rules (parsing `franchise:`/`series:` subjects, choosing the container, slugs); `series.py` is the only writer of `series` rows outside librarian fixes — it gives any work flushed without one a singleton, promotes a singleton when its tags later name a series, and provides `absorb_series`, which `merge_works` runs before rewriting thread tags; `threads.py` owns the one thread-listing query (series feed, its per-book filter, genre feed) and thread creation; `auth.py` holds JWT (python-jose, HS256), bcrypt password hashing, reset-token generation/hashing, and the `get_current_user` / `get_current_user_optional` dependencies; `email.py` provides the `EmailSender` ABC with SMTP and console implementations; `librarian/` holds the librarian tools (`keys`, `record`, `placement`, `identity`, `undo`, `export`) and is the only writer of `catalog_corrections`; `identity.merge_preview` answers what a merge would do without writing anything: both books through `load_work_presentation` (never raw cover/description columns) and the counts from `merge_consequences`, the same function the merge's 422 confirmation uses — each op applies its change through the services above and records its override entries and undo snapshot in the op's own transaction. `override` is a *list* of pipeline §5.4 entries because a move exports its `remove_from_series` entries before its `set_series`; a fix whose keys the next build may not hold (a heuristic work, a Google edition, a series outside any release) is recorded with `runtime_only_reason` instead. `require_librarian` (in `auth.py`) gates `api/librarian.py`: 401 anonymous, 403 for a reader.
+unattached volume is not evidence that it belongs; `covers.py` HEADs a cover URL to reject Google's placeholder; `works.py` owns the resolution ladder, `upsert_work_from_ol`, representative-edition selection and `merge_works`; `work_identity.py` holds the pure string rules the others build on; `series_identity.py` holds the pure series-tag rules (parsing `franchise:`/`series:` subjects, choosing the container, slugs); `series.py` is the only writer of `series` rows outside librarian fixes — it gives any work flushed without one a singleton, promotes a singleton when its tags later name a series, and provides `absorb_series`, which `merge_works` runs before rewriting thread tags; `threads.py` owns the one thread-listing query (series feed, its per-book filter, genre feed) and thread creation; `genre_inference.py` is the pure taxonomy loader and subject → genre rules (`infer_genres`: `genre:` tags first, whole-word matching, `exclude` lists, no generic fallback); `genre_taxonomy.py` syncs `app/data/genres.yaml` into `genres`; `genres.py` is the only writer of `genre_votes`, `genre_inferences` and `work_genres` — `recompute` runs after every vote, inference, veto, revert and merge, the 5-per-reader cap is taken under `FOR UPDATE` on the work row, and `absorb` is `merge_works`' genre half; `auth.py` holds JWT (python-jose, HS256), bcrypt password hashing, reset-token generation/hashing, and the `get_current_user` / `get_current_user_optional` dependencies; `email.py` provides the `EmailSender` ABC with SMTP and console implementations; `librarian/` holds the librarian tools (`keys`, `record`, `placement`, `identity`, `undo`, `export`, and `genres` for `veto_genre` / `repoint_vetoes`) and is the only writer of `catalog_corrections`; `identity.merge_preview` answers what a merge would do without writing anything: both books through `load_work_presentation` (never raw cover/description columns) and the counts from `merge_consequences`, the same function the merge's 422 confirmation uses — each op applies its change through the services above and records its override entries and undo snapshot in the op's own transaction. `override` is a *list* of pipeline §5.4 entries because a move exports its `remove_from_series` entries before its `set_series`; a fix whose keys the next build may not hold (a heuristic work, a Google edition, a series outside any release) is recorded with `runtime_only_reason` instead. `require_librarian` (in `auth.py`) gates `api/librarian.py`: 401 anonymous, 403 for a reader.
 - **`scripts/`** — standalone maintenance entrypoints run with `python -m
   scripts.<name>` (e.g. `backfill_cover_urls`, `repair_presentation`, which
   detaches editions enrichment wrongly attached and re-picks every
@@ -145,6 +145,22 @@ to the survivor. `works.subjects` is stored one subject per line
 `set_series`/`remove_from_series` correction; a dissolved series (`dissolved_at`)
 is never chosen and takes no threads.
 
+**Genres** come from a curated two-level taxonomy, `backend/app/data/genres.yaml`
+(slugs are permanent; a removed entry is retired, never deleted), synced by
+`python -m scripts.sync_genres`, which compose runs after migrations. Readers tag
+works (never series) with up to 5 genres each; ingest, enrichment and the catalog
+loader write per-source *inferences*; librarians *veto*. A work's effective genres
+are the `effective_work_genres` view — readers' genres when any reader voted a
+live, unvetoed genre, otherwise the inferred ones — and a subgenre rolls up into
+its parent, one reader counted once. The view's SQL is one constant,
+`EFFECTIVE_WORK_GENRES_VIEW` in `models/genre.py`, executed by the migration and
+by a `create_all` listener: never re-derive the rule, read the view. Vetoes are
+`veto_genre` corrections, runtime-only, and undo per `(work, genre)` — they never
+block or wait on the book's series fixes. `works.genre_id` is gone; rooms
+(`threads.genre_id`) are parent genres only, and a subgenre page shows its
+parent's threads. After changing a `match`/`exclude` list, run
+`python -m scripts.rebuild_work_genres --reinfer`.
+
 A work may have **zero editions**: Open Library's search response carries
 everything a work row stores, so search ingests works without touching `books`
 at all, and editions only arrive when someone opens its series page. Everything
@@ -173,6 +189,10 @@ Library is down (and then the query is deliberately *not* recorded, so the next
 search retries), and otherwise runs only from `enrichment.py`. `search_doc` is
 declared twice on purpose — in the model for `create_all` in tests, and in the
 migration for the real database — and the two expressions must stay identical.
+Filters (`genre`, repeatable; `author`; `year_from`/`year_to`) only narrow the
+local query: gating and ingest stay keyed on `q`, a filter-only search is a
+local browse with no upstream call, and a bad filter is refused before any. The
+`author` filter reads `works.author_doc`, declared twice like `search_doc`.
 
 `work_identity` exposes two title forms and they are not interchangeable:
 `clean_title()` is the *key* (lowercased, depunctuated, feeds `canonical_key`),
@@ -263,8 +283,9 @@ Read those before changing anything visual.
   presets to `REASONS`. In Playwright, find the field with
   `getByLabel('Reason', { exact: true })` — the `Quick reasons` group matches too.
 - **Box-drawing frames and rails are CSS borders, not characters.** Only tree
-  elbows (`├─`, `└─`), sort carets (`▾`/`▴`) and the float marker (`■`) are
-  literal glyphs, and every one is `aria-hidden`.
+  elbows (`├─`, `└─`), sort carets (`▾`/`▴`), the float marker (`■`), the
+  own-genre-vote marker (`●`) and the remove-filter cross (`×`) are literal
+  glyphs, and every one is `aria-hidden`.
 - **Measure in `ch`**: `max-w-prose` (72ch), `max-w-table` (96ch),
   `max-w-shell` (120ch). In a monospaced layout that is the grid.
 - **No new border radii, shadows, font sizes, or durations.** Corners are square
@@ -312,11 +333,13 @@ settings, HTTP and ORM imports (`tests/test_pure_imports.py` enforces it).
 ## Known remaining gaps
 
 - **No token revocation**: `POST /auth/logout` is a stateless acknowledgement — the frontend just clears the persisted JWT, and a stolen token stays valid until expiry (`ACCESS_TOKEN_EXPIRE_MINUTES`, default 30). A password reset does not invalidate existing sessions either. Anything relying on server-side session invalidation needs a refresh/denylist design first.
-- Librarian tools cover merge/split/move/reorder/rename/remove/dissolve in-app (from the series page in edit mode, which can also add a book, as a move; merge also from search results via `select`);
+- Librarian tools cover merge/split/move/reorder/rename/remove/dissolve and genre vetoes in-app (from the series page in edit mode, which can also add a book, as a move; merge also from search results via `select`);
   `python -m scripts.export_overrides` writes them to
   `pipeline/overrides/z-librarian.yaml`, which a person reviews and commits.
   Librarians are granted with `python -m scripts.grant_librarian`. Merge and
-  split cannot be undone, and there is no role system beyond the flag.
+  split cannot be undone, and there is no role system beyond the flag. Genre
+  vetoes are runtime-only (the pipeline has no genre overrides). The genre
+  taxonomy has no in-app editor: the YAML file is the editor.
 - Content is immutable (no edit/delete for threads or posts). See `ROADMAP.md` for the tracked list.
 
 ## Environment

@@ -55,6 +55,8 @@ class Work(Base):
     __table_args__ = (
         UniqueConstraint("source", "external_id", name="uq_works_source_external_id"),
         Index("ix_works_search_doc", "search_doc", postgresql_using="gin"),
+        Index("ix_works_author_doc", "author_doc", postgresql_using="gin"),
+        Index("ix_works_first_publish_year", "first_publish_year"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -93,9 +95,6 @@ class Work(Base):
             name="fk_works_representative_book_id",
         ),
         nullable=True,
-    )
-    genre_id: Mapped[uuid.UUID | None] = mapped_column(
-        ForeignKey("genres.id", ondelete="SET NULL"), nullable=True, index=True
     )
     # The book's room. Every work has one — a singleton of its own when no
     # series is known — so a work page, a search card and a thread all resolve
@@ -143,6 +142,15 @@ class Work(Base):
         ),
         nullable=False,
     )
+    # Author-only document for the search filter. 'simple', not 'english':
+    # names are not words to stem. Declared twice, like search_doc — here for
+    # create_all, in migration c7d2e4f6a8b1 for the real database — and the two
+    # expressions must stay identical.
+    author_doc: Mapped[str] = mapped_column(
+        TSVECTOR,
+        Computed("to_tsvector('simple', coalesce(author, ''))", persisted=True),
+        nullable=False,
+    )
     # The catalog release this row came from; null = created at runtime by search.
     catalog_release: Mapped[str | None] = mapped_column(
         ForeignKey("catalog_releases.version"), nullable=True, index=True
@@ -169,7 +177,6 @@ class Work(Base):
     representative: Mapped["Book | None"] = relationship(  # noqa: F821
         "Book", foreign_keys=[representative_book_id], post_update=True
     )
-    genre: Mapped["Genre | None"] = relationship("Genre", back_populates="works")  # noqa: F821
     series: Mapped["Series"] = relationship(  # noqa: F821
         "Series", back_populates="works", foreign_keys=[series_id]
     )

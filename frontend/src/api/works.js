@@ -1,11 +1,20 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import client from './client'
 
-export function useSearchWorks(query) {
+export function useSearchWorks(query, { genres = [], author = '', yearFrom = '', yearTo = '' } = {}) {
+  const filtered = genres.length > 0 || !!author || !!yearFrom || !!yearTo
+  const params = {
+    ...(query ? { q: query } : {}),
+    ...(genres.length ? { genre: genres } : {}),
+    ...(author ? { author } : {}),
+    ...(yearFrom ? { year_from: yearFrom } : {}),
+    ...(yearTo ? { year_to: yearTo } : {}),
+  }
   return useQuery({
-    queryKey: ['works', 'search', query],
-    queryFn: () => client.get('/works/search', { params: { q: query } }).then((r) => r.data),
-    enabled: query.length > 1,
+    queryKey: ['works', 'search', params],
+    // indexes: null → genre=a&genre=b, the repeated form FastAPI reads as a list.
+    queryFn: () => client.get('/works/search', { params, paramsSerializer: { indexes: null } }).then((r) => r.data),
+    enabled: query.length > 1 || filtered,
   })
 }
 

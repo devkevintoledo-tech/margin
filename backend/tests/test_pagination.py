@@ -6,6 +6,7 @@ from app.models.genre import Genre
 from app.models.thread import Thread
 from app.models.user import User, AuthProvider
 from app.models import Series
+from app.services import genres as genres_service
 
 pytestmark = pytest.mark.asyncio
 
@@ -43,11 +44,11 @@ async def _seed_genre_works(db_session, genre, n: int):
             author="Author",
             kind=WorkKind.single,
             identity_provenance=WorkProvenance.isbn,
-            genre_id=genre.id,
         )
         db_session.add(w)
         works.append(w)
     await db_session.flush()
+    await genres_service.set_inferences_bulk(db_session, {w.id: {genre.slug} for w in works}, "open_library")
     return works
 
 

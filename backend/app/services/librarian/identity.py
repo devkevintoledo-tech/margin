@@ -6,7 +6,8 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import (
-    Book, CatalogCorrection, CorrectionOp, Series, SeriesKind, Shelf, Thread, User, Work, WorkProvenance, WorkSource,
+    Book, CatalogCorrection, CorrectionOp, GenreVote, Series, SeriesKind, Shelf, Thread, User, Work, WorkProvenance,
+    WorkSource,
 )
 from app.schemas.librarian import MergePreviewOut, MergeSide
 from app.services.librarian.errors import Conflict, Invalid, NeedsConfirmation, NotFound
@@ -40,6 +41,7 @@ async def merge_consequences(db: AsyncSession, source: Work, target: Work) -> di
         "threads": moving_threads,
         "shelves": await _count(db, Shelf, Shelf.work_id == source.id),
         "editions": await _count(db, Book, Book.work_id == source.id),
+        "genre_votes": await _count(db, GenreVote, GenreVote.work_id == source.id),
     }
 
 
@@ -129,7 +131,7 @@ async def split(db: AsyncSession, user: User, work: Work, edition_ids: list[UUID
     room = await db.get(Series, work.series_id)
     new = Work(
         source=source, external_id=external_id, canonical_key=key, title=title, author=work.author,
-        kind=work.kind, identity_provenance=provenance, genre_id=work.genre_id,
+        kind=work.kind, identity_provenance=provenance,
         # A singleton is one book's page: the new book gets its own (flush listener).
         series_id=room.id if room.kind is SeriesKind.series else None,
     )

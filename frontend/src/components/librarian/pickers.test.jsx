@@ -53,7 +53,7 @@ describe('WorkPicker', () => {
     client.get.mockResolvedValue({ data: [] })
     wrap(<WorkPicker label="Find a book" value={null} onChange={vi.fn()} />)
     await userEvent.type(screen.getByLabelText('Find a book'), 'dune messiah')
-    await waitFor(() => expect(client.get).toHaveBeenCalledWith('/works/search', { params: { q: 'dune messiah' } }))
+    await waitFor(() => expect(client.get).toHaveBeenCalledWith('/works/search', expect.objectContaining({ params: { q: 'dune messiah' } })))
     expect(client.get.mock.calls.filter(([url]) => url === '/works/search')).toHaveLength(1)
   })
 })

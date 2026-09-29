@@ -17,6 +17,7 @@ class CorrectionOp(str, enum.Enum):
     remove_from_series = "remove_from_series"
     reject_series = "reject_series"
     rename_series = "rename_series"
+    veto_genre = "veto_genre"  # runtime-only: the pipeline has no genre overrides
 
 
 def _now() -> datetime:

@@ -43,8 +43,8 @@ describe('MergePreview', () => {
   })
 
   it('states what moves, agreeing in number', () => {
-    render(<MergePreview preview={{ ...PREVIEW, threads: 1, shelves: 2, editions: 0 }} />)
-    expect(screen.getByText('1 thread, 2 shelf entries and 0 editions move to the survivor.')).toBeInTheDocument()
+    render(<MergePreview preview={{ ...PREVIEW, threads: 1, shelves: 2, genre_votes: 3, editions: 0 }} />)
+    expect(screen.getByText('1 thread, 2 shelf entries, 3 genre votes and 0 editions move to the survivor.')).toBeInTheDocument()
   })
 
   it('shows the cover when there is one and the title when there is none or it fails', () => {

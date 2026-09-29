@@ -179,27 +179,6 @@ def cover_url(cover_id: int | None, size: str = "L") -> str | None:
     return f"https://covers.openlibrary.org/b/id/{cover_id}-{size}.jpg"
 
 
-def genre_slug(subjects: Sequence[str]) -> str | None:
-    """Map Open Library subject tags onto a seeded Genre slug.
-
-    OL tags genres explicitly (``genre:science fiction``), which is strictly
-    better than the substring guessing Google's free-text categories force. An
-    explicit tag wins; plain subjects are a fallback for works that lack one.
-    """
-    # Imported here rather than at module scope: google_books already imports
-    # from this module's neighbours, and the slug table is shared data, not a
-    # dependency on Google.
-    from app.services.google_books import _CATEGORY_SLUGS
-
-    tagged = [s[len("genre:"):] for s in subjects if s.lower().startswith("genre:")]
-    for pool in (tagged, list(subjects)):
-        blob = " ".join(pool).lower()
-        for needle, slug in _CATEGORY_SLUGS:
-            if needle in blob:
-                return slug
-    return None
-
-
 async def fetch_work_subjects(key: str) -> tuple[str, ...] | None:
     """A work's subject tags from ``/works/{key}.json``, or None on any failure.
 

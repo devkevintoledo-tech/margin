@@ -12,6 +12,7 @@ from app.services.librarian.errors import Conflict, Invalid, NotFound
 
 # Corrections whose subject is a series; every other op's subject is a work.
 SERIES_SUBJECT_OPS = (CorrectionOp.rename_series, CorrectionOp.reject_series)
+GENRE_SUBJECT_OPS = (CorrectionOp.veto_genre,)
 
 
 def clean_reason(reason: str | None) -> str:
@@ -81,17 +82,26 @@ async def record(db: AsyncSession, *, op: CorrectionOp, user: User, reason: str,
 
 
 async def latest_for_subject(db: AsyncSession, correction: CatalogCorrection) -> CatalogCorrection | None:
-    """The newest unreverted fix on the same subject: its work, or its series for
-    rename and dissolve."""
+    """The newest unreverted fix on the same subject: its work (excluding genre
+    vetoes), its (work, genre) for a veto, or its series for rename and dissolve."""
     query = select(CatalogCorrection).where(CatalogCorrection.reverted_at.is_(None))
     if correction.op in SERIES_SUBJECT_OPS:
         if correction.series_id is None:
             return None
         query = query.where(CatalogCorrection.series_id == correction.series_id,
                             CatalogCorrection.op.in_(SERIES_SUBJECT_OPS))
+    elif correction.op in GENRE_SUBJECT_OPS:
+        # A veto's subject is (book, genre): it neither blocks nor is blocked by
+        # fixes to the book's series, or by vetoes of other genres.
+        if correction.work_id is None:
+            return None
+        query = query.where(CatalogCorrection.work_id == correction.work_id,
+                            CatalogCorrection.op == CorrectionOp.veto_genre,
+                            CatalogCorrection.payload["genre_id"].astext == correction.payload["genre_id"])
     else:
         if correction.work_id is None:
             return None
-        query = query.where(CatalogCorrection.work_id == correction.work_id)
+        query = query.where(CatalogCorrection.work_id == correction.work_id,
+                            CatalogCorrection.op.not_in(GENRE_SUBJECT_OPS))
     query = query.order_by(CatalogCorrection.created_at.desc(), CatalogCorrection.id.desc()).limit(1)
     return (await db.execute(query)).scalar_one_or_none()

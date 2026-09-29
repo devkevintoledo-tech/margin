@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
-import client from '../api/client'
+import { useGenreTree } from '../api/genres'
 import { useStatusBar } from '../store/status'
 
 const FALLBACK_GENRES = [
@@ -19,13 +18,8 @@ function Home() {
   const [query, setQuery] = useState('')
   const navigate = useNavigate()
 
-  const { data: genres } = useQuery({
-    queryKey: ['genres'],
-    queryFn: () => client.get('/genres/').then((r) => r.data),
-    placeholderData: FALLBACK_GENRES,
-  })
-
-  const list = genres || FALLBACK_GENRES
+  const { data: genres } = useGenreTree()
+  const list = genres || FALLBACK_GENRES.map((g) => ({ ...g, children: [] }))
 
   useStatusBar({ mode: 'HOME', path: '~', facts: [`${list.length} genres`] })
 
@@ -84,6 +78,21 @@ function Home() {
                 </span>
                 <span className="text-ink-dim text-sm truncate">{genre.description}</span>
               </Link>
+              {genre.children.length > 0 && (
+                <ul className="pl-4 sm:pl-52 text-sm">
+                  {genre.children.slice(0, 3).map((child, i) => (
+                    <li key={child.slug}>
+                      <Link to={`/genres/${child.slug}`}
+                            className="flex gap-2 px-2 -mx-2 hover:bg-highlight transition-colors duration-fast">
+                        <span aria-hidden="true" className="text-ink-faint">
+                          {i === 2 || i === genre.children.length - 1 ? '└─' : '├─'}
+                        </span>
+                        <span className="text-path">{child.slug}</span>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </li>
           ))}
         </ul>

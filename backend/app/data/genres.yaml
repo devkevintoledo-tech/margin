@@ -1,0 +1,223 @@
+# MARGIN's genre taxonomy (docs/superpowers/specs/2026-09-29-genre-voting-design.md §5).
+#
+# slug     permanent and globally unique. Rename with `name`; never change a slug.
+# match    subject phrases inference looks for, whole words, case- and
+#          punctuation-insensitive. Empty = the genre is only ever reader-voted.
+# exclude  a subject containing any of these never infers this genre
+#          ("Great Britain -- History -- Fiction" is a novel, not History).
+# Order in the file is the display order. Two levels only.
+#
+# After editing: `python -m scripts.sync_genres`; after changing a match or
+# exclude list, also `python -m scripts.rebuild_work_genres --reinfer`.
+
+- slug: literary-fiction
+  name: Literary Fiction
+  description: Character-driven stories with literary merit.
+  match: [literary fiction, fiction literary, psychological fiction, fiction psychological]
+  children:
+    - {slug: contemporary-literary, name: Contemporary Literary, match: [contemporary fiction]}
+    - {slug: historical-fiction, name: Historical Fiction, match: [historical fiction, fiction historical]}
+    - {slug: experimental, name: Experimental, match: [experimental fiction]}
+    - {slug: family-saga, name: Family Saga, match: [family saga, domestic fiction, fiction family life]}
+    - {slug: satire, name: Satire, match: [satire, humorous fiction, fiction humorous]}
+    - {slug: short-stories, name: Short Stories, match: [short stories]}
+    - {slug: coming-of-age, name: Coming of Age, match: [coming of age, bildungsroman]}
+
+- slug: science-fiction
+  name: Science Fiction
+  description: Speculative worlds, technology, and futures.
+  match: [science fiction, sci fi]
+  children:
+    - {slug: space-opera, name: Space Opera, match: [space opera]}
+    - {slug: hard-sf, name: Hard SF, match: [hard science fiction]}
+    - {slug: cyberpunk, name: Cyberpunk, match: [cyberpunk]}
+    - {slug: dystopian, name: Dystopian, match: [dystopias, dystopia, dystopian]}
+    - {slug: post-apocalyptic, name: Post-Apocalyptic, match: [post apocalyptic, postapocalyptic]}
+    - {slug: military-sf, name: Military SF, match: [military science fiction, science fiction military]}
+    - {slug: time-travel, name: Time Travel, match: [time travel]}
+    - {slug: first-contact, name: First Contact, match: [first contact, human alien encounters]}
+    - {slug: climate-fiction, name: Climate Fiction, match: [climate fiction, cli fi]}
+    - {slug: alternate-history, name: Alternate History, match: [alternative histories, alternate history, alternative history]}
+
+- slug: fantasy
+  name: Fantasy
+  description: Magic, myth, and invented worlds.
+  match: [fantasy]
+  children:
+    - {slug: epic-fantasy, name: Epic Fantasy, match: [epic fantasy, high fantasy, fantasy epic]}
+    - {slug: grimdark, name: Grimdark, match: [grimdark, dark fantasy]}
+    - {slug: urban-fantasy, name: Urban Fantasy, match: [urban fantasy, fantasy urban]}
+    - {slug: sword-and-sorcery, name: Sword and Sorcery, match: [sword and sorcery]}
+    - {slug: mythic-fantasy, name: Mythic Fantasy, match: [mythic fiction, mythic fantasy]}
+    - {slug: fairy-tale-retellings, name: Fairy Tale Retellings, match: [fairy tale retellings, fairy tales adaptations]}
+    - {slug: portal-fantasy, name: Portal Fantasy, match: [portal fantasy]}
+    - {slug: cozy-fantasy, name: Cozy Fantasy, match: [cozy fantasy]}
+    - {slug: magical-realism, name: Magical Realism, match: [magical realism, magic realism]}
+    - {slug: historical-fantasy, name: Historical Fantasy, match: [historical fantasy, fantasy historical]}
+
+- slug: horror
+  name: Horror
+  description: Dread, the uncanny, and what waits in the dark.
+  match: [horror, horror tales]
+  children:
+    - {slug: cosmic-horror, name: Cosmic Horror, match: [cosmic horror, lovecraftian]}
+    - {slug: gothic, name: Gothic, match: [gothic fiction, fiction gothic, gothic novels]}
+    - {slug: supernatural-horror, name: Supernatural Horror, match: [ghost stories, haunted houses, supernatural horror]}
+    - {slug: psychological-horror, name: Psychological Horror, match: [psychological horror]}
+    - {slug: folk-horror, name: Folk Horror, match: [folk horror]}
+    - {slug: body-horror, name: Body Horror, match: [body horror]}
+
+- slug: mystery
+  name: Mystery
+  description: Puzzles, crimes, and revelations.
+  match: [mystery, detective and mystery stories, mystery and detective stories]
+  children:
+    - {slug: detective, name: Detective, match: [private investigators, detective fiction]}
+    - {slug: cozy-mystery, name: Cozy Mystery, match: [cozy mystery, cozy mysteries, mystery detective cozy]}
+    - {slug: police-procedural, name: Police Procedural, match: [police procedural, police procedurals]}
+    - {slug: noir, name: Noir, match: [noir, noir fiction]}
+    - {slug: hardboiled, name: Hardboiled, match: [hardboiled, hard boiled]}
+    - {slug: locked-room, name: Locked Room, match: [locked room, locked room mysteries]}
+    - {slug: amateur-sleuth, name: Amateur Sleuth, match: [amateur sleuth, women sleuths]}
+
+- slug: thriller
+  name: Thriller
+  description: Suspense, stakes, and a clock running down.
+  match: [thriller, thrillers, suspense fiction]
+  children:
+    - {slug: psychological-thriller, name: Psychological Thriller, match: [psychological thriller, thrillers psychological]}
+    - {slug: legal-thriller, name: Legal Thriller, match: [legal thriller, legal stories, thrillers legal]}
+    - {slug: spy-thriller, name: Spy Thriller, match: [spy stories, espionage, spy thriller]}
+    - {slug: techno-thriller, name: Techno-Thriller, match: [techno thriller, technothriller, thrillers technological]}
+    - {slug: political-thriller, name: Political Thriller, match: [political thriller, thrillers political, political fiction]}
+
+- slug: romance
+  name: Romance
+  description: Love stories, and everything in their way.
+  match: [romance, love stories, romance fiction]
+  children:
+    - {slug: contemporary-romance, name: Contemporary Romance, match: [contemporary romance, romance contemporary]}
+    - {slug: historical-romance, name: Historical Romance, match: [historical romance, romance historical]}
+    - {slug: fantasy-romance, name: Fantasy Romance, match: [fantasy romance, romance fantasy, romantasy, romance paranormal]}
+    - {slug: romantic-suspense, name: Romantic Suspense, match: [romantic suspense, romance suspense]}
+
+- slug: adventure
+  name: Adventure
+  description: Journeys, danger, and the far side of the map.
+  match: [adventure stories, adventure fiction, action and adventure]
+  children:
+    - {slug: nautical, name: Nautical, match: [sea stories, nautical fiction]}
+    - {slug: survival, name: Survival, match: [survival fiction, wilderness survival]}
+    - {slug: western, name: Western, match: [western stories, westerns, western fiction]}
+    - {slug: swashbuckler, name: Swashbuckler, match: [swashbuckler, swashbucklers, pirates]}
+
+- slug: classics
+  name: Classics
+  description: Books that outlived their century.
+  match: [classics, classic literature]
+  children:
+    - {slug: ancient-classics, name: Ancient Classics, match: [classical literature, greek literature, latin literature]}
+    - {slug: nineteenth-century, name: Nineteenth Century, match: [nineteenth century fiction, 19th century fiction, victorian fiction]}
+    - {slug: modernist, name: Modernist, match: [modernism literature, modernist fiction]}
+    - {slug: epic-poetry, name: Epic Poetry, match: [epic poetry]}
+
+- slug: poetry
+  name: Poetry
+  description: Language compressed into meaning.
+  match: [poetry, poems]
+  children:
+    - {slug: lyric-poetry, name: Lyric Poetry, match: [lyric poetry]}
+    - {slug: narrative-poetry, name: Narrative Poetry, match: [narrative poetry]}
+    - {slug: verse-novels, name: Verse Novels, match: [novels in verse, verse novels]}
+    - {slug: anthologies, name: Anthologies, match: [poetry collections, poetry anthologies]}
+
+- slug: drama
+  name: Drama
+  description: Plays, for the stage and the page.
+  match: [drama, plays]
+  children:
+    - {slug: tragedy, name: Tragedy, match: [tragedy, tragedies]}
+    - {slug: comedy, name: Comedy, match: [comedies, comedy drama]}
+    - {slug: contemporary-drama, name: Contemporary Drama, match: [contemporary drama]}
+
+- slug: graphic-novels
+  name: Graphic Novels
+  description: Stories told in panels.
+  match: [graphic novels, comic books strips, comics]
+  children:
+    - {slug: superhero, name: Superhero, match: [superheroes, superhero]}
+    - {slug: manga, name: Manga, match: [manga]}
+    - {slug: graphic-memoir, name: Graphic Memoir, match: [graphic memoir, autobiographical comics]}
+    - {slug: bande-dessinee, name: Bande Dessinée, match: [bande dessinee, bandes dessinees]}
+
+- slug: history
+  name: History
+  description: Non-fiction explorations of the past.
+  match: [history, historiography]
+  exclude: [fiction]
+  children:
+    - {slug: ancient-history, name: Ancient History, match: [ancient history, history ancient, antiquities], exclude: [fiction]}
+    - {slug: medieval-history, name: Medieval History, match: [medieval history, history medieval, middle ages], exclude: [fiction]}
+    - {slug: modern-history, name: Modern History, match: [modern history, history modern], exclude: [fiction]}
+    - {slug: military-history, name: Military History, match: [military history, history military], exclude: [fiction]}
+    - {slug: social-history, name: Social History, match: [social history, history social], exclude: [fiction]}
+    - {slug: history-of-science, name: History of Science, match: [history of science, science history], exclude: [fiction]}
+
+- slug: biography
+  name: Biography
+  description: Lives examined and recorded.
+  match: [biography, biographies]
+  exclude: [fiction]
+  children:
+    - {slug: memoir, name: Memoir, match: [memoir, memoirs], exclude: [fiction]}
+    - {slug: autobiography, name: Autobiography, match: [autobiography, autobiographies], exclude: [fiction]}
+    - {slug: letters-and-diaries, name: Letters and Diaries, match: [correspondence, diaries, letters], exclude: [fiction]}
+
+- slug: philosophy
+  name: Philosophy
+  description: Ideas, ethics, and ways of knowing.
+  match: [philosophy]
+  exclude: [fiction]
+  children:
+    - {slug: ethics, name: Ethics, match: [ethics], exclude: [fiction]}
+    - {slug: political-philosophy, name: Political Philosophy, match: [political philosophy], exclude: [fiction]}
+    - {slug: metaphysics, name: Metaphysics, match: [metaphysics], exclude: [fiction]}
+    - {slug: epistemology, name: Epistemology, match: [epistemology, knowledge theory of], exclude: [fiction]}
+    - {slug: existentialism, name: Existentialism, match: [existentialism], exclude: [fiction]}
+    - {slug: eastern-philosophy, name: Eastern Philosophy, match: [eastern philosophy, buddhist philosophy, chinese philosophy, taoism, zen buddhism], exclude: [fiction]}
+    - {slug: philosophy-of-mind, name: Philosophy of Mind, match: [philosophy of mind], exclude: [fiction]}
+
+- slug: science
+  name: Science
+  description: How the world works, and how we found out.
+  match: []
+  children:
+    - {slug: physics, name: Physics, match: [physics], exclude: [fiction]}
+    - {slug: biology, name: Biology, match: [biology], exclude: [fiction]}
+    - {slug: astronomy, name: Astronomy, match: [astronomy], exclude: [fiction]}
+    - {slug: mathematics, name: Mathematics, match: [mathematics], exclude: [fiction]}
+    - {slug: popular-science, name: Popular Science, match: [popular science, science popular works], exclude: [fiction]}
+    - {slug: nature-writing, name: Nature Writing, match: [nature writing, natural history], exclude: [fiction]}
+
+- slug: society-and-politics
+  name: Society & Politics
+  description: How people live together, and argue about it.
+  match: []
+  children:
+    - {slug: politics, name: Politics, match: [politics and government, political science], exclude: [fiction]}
+    - {slug: economics, name: Economics, match: [economics], exclude: [fiction]}
+    - {slug: sociology, name: Sociology, match: [sociology], exclude: [fiction]}
+    - {slug: true-crime, name: True Crime, match: [true crime], exclude: [fiction]}
+    - {slug: journalism, name: Journalism, match: [journalism, reportage], exclude: [fiction]}
+    - {slug: essays, name: Essays, match: [essays]}
+
+- slug: religion-and-mythology
+  name: Religion & Mythology
+  description: Faith, scripture, and the oldest stories.
+  match: [religion]
+  exclude: [fiction]
+  children:
+    - {slug: mythology, name: Mythology, match: [mythology], exclude: [fiction]}
+    - {slug: theology, name: Theology, match: [theology], exclude: [fiction]}
+    - {slug: religious-texts, name: Religious Texts, match: [sacred books, bible, koran, quran], exclude: [fiction]}
+    - {slug: spirituality, name: Spirituality, match: [spirituality, spiritual life], exclude: [fiction]}

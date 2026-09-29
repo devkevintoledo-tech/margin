@@ -34,8 +34,13 @@ const THREADS = [
   { id: 't2', title: 'Best book?', score: 1, my_vote: 0, post_count: 0, author: 'reader', created_at: new Date().toISOString(), work_id: null },
 ]
 
+// Every book row asks for its genres; the series page tests don't care what they are.
+const isGenreGet = (url) => url === '/genres/' || /^\/works\/[^/]+\/genres$/.test(url)
+const genreGet = (url) => Promise.resolve({ data: url === '/genres/' ? [] : { source: 'none', genres: [], my_vote_count: null } })
+
 function mockApi(series, threads = THREADS) {
   client.get.mockImplementation((url, config) => {
+    if (isGenreGet(url)) return genreGet(url)
     if (url.endsWith('/threads')) {
       const workId = config?.params?.work_id
       return Promise.resolve({ data: workId ? threads.filter((t) => t.work_id === workId) : threads })
@@ -259,6 +264,7 @@ describe('Series page', () => {
     useAuthStore.setState({ token: 't', user: { id: 'u1', username: 'lib', is_librarian: true } })
     let payload = { ...SAGA, id: 's1' }
     client.get.mockImplementation((url, config) => {
+    if (isGenreGet(url)) return genreGet(url)
       if (url.endsWith('/threads')) return Promise.resolve({ data: [] })
       return Promise.resolve({ data: payload })
     })
@@ -314,6 +320,7 @@ describe('Series page', () => {
   it('adds a book from the series header as a move into this series', async () => {
     useAuthStore.setState({ token: 't', user: { id: 'u1', username: 'lib', is_librarian: true } })
     client.get.mockImplementation((url) => {
+    if (isGenreGet(url)) return genreGet(url)
       if (url.endsWith('/threads')) return Promise.resolve({ data: [] })
       if (url === '/works/search') {
         return Promise.resolve({ data: [{ id: 'b3', title: 'Morning Star', author: 'Pierce Brown',

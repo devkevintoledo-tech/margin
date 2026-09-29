@@ -12,6 +12,8 @@ from app.database import get_db
 # effect.
 from app.models import Book, Genre, Shelf, Work
 from app.schemas.book import ShelfIn, ShelfOut, WorkOut, work_out
+from app.schemas.genre import WorkGenresOut
+from app.services import genres as genres_service
 from app.services import search
 from app.services.auth import get_current_user, get_current_user_optional
 from app.services.works import canonical_work, load_work_presentation
@@ -34,23 +36,9 @@ async def _get_work_or_404(work_id: UUID, db: AsyncSession) -> Work:
     return await canonical_work(db, work)
 
 
-async def _upsert_editions(
-    db: AsyncSession, results: list[dict]
-) -> tuple[list[Book], dict[UUID, UUID]]:
-    """Upsert every volume as an edition; return them in relevance order.
-
-    The second return value maps ``Book.id`` to the genre its categories imply.
-    Genre belongs to the work, so the hint is passed through rather than stored
-    on the edition.
-    """
-    slugs = {r["genre_slug"] for r in results if r.get("genre_slug")}
-    genre_ids: dict[str, UUID] = {}
-    if slugs:
-        rows = (await db.execute(select(Genre.slug, Genre.id).where(Genre.slug.in_(slugs)))).all()
-        genre_ids = {slug: gid for slug, gid in rows}
-
+async def _upsert_editions(db: AsyncSession, results: list[dict]) -> list[Book]:
+    """Upsert every volume as an edition; return them in relevance order."""
     editions: list[Book] = []
-    hints: dict[UUID, UUID] = {}
     for item in results:
         ext_id = item.get("external_id")
         if not ext_id:
@@ -75,10 +63,8 @@ async def _upsert_editions(
 
         await db.flush()  # get generated id
         editions.append(edition)
-        if item.get("genre_slug") in genre_ids:
-            hints[edition.id] = genre_ids[item["genre_slug"]]
 
-    return editions, hints
+    return editions
 
 
 async def _to_work_outs(
@@ -91,17 +77,35 @@ async def _to_work_outs(
     ]
 
 
+def _query_error(param: str, message: str) -> HTTPException:
+    # FastAPI's own 422 shape, so api/errors.js shows `msg` and a client can read `loc`.
+    return HTTPException(status_code=422, detail=[{"loc": ["query", param], "msg": message, "type": "value_error"}])
+
+
 @router.get("/search", response_model=list[WorkOut])
 async def search_works(
-    q: str = Query(..., min_length=1),
+    q: str | None = Query(None, description="Text query. Optional when any filter is set."),
+    genre: list[str] = Query([], description="Genre slug; repeat for several (all must match)."),
+    author: str | None = Query(None, max_length=200),
+    year_from: int | None = Query(None, ge=0, le=9999),
+    year_to: int | None = Query(None, ge=0, le=9999),
     db: AsyncSession = Depends(get_db),
 ):
-    """Answer from the local catalog, filling it from Open Library when cold.
+    """Answer from the local catalog, filling it from Open Library when ``q`` is cold.
 
-    No upstream call happens on a query the database has already resolved, so
-    the common case never leaves the process.
+    No upstream call happens on a query the database has already resolved, and
+    none ever happens for filters: a filter-only search is a local browse.
     """
-    works = await search.search(db, q)
+    filters = search.SearchFilters(
+        genres=tuple(dict.fromkeys(g.strip() for g in genre if g.strip())),
+        author=(author or "").strip() or None, year_from=year_from, year_to=year_to,
+    )
+    if not (q or "").strip() and not filters.active:
+        raise _query_error("q", "Search needs a query or a filter.")
+    try:
+        works = await search.search(db, q, filters)
+    except search.InvalidFilter as exc:
+        raise _query_error(exc.param, str(exc)) from None
     return await _to_work_outs(db, works)
 
 
@@ -178,3 +182,38 @@ async def remove_from_shelf(
         raise HTTPException(status_code=404, detail="Shelf entry not found")
 
     await db.delete(shelf)
+
+
+async def _genre_or_404(slug: str, db: AsyncSession) -> Genre:
+    genre = (await db.execute(select(Genre).where(Genre.slug == slug))).scalar_one_or_none()
+    if genre is None:
+        raise HTTPException(status_code=404, detail="Genre not found")
+    return genre
+
+
+@router.get("/{work_id}/genres", response_model=WorkGenresOut)
+async def get_work_genres(work_id: UUID, db: AsyncSession = Depends(get_db),
+                          current_user=Depends(get_current_user_optional)):
+    """The book's effective genres; for a librarian, also the vetoed ones."""
+    work = await _get_work_or_404(work_id, db)
+    return await genres_service.work_genres_payload(db, work, current_user)
+
+
+@router.put("/{work_id}/genres/{slug}", response_model=WorkGenresOut)
+async def vote_genre(work_id: UUID, slug: str, db: AsyncSession = Depends(get_db),
+                     current_user=Depends(get_current_user)):
+    """Tag the book with a genre from the taxonomy. Idempotent; at most 5 per reader per book."""
+    work, genre = await _get_work_or_404(work_id, db), await _genre_or_404(slug, db)
+    try:
+        work = await genres_service.vote(db, current_user, work, genre)
+    except genres_service.GenreRefused as exc:
+        raise HTTPException(status_code=422, detail=exc.message) from None
+    return await genres_service.work_genres_payload(db, work, current_user)
+
+
+@router.delete("/{work_id}/genres/{slug}", response_model=WorkGenresOut)
+async def unvote_genre(work_id: UUID, slug: str, db: AsyncSession = Depends(get_db),
+                       current_user=Depends(get_current_user)):
+    work, genre = await _get_work_or_404(work_id, db), await _genre_or_404(slug, db)
+    work = await genres_service.unvote(db, current_user, work, genre)
+    return await genres_service.work_genres_payload(db, work, current_user)
