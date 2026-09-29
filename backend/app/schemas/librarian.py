@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.models import CorrectionOp
 
@@ -13,36 +13,48 @@ class _Reasoned(BaseModel):
 
 
 class MergeIn(_Reasoned):
+    model_config = ConfigDict(json_schema_extra={"examples": [{"into_work_id": "3a1f0e2d-4c5b-4a69-8d7e-6f5a4b3c2d10", "reason": "Same book, two Open Library records.", "confirm": False}]})
+
     into_work_id: UUID
     confirm: bool = False
 
 
 class SplitIn(_Reasoned):
+    model_config = ConfigDict(json_schema_extra={"examples": [{"edition_ids": ["8b7c6d5e-4f3a-4b2c-9d1e-0f9a8b7c6d5e"], "reason": "This printing is the sequel.", "confirm": False}]})
+
     edition_ids: list[UUID]
     confirm: bool = False
 
 
 class MoveIn(_Reasoned):
+    model_config = ConfigDict(json_schema_extra={"examples": [{"series_id": "3a1f0e2d-4c5b-4a69-8d7e-6f5a4b3c2d10", "position": 3, "reason": "Third book of the series."}]})
+
     series_id: UUID | None = None
     new_series_name: str | None = Field(default=None, max_length=500)  # series.name is String(500)
     position: float | None = Field(default=None, allow_inf_nan=False)
 
 
 class PositionIn(_Reasoned):
+    model_config = ConfigDict(json_schema_extra={"examples": [{"work_id": "8b7c6d5e-4f3a-4b2c-9d1e-0f9a8b7c6d5e", "position": 2.5, "reason": "Novella set between books two and three."}]})
+
     work_id: UUID
     position: float | None = Field(default=None, allow_inf_nan=False)
 
 
 class RemoveIn(_Reasoned):
+    model_config = ConfigDict(json_schema_extra={"examples": [{"work_id": "8b7c6d5e-4f3a-4b2c-9d1e-0f9a8b7c6d5e", "reason": "Not part of this series."}]})
+
     work_id: UUID
 
 
 class RenameIn(_Reasoned):
+    model_config = ConfigDict(json_schema_extra={"examples": [{"name": "The Red Rising Saga", "reason": "Use the publisher's series name."}]})
+
     name: str = Field(max_length=500)
 
 
 class DissolveIn(_Reasoned):
-    pass
+    model_config = ConfigDict(json_schema_extra={"examples": [{"reason": "These books share a tag, not a series."}]})
 
 
 class CorrectionOut(BaseModel):

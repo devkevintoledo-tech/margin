@@ -9,7 +9,14 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 class ThreadCreate(BaseModel):
     # Accept the frontend's payload as-is: genre threads are created by `slug`
     # and the opening post body arrives as `content`.
-    model_config = ConfigDict(populate_by_name=True)
+    model_config = ConfigDict(
+        populate_by_name=True,
+        json_schema_extra={
+            "examples": [
+                {"title": "Is the ending earned?", "genre_slug": "science-fiction", "content": "I'm not sure it is."}
+            ]
+        },
+    )
 
     title: str
     work_id: UUID | None = None
@@ -30,6 +37,8 @@ class ThreadCreate(BaseModel):
 
 class VoteIn(BaseModel):
     """A vote to set: 1 up, -1 down, 0 clears it."""
+
+    model_config = ConfigDict(json_schema_extra={"examples": [{"value": 1}]})
 
     value: int = Field(ge=-1, le=1)
 
@@ -89,6 +98,18 @@ class ThreadSummary(BaseModel):
 
 
 class PostCreate(BaseModel):
+    model_config = ConfigDict(
+        json_schema_extra={
+            "examples": [
+                {
+                    "thread_id": "0d9f3c1a-7b2e-4f5d-8a6c-9e1b2c3d4f50",
+                    "content": "The narrator is lying to himself, not to us.",
+                    "parent_id": None,
+                }
+            ]
+        }
+    )
+
     thread_id: UUID
     content: str
     parent_id: UUID | None = None

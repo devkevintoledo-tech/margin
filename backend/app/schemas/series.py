@@ -48,7 +48,18 @@ class SeriesOut(BaseModel):
 
 
 class SeriesThreadCreate(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
+    model_config = ConfigDict(
+        populate_by_name=True,
+        json_schema_extra={
+            "examples": [
+                {
+                    "title": "Who is the real villain?",
+                    "work_id": "3a1f0e2d-4c5b-4a69-8d7e-6f5a4b3c2d10",
+                    "content": "Tagged to one book; omit work_id to talk about the whole series.",
+                }
+            ]
+        },
+    )
 
     title: str = Field(min_length=1)
     work_id: UUID | None = None
