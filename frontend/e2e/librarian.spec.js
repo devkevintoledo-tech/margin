@@ -118,3 +118,29 @@ test('a librarian adds a book from the series page and undoes it', async ({ page
   await expect(status.getByText('undone')).toBeVisible()
   await expect(books.getByRole('heading', { level: 3, name: /Dispossessed/ })).toHaveCount(0)
 })
+
+// A librarian opens a merge from a series row, sees both books side by side,
+// swaps which survives, and backs out. Never confirms: a merge is permanent.
+test('a librarian previews a merge side by side and swaps the survivor', async ({ page }) => {
+  const user = await registerViaUi(page)
+  grantLibrarian(user)
+  await page.reload()
+
+  await openFirstSearchResult(page, 'dune')
+  await ensureEditMode(page)
+  const books = page.getByRole('list', { name: 'Books in this series' })
+  const title = await books.getByRole('heading').first().textContent()
+  await books.getByRole('button', { name: `merge into… ${title}`, exact: true }).click()
+
+  const dialog = page.getByRole('dialog')
+  await dialog.getByLabel('Find the book to keep', { exact: true }).fill('dune messiah')
+  await dialog.getByRole('radio').first().check()
+  const preview = dialog.getByRole('group', { name: 'Merge preview' })
+  await expect(preview.getByRole('region', { name: `merges away: ${title}` })).toBeVisible()
+
+  await preview.getByRole('button', { name: 'swap which book survives' }).click()
+  await expect(preview.getByRole('region', { name: `survives: ${title}` })).toBeVisible()
+
+  await page.keyboard.press('Escape')
+  await expect(dialog).toBeHidden()
+})

@@ -13,6 +13,35 @@ const SERIES = { id: 's1', name: 'Dune', slug: 'dune', kind: 'series' }
 const BOOK = { id: 'w1', title: 'Dune', author: 'Brian Herbert', position: null }
 const CORRECTION = { id: 'c1', op: 'set_series', exportable: true, undoable: true, room_slug: 'dune' }
 
+const OTHER = { id: 'w2', title: 'Dune', author: 'Frank Herbert' }
+const THIRD = { id: 'w3', title: 'Dune', author: 'Kevin J. Anderson' }
+const side = (book, over = {}) => ({
+  id: book.id, title: book.title, author: book.author, first_publish_year: null, cover_url: null,
+  description: null, edition_count: 1, thread_count: 0, shelf_count: 0, series_slug: `s-${book.id}`,
+  series_name: null, ...over,
+})
+const BY_ID = { w1: BOOK, w2: OTHER, w3: THIRD }
+
+/** Search answers `works`; a merge preview answers for whichever pair it is asked about. */
+function mockGets(works = [OTHER, THIRD], previewError = null) {
+  client.get.mockImplementation((url, config) => {
+    if (url === '/works/search') return Promise.resolve({ data: works })
+    const preview = url.match(/^\/librarian\/works\/(\w+)\/merge-preview$/)
+    if (preview) {
+      if (previewError) return Promise.reject(previewError)
+      const [from, to] = [BY_ID[preview[1]], BY_ID[config.params.into]]
+      return Promise.resolve({ data: {
+        source: side(from), target: side(to), threads: from.id === 'w1' ? 3 : 1, shelves: 0, editions: 1 } })
+    }
+    return Promise.resolve({ data: [] })
+  })
+}
+
+async function pickToKeep(name) {
+  await userEvent.type(screen.getByLabelText('Find the book to keep'), 'dune')
+  await userEvent.click(await screen.findByRole('radio', { name }))
+}
+
 function renderPanel(action, onDone = vi.fn(), { qc = new QueryClient({ defaultOptions: { queries: { retry: false } } }), onClose = vi.fn() } = {}) {
   render(
     <QueryClientProvider client={qc}>
@@ -37,7 +66,7 @@ describe('LibrarianPanel', () => {
   })
 
   it('confirms a merge with the counts the server returned', async () => {
-    client.get.mockResolvedValue({ data: [{ id: 'w2', title: 'Dune', author: 'Frank Herbert' }] })
+    mockGets([OTHER])
     client.post
       .mockRejectedValueOnce({ response: { status: 422, data: { detail: {
         message: 'Merging Dune into Dune cannot be undone.', consequences: { threads: 3, shelves: 12, editions: 4 } } } } })
@@ -46,6 +75,7 @@ describe('LibrarianPanel', () => {
 
     await userEvent.type(screen.getByLabelText('Find the book to keep'), 'dune')
     await userEvent.click(await screen.findByRole('radio', { name: /Frank Herbert/ }))
+    await screen.findByRole('group', { name: 'Merge preview' })
     await userEvent.type(screen.getByLabelText('Reason'), 'same book')
     await userEvent.click(screen.getByRole('button', { name: 'Merge' }))
 
@@ -291,5 +321,153 @@ describe('LibrarianPanel', () => {
     await userEvent.type(screen.getByLabelText('Reason'), 'r')
     expect(screen.getByText(/is already in/)).toHaveTextContent('Dune is already in Dune.')
     expect(screen.getByRole('button', { name: 'Add book' })).toBeDisabled()
+  })
+
+  it('shows both books side by side once the other book is picked', async () => {
+    mockGets()
+    renderPanel({ kind: 'merge', work: BOOK })
+    expect(screen.queryByRole('group', { name: 'Merge preview' })).toBeNull()
+    await pickToKeep(/Frank Herbert/)
+    const preview = await screen.findByRole('group', { name: 'Merge preview' })
+    expect(within(preview).getByRole('region', { name: 'merges away: Dune' })).toHaveTextContent('Brian Herbert')
+    expect(within(preview).getByRole('region', { name: 'survives: Dune' })).toHaveTextContent('Frank Herbert')
+    expect(client.get).toHaveBeenCalledWith('/librarian/works/w1/merge-preview', { params: { into: 'w2' } })
+  })
+
+  it('swap makes the picked book the one that merges away', async () => {
+    mockGets()
+    client.post
+      .mockRejectedValueOnce({ response: { status: 422, data: { detail: {
+        message: 'm', consequences: { threads: 1, shelves: 0, editions: 1 } } } } })
+      .mockResolvedValueOnce({ data: CORRECTION })
+    const onDone = renderPanel({ kind: 'merge', work: BOOK })
+    await pickToKeep(/Frank Herbert/)
+    await userEvent.click(await screen.findByRole('button', { name: 'swap which book survives' }))
+    const preview = await screen.findByRole('group', { name: 'Merge preview' })
+    await waitFor(() => expect(within(preview).getByRole('region', { name: /^merges away/ })).toHaveTextContent('Frank Herbert'))
+    expect(client.get).toHaveBeenCalledWith('/librarian/works/w2/merge-preview', { params: { into: 'w1' } })
+
+    await userEvent.type(screen.getByLabelText('Reason'), 'same book')
+    await userEvent.click(screen.getByRole('button', { name: 'Merge' }))
+    expect(client.post).toHaveBeenCalledWith('/librarian/works/w2/merge',
+      { reason: 'same book', into_work_id: 'w1', confirm: false })
+    expect(await screen.findByText(/Frank Herbert\) will merge into/)).toHaveTextContent(/\(Brian Herbert\)/)
+    await userEvent.click(screen.getByRole('button', { name: 'Confirm merge' }))
+    await waitFor(() => expect(onDone).toHaveBeenCalledWith(CORRECTION))
+    expect(client.post).toHaveBeenLastCalledWith('/librarian/works/w2/merge',
+      { reason: 'same book', into_work_id: 'w1', confirm: true })
+  })
+
+  it('swapping after the counts came back asks again', async () => {
+    mockGets()
+    client.post.mockRejectedValue({ response: { status: 422, data: { detail: {
+      message: 'm', consequences: { threads: 3, shelves: 0, editions: 1 } } } } })
+    renderPanel({ kind: 'merge', work: BOOK })
+    await pickToKeep(/Frank Herbert/)
+    await screen.findByRole('group', { name: 'Merge preview' })
+    await userEvent.type(screen.getByLabelText('Reason'), 'same book')
+    await userEvent.click(screen.getByRole('button', { name: 'Merge' }))
+    expect(await screen.findByRole('button', { name: 'Confirm merge' })).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'swap which book survives' }))
+    expect(screen.queryByRole('button', { name: 'Confirm merge' })).toBeNull()
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Merge' })).toBeEnabled())
+    await userEvent.click(screen.getByRole('button', { name: 'Merge' }))
+    expect(client.post).toHaveBeenLastCalledWith('/librarian/works/w2/merge',
+      { reason: 'same book', into_work_id: 'w1', confirm: false })
+  })
+
+  it('refuses to go on when the preview says a book is gone', async () => {
+    mockGets([OTHER], { response: { status: 409, data: { detail: 'Dune was merged into another book; reload the page.' } } })
+    renderPanel({ kind: 'merge', work: BOOK })
+    await pickToKeep(/Frank Herbert/)
+    expect(await screen.findByText('Dune was merged into another book; reload the page.')).toHaveClass('alert-danger')
+    await userEvent.type(screen.getByLabelText('Reason'), 'same book')
+    expect(screen.getByRole('button', { name: 'Merge' })).toBeDisabled()
+  })
+
+  it('picking another book resets the swap', async () => {
+    mockGets()
+    renderPanel({ kind: 'merge', work: BOOK })
+    await pickToKeep(/Frank Herbert/)
+    await userEvent.click(await screen.findByRole('button', { name: 'swap which book survives' }))
+    await userEvent.click(screen.getByRole('radio', { name: /Kevin J. Anderson/ }))
+    const preview = await screen.findByRole('group', { name: 'Merge preview' })
+    await waitFor(() => expect(within(preview).getByRole('region', { name: /^survives/ })).toHaveTextContent('Kevin J. Anderson'))
+    expect(client.get).toHaveBeenLastCalledWith('/librarian/works/w1/merge-preview', { params: { into: 'w3' } })
+  })
+
+  it('keeps focus on swap while the swapped preview loads, so the dialog keeps its keys', async () => {
+    mockGets()
+    renderPanel({ kind: 'merge', work: BOOK })
+    await pickToKeep(/Frank Herbert/)
+    const swapButton = await screen.findByRole('button', { name: 'swap which book survives' })
+    await userEvent.click(swapButton)
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'swap which book survives' }))
+    await waitFor(() => expect(screen.getByRole('region', { name: /^merges away/ })).toHaveTextContent('Frank Herbert'))
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'swap which book survives' }))
+  })
+
+  it('will not merge on the previous pair while the swapped preview loads', async () => {
+    let answer
+    mockGets()
+    const answered = client.get.getMockImplementation()
+    renderPanel({ kind: 'merge', work: BOOK })
+    await pickToKeep(/Frank Herbert/)
+    await screen.findByRole('group', { name: 'Merge preview' })
+    await userEvent.type(screen.getByLabelText('Reason'), 'same book')
+    expect(screen.getByRole('button', { name: 'Merge' })).toBeEnabled()
+    client.get.mockImplementation((url, config) =>
+      url.endsWith('/merge-preview') ? new Promise((resolve) => { answer = () => resolve(answered(url, config)) }) : answered(url, config))
+    await userEvent.click(screen.getByRole('button', { name: 'swap which book survives' }))
+    expect(screen.getByRole('button', { name: 'Merge' })).toBeDisabled()
+    answer()
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Merge' })).toBeEnabled())
+  })
+
+  it('keeps focus on swap when swapping from the confirm step', async () => {
+    mockGets()
+    client.post.mockRejectedValue({ response: { status: 422, data: { detail: {
+      message: 'm', consequences: { threads: 3, shelves: 0, editions: 1 } } } } })
+    renderPanel({ kind: 'merge', work: BOOK })
+    await pickToKeep(/Frank Herbert/)
+    await screen.findByRole('group', { name: 'Merge preview' })
+    await userEvent.type(screen.getByLabelText('Reason'), 'same book')
+    await userEvent.click(screen.getByRole('button', { name: 'Merge' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'swap which book survives' }))
+    expect(screen.queryByRole('button', { name: 'Confirm merge' })).toBeNull()
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'swap which book survives' }))
+  })
+
+  it('cannot swap while a merge request is in flight', async () => {
+    mockGets()
+    let refuse
+    client.post.mockImplementationOnce(() => new Promise((_, reject) => { refuse = reject }))
+    renderPanel({ kind: 'merge', work: BOOK })
+    await pickToKeep(/Frank Herbert/)
+    await screen.findByRole('group', { name: 'Merge preview' })
+    await userEvent.type(screen.getByLabelText('Reason'), 'same book')
+    await userEvent.click(screen.getByRole('button', { name: 'Merge' }))
+    expect(screen.getByRole('button', { name: 'swap which book survives' })).toBeDisabled()
+    refuse({ response: { status: 422, data: { detail: { message: 'm', consequences: { threads: 3, shelves: 0, editions: 1 } } } } })
+    expect(await screen.findByRole('button', { name: 'Confirm merge' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'swap which book survives' })).toBeEnabled()
+  })
+
+  it('drops counts that answered a pair the form no longer shows', async () => {
+    mockGets()
+    let refuse
+    client.post.mockImplementationOnce(() => new Promise((_, reject) => { refuse = reject }))
+    renderPanel({ kind: 'merge', work: BOOK })
+    await pickToKeep(/Frank Herbert/)
+    await screen.findByRole('group', { name: 'Merge preview' })
+    await userEvent.type(screen.getByLabelText('Reason'), 'same book')
+    await userEvent.click(screen.getByRole('button', { name: 'Merge' }))
+    await userEvent.click(screen.getByRole('radio', { name: /Kevin J. Anderson/ }))
+    refuse({ response: { status: 422, data: { detail: { message: 'm', consequences: { threads: 3, shelves: 0, editions: 1 } } } } })
+    await waitFor(() => expect(client.post).toHaveBeenCalledTimes(1))
+    await new Promise((r) => setTimeout(r, 0))
+    expect(screen.queryByRole('button', { name: 'Confirm merge' })).toBeNull()
+    expect(screen.getByRole('radio', { name: /Kevin J. Anderson/ })).toBeChecked()
   })
 })

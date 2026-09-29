@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import client from './client'
 
 /** The counts a merge or split would affect, when the server asked to confirm. */
@@ -55,5 +55,19 @@ export function useCorrections({ runtimeOnly = false } = {}) {
     queryKey: ['librarian', 'corrections', runtimeOnly],
     queryFn: () =>
       client.get('/librarian/corrections', { params: runtimeOnly ? { runtime_only: true } : {} }).then((r) => r.data),
+  })
+}
+
+/** Both books of a prospective merge, and what it would move. */
+export function useMergePreview(sourceId, intoId) {
+  return useQuery({
+    queryKey: ['librarian', 'merge-preview', sourceId, intoId],
+    queryFn: () =>
+      client.get(`/librarian/works/${sourceId}/merge-preview`, { params: { into: intoId } }).then((r) => r.data),
+    enabled: !!sourceId && !!intoId,
+    retry: false, // a 409 (merged away) or 422 (same book) is an answer, not a blip
+    // A swap asks for a new pair; keeping the old one mounted meanwhile keeps
+    // focus on the swap button instead of dropping it out of the dialog.
+    placeholderData: keepPreviousData,
   })
 }

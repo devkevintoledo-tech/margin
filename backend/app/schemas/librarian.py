@@ -73,3 +73,32 @@ class EditionOut(BaseModel):
     published_year: int | None = None
     language: str | None = None
     source: str
+
+
+class MergeSide(BaseModel):
+    """One book in a merge preview, shown the way its own page shows it."""
+
+    id: UUID
+    title: str
+    author: str
+    first_publish_year: int | None = None
+    # load_work_presentation's ladder, never a raw column: the representative
+    # edition's cover, then OL's curated image; its blurb, then the work's.
+    cover_url: str | None = None
+    description: str | None = None
+    # OL's total, then local rows: the number a search card shows for this book.
+    edition_count: int = 0
+    # Threads about this book: tagged with it, plus a singleton room's untagged ones.
+    thread_count: int = 0
+    shelf_count: int = 0
+    series_slug: str | None = None  # the book's page
+    series_name: str | None = None  # null for a singleton, which has no series chrome
+
+
+class MergePreviewOut(BaseModel):
+    source: MergeSide  # merges away
+    target: MergeSide  # survives
+    # What the merge moves: the numbers its 422 confirmation states.
+    threads: int
+    shelves: int
+    editions: int

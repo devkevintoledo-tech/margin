@@ -12,7 +12,7 @@
 
 **Roadmap item:** 04 — tick in docs/librarian-ux-roadmap.md when merged
 
-- [ ] **Merged** (PR: ____, date: ____)
+- [x] **Merged** (PR: #18, date: 2026-09-29)
 
 ## Global Constraints
 
