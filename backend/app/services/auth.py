@@ -20,7 +20,6 @@ bearer_scheme = HTTPBearer()
 optional_bearer_scheme = HTTPBearer(auto_error=False)
 
 ALGORITHM = "HS256"
-DEFAULT_EXPIRE_MINUTES = 30
 
 
 # Use bcrypt directly: passlib 1.7.4 is incompatible with bcrypt >= 4.1.
@@ -52,7 +51,7 @@ def generate_reset_token() -> tuple[str, str]:
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
     to_encode = data.copy()
     expire = datetime.now(timezone.utc) + (
-        expires_delta if expires_delta else timedelta(minutes=DEFAULT_EXPIRE_MINUTES)
+        expires_delta if expires_delta else timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     )
     to_encode["exp"] = expire
     return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=ALGORITHM)

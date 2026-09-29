@@ -52,3 +52,42 @@ async def test_duplicate_email_conflict(client):
     payload["username"] = "second"
     again = await client.post("/api/auth/register", json=payload)
     assert again.status_code == 409
+
+
+async def test_token_lifetime_follows_the_setting(client, monkeypatch):
+    from datetime import datetime, timezone
+
+    from jose import jwt
+
+    from app.services import auth as auth_service
+
+    monkeypatch.setattr(auth_service.settings, "ACCESS_TOKEN_EXPIRE_MINUTES", 5)
+    reg = await client.post(
+        "/api/auth/register",
+        json={"email": "hedy@example.com", "username": "hedy", "password": "frequency-hop"},
+    )
+    claims = jwt.get_unverified_claims(reg.json()["token"])
+    remaining = claims["exp"] - datetime.now(timezone.utc).timestamp()
+    assert 4 * 60 < remaining <= 5 * 60
+
+
+async def test_expired_token_is_rejected(client):
+    from datetime import timedelta
+
+    from app.services.auth import create_access_token
+
+    reg = await client.post(
+        "/api/auth/register",
+        json={"email": "joan@example.com", "username": "joan", "password": "enigma-1942"},
+    )
+    user_id = reg.json()["user"]["id"]
+    expired = create_access_token({"sub": user_id}, expires_delta=timedelta(seconds=-1))
+
+    me = await client.get("/api/auth/me", headers={"Authorization": f"Bearer {expired}"})
+    assert me.status_code == 401
+
+
+async def test_logout_is_a_stateless_acknowledgement(client):
+    resp = await client.post("/api/auth/logout")
+    assert resp.status_code == 200
+    assert resp.json() == {"message": "logged out"}

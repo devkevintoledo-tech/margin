@@ -33,7 +33,7 @@ Status: ⬜ not started · 🟡 in progress · ✅ done · ⏸ parked
 | 02 | Quick reasons | [plan](superpowers/plans/2026-09-29-lx02-quick-reasons.md) | — | ✅ | feat/librarian-lx02-quick-reasons | 2026-09-29 | #16 |
 | 03 | Add a book from the series page | [plan](superpowers/plans/2026-09-29-lx03-add-book-to-series.md) | — | ✅ | feat/librarian-lx03-add-book | 2026-09-29 | #17 |
 | 04 | Side-by-side merge preview | [plan](superpowers/plans/2026-09-29-lx04-merge-preview.md) | — | ✅ | feat/librarian-lx04-merge-preview | 2026-09-29 | #18 |
-| 05 | Merge from search results | [plan](superpowers/plans/2026-09-29-lx05-merge-from-search.md) | 04 | 🟡 | feat/librarian-lx05-merge-from-search | | |
+| 05 | Merge from search results | [plan](superpowers/plans/2026-09-29-lx05-merge-from-search.md) | 04 | ✅ | feat/librarian-lx05-merge-from-search | 2026-09-29 | #19 |
 | 06 | Cover picker | [plan](superpowers/plans/2026-09-29-lx06-cover-picker.md) | — | ⬜ | | | |
 | 07 | Keep the best of both on merge | [plan](superpowers/plans/2026-09-29-lx07-merge-keep-best.md) | 04, 06 | ⬜ | | | |
 | 08 | Batch actions | [plan](superpowers/plans/2026-09-29-lx08-batch-actions.md) | 02 | ⬜ | | | |

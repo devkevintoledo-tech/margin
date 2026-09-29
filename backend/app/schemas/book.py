@@ -96,6 +96,8 @@ class GenreOut(BaseModel):
 
 
 class ShelfIn(BaseModel):
+    model_config = ConfigDict(json_schema_extra={"examples": [{"status": "reading"}]})
+
     status: Literal["want_to_read", "reading", "read"]
 
 

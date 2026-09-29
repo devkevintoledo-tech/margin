@@ -79,7 +79,7 @@ Working state is `build/catalog.duckdb`; releases land in `releases/catalog-<ver
 
 ### Subagents & roadmap
 
-Feature work is delegated to focused subagents in `.claude/agents/`: `backend-dev`, `frontend-dev`, `test-engineer`, and `code-reviewer`. The phased feature plan lives in `ROADMAP.md` (Phase 0 = test/hardening foundations is the current focus).
+Feature work is delegated to focused subagents in `.claude/agents/`: `backend-dev`, `frontend-dev`, `test-engineer`, and `code-reviewer`. The phased feature plan lives in `ROADMAP.md` (Phase 0 = test/hardening foundations is done; Phase 1 is the current focus).
 
 ## Architecture
 
@@ -311,7 +311,7 @@ settings, HTTP and ORM imports (`tests/test_pure_imports.py` enforces it).
 
 ## Known remaining gaps
 
-- **No token revocation**: `POST /auth/logout` is a stateless no-op — the frontend just clears the persisted JWT, and a stolen token stays valid until expiry. A password reset does not invalidate existing sessions either. Anything relying on server-side session invalidation needs a refresh/denylist design first.
+- **No token revocation**: `POST /auth/logout` is a stateless acknowledgement — the frontend just clears the persisted JWT, and a stolen token stays valid until expiry (`ACCESS_TOKEN_EXPIRE_MINUTES`, default 30). A password reset does not invalidate existing sessions either. Anything relying on server-side session invalidation needs a refresh/denylist design first.
 - Librarian tools cover merge/split/move/reorder/rename/remove/dissolve in-app (from the series page in edit mode, which can also add a book, as a move; merge also from search results via `select`);
   `python -m scripts.export_overrides` writes them to
   `pipeline/overrides/z-librarian.yaml`, which a person reviews and commits.
@@ -328,3 +328,4 @@ Backend reads env vars (see `backend/.env.example` and the `backend` service in 
 - Book data: `GOOGLE_BOOKS_BASE_URL`, `GOOGLE_BOOKS_API_KEY` (optional; keyless fallback), `OPEN_LIBRARY_BASE_URL`
 - Email (optional — no `SMTP_HOST` means reset links are logged, not sent): `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_USE_TLS`, `MAIL_FROM`
 - Password reset: `FRONTEND_BASE_URL` (base of the emailed link), `PASSWORD_RESET_TOKEN_TTL_MINUTES`
+- Sessions: `ACCESS_TOKEN_EXPIRE_MINUTES` (JWT lifetime; default 30)

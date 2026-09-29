@@ -10,23 +10,23 @@ exists, what's next, and in what order**.
 The current code is a functionally complete v1 MVP: works and series as the
 catalog, series pages as the discussion home, an offline catalog pipeline that
 publishes loadable releases, and a terminal-style design system — covered by
-backend, frontend-unit and e2e suites in CI. Phase 0 finishes hardening it;
-later phases extend it along the spec's "out of scope for v1" list.
+backend, frontend-unit and e2e suites in CI. Phase 0 hardened it; later
+phases extend it along the spec's "out of scope for v1" list.
 
 ---
 
 ## Phase 0 — Foundations & Hardening
 
-Make the MVP safe to change. This is the current focus.
+Make the MVP safe to change. Done; Phase 1 is the current focus.
 
 | Status | Feature | Touches |
 | --- | --- | --- |
-| 🟡 | **Test pyramid** — pytest (backend, ~370 tests: auth, works, series, search, enrichment, votes, catalog loader, scripts), Vitest + RTL (frontend unit: pages, shared components, design tokens), Playwright (e2e: auth, search, series, thread, reply). Gaps: Home, Genre, Search, Thread and Register pages have no unit tests. | `backend/tests/`, `frontend/src/**/*.test.jsx`, `frontend/e2e/` |
+| ✅ | **Test pyramid** — pytest (backend, ~455 tests: auth, works, series, search, enrichment, votes, catalog loader, librarian, scripts, OpenAPI), Vitest + RTL (frontend unit: every page, shared components, design tokens), Playwright (e2e: auth, search, series, thread, reply, librarian). | `backend/tests/`, `frontend/src/**/*.test.jsx`, `frontend/e2e/` |
 | ✅ | **CI workflow** — backend, frontend unit and pipeline tests on push/PR; e2e nightly. | `.github/workflows/ci.yml` |
 | ✅ | **Shelf uniqueness** — `UNIQUE (user_id, work_id)` (`uq_shelf_user_work`); shelves hang off works since work grouping. | `backend/app/models/shelf.py`, `backend/alembic/versions/` |
-| 🟡 | **Real logout / token handling** — frontend calls `POST /auth/logout` then clears the JWT; server endpoint is still a stateless no-op (no refresh/revocation). Strategy = short-lived JWT + client clear; revisit if token revocation is needed. | `backend/app/api/auth.py:203`, `frontend/src/store/auth.js` |
+| ✅ | **Logout / token handling** — decided: short-lived stateless JWT (`ACCESS_TOKEN_EXPIRE_MINUTES`, default 30) + client clear. The frontend calls `POST /auth/logout` (a documented acknowledgement) then drops the token; expired tokens are rejected. Revocation is tracked in Phase 6. | `backend/app/config.py`, `backend/app/api/auth.py`, `frontend/src/store/auth.js` |
 | ✅ | **Pagination** — `limit`/`offset` on genre works, genre threads and series threads. | `backend/app/api/{genres,series}.py`, `backend/app/services/threads.py` |
-| 🟡 | **OpenAPI polish** — tags + response models in place, `/docs` & `/redoc` surfaced by default; response examples still to add. | `backend/app/main.py` |
+| ✅ | **OpenAPI polish** — tags, response models and examples; every JSON request body carries an example, asserted by `tests/test_openapi.py`. `/docs` & `/redoc` surfaced by default. | `backend/app/main.py`, `backend/app/schemas/` |
 | ✅ | **404 / error pages** — `NotFound` page + wildcard route. Generic error strings on data-fetch failures remain. | `frontend/src/App.jsx`, `frontend/src/pages/NotFound.jsx` |
 | ✅ | **Public profile hides email** — `GET /api/users/{username}` is anonymous and now serializes `PublicUserOut`; `email` stays on the auth routes. | `backend/app/schemas/user.py`, `backend/app/api/users.py` |
 
@@ -118,6 +118,7 @@ No moderation surface exists today (no roles, flags, or admin tools).
 | Status | Feature | Touches |
 | --- | --- | --- |
 | ⬜ | **Background jobs / queue** — async Google Books sync, notification fan-out. | new worker service |
+| ⬜ | **Token revocation / refresh tokens** — sessions are stateless JWTs today: logout and password reset cannot invalidate a token already issued. Needs a refresh + denylist design. | `backend/app/services/auth.py`, new model |
 | ⬜ | **Email verification** — password reset already ships (`/auth/forgot-password`). | `backend/app/api/auth.py`, email service |
 | ⬜ | **Rate-limit `/api/works/search`** — much cheaper since local-first search: a repeat query makes no upstream call at all, so only a *cold* query costs anything (one 5s Open Library call, or the Google fallback). Still anonymous and still writes `works` rows, so a stream of distinct queries is unbounded work. | `backend/app/api/works.py`, `backend/app/services/search.py` |
 | ⬜ | **Data export** — user shelf/post export. | new endpoint |
