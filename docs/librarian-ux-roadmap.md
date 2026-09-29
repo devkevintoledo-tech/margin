@@ -281,3 +281,15 @@ _(Add dated notes here as items land: surprises, changed names, follow-ups.)_
   endpoint was added. `LibrarianPanel`'s float now scrolls within the viewport
   (`max-h-full overflow-y-auto`): a long result list had pushed its submit
   button off screen.
+- **2026-09-29 — 04:** `GET /api/librarian/works/{id}/merge-preview?into=` →
+  `MergePreviewOut`; service `services/librarian/identity.merge_preview`, whose
+  counts come from `merge_consequences`, shared with `merge`'s 422.
+  `MergeSide.series_name` is null for a singleton (`series_slug` is still set: it
+  is the book's page). `MergeSide.edition_count` is the presentation count (OL
+  total, then local rows), matching search cards; the top-level `editions` is
+  the local rows that move. `MergePreview`'s `onSwap` is optional; without it no
+  swap control renders (for 14's compact rows). Hook: `useMergePreview(sourceId,
+  intoId)`, which keeps the previous pair mounted (`keepPreviousData`) while a
+  swapped pair loads, so focus stays on `swap`; the panel holds `Merge` while
+  `isPlaceholderData`. The panel's merge fields carry `swapped`, reset when
+  `into` changes; 05 presets `into` and relies on that.
