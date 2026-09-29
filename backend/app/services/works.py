@@ -366,9 +366,10 @@ async def upsert_work_from_ol(db: AsyncSession, ol: OLWork) -> Work:
     # New tags on a re-ingest can promote a singleton into its series.
     await series_service.assign_series(db, work)
 
-    # A release work's genres are the catalog's, as its subjects are.
-    if work.catalog_release is None:
-        await genres_service.infer_from_subjects(db, work, ol.subjects or (), "open_library")
+    # A release work's genres are the catalog's, as its subjects are. A doc
+    # with no subjects is no evidence, so it leaves the current inference alone.
+    if work.catalog_release is None and ol.subjects:
+        await genres_service.infer_from_subjects(db, work, ol.subjects, "open_library")
 
     await db.flush()
     return work

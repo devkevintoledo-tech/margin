@@ -93,3 +93,11 @@ async def test_split_off_book_starts_with_no_votes(db_session, taxonomy):
     assert (await db_session.execute(select(GenreVote).where(GenreVote.work_id == new.id))).first() is None
     assert set(await effective(db_session, new)) == {"horror"}
     assert "fantasy" in await effective(db_session, work)
+
+
+async def test_a_reingest_without_subjects_keeps_the_inference(db_session, taxonomy):
+    # No subjects is no evidence: a doc without tags must not erase a genre
+    # the work already has (for older works, the one works.genre_id became).
+    work = await upsert_work_from_ol(db_session, ol_work(subjects=("genre:science fiction",)))
+    await upsert_work_from_ol(db_session, ol_work(subjects=()))
+    assert set(await effective(db_session, work)) == {"science-fiction"}
