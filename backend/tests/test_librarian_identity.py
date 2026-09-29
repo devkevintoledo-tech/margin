@@ -27,14 +27,14 @@ async def test_merge_asks_first_with_real_counts(db_session):
 
     with pytest.raises(NeedsConfirmation) as asked:
         await merge(db_session, lib, source, target, reason="same book")
-    assert asked.value.consequences == {"threads": 2, "shelves": 1, "editions": 2}
+    assert asked.value.consequences == {"threads": 2, "shelves": 1, "editions": 2, "genre_votes": 0}
     assert await fresh(db_session, Work.merged_into_id, source.id) is None  # nothing happened
 
     c = await merge(db_session, lib, source, target, reason="same book", confirm=True)
     assert await fresh(db_session, Work.merged_into_id, source.id) == target.id
     assert c.op is CorrectionOp.merge_works and c.work_id == target.id and c.snapshot is None
     assert c.override == [{"merge_works": ["OL1W", "OL2W"]}]
-    assert c.payload["consequences"] == {"threads": 2, "shelves": 1, "editions": 2}
+    assert c.payload["consequences"] == {"threads": 2, "shelves": 1, "editions": 2, "genre_votes": 0}
 
 
 async def test_merge_refusals(db_session):

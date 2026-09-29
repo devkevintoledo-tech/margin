@@ -76,7 +76,7 @@ async def test_merge_asks_for_confirmation_then_refuses_a_second_merge(client, d
 
     ask = await client.post(path, json=body, headers=lib)
     assert ask.status_code == 422
-    assert ask.json()["detail"]["consequences"] == {"threads": 0, "shelves": 0, "editions": 1}
+    assert ask.json()["detail"]["consequences"] == {"threads": 0, "shelves": 0, "editions": 1, "genre_votes": 0}
     assert "cannot be undone" in ask.json()["detail"]["message"]
 
     done = await client.post(path, json={**body, "confirm": True}, headers=lib)

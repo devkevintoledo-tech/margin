@@ -6,7 +6,8 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import (
-    Book, CatalogCorrection, CorrectionOp, Series, SeriesKind, Shelf, Thread, User, Work, WorkProvenance, WorkSource,
+    Book, CatalogCorrection, CorrectionOp, GenreVote, Series, SeriesKind, Shelf, Thread, User, Work, WorkProvenance,
+    WorkSource,
 )
 from app.schemas.librarian import MergePreviewOut, MergeSide
 from app.services.librarian.errors import Conflict, Invalid, NeedsConfirmation, NotFound
@@ -40,6 +41,7 @@ async def merge_consequences(db: AsyncSession, source: Work, target: Work) -> di
         "threads": moving_threads,
         "shelves": await _count(db, Shelf, Shelf.work_id == source.id),
         "editions": await _count(db, Book, Book.work_id == source.id),
+        "genre_votes": await _count(db, GenreVote, GenreVote.work_id == source.id),
     }
 
 

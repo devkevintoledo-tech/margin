@@ -12,6 +12,10 @@ class _Reasoned(BaseModel):
     reason: str
 
 
+class VetoIn(_Reasoned):
+    model_config = ConfigDict(json_schema_extra={"examples": [{"reason": "troll tagging"}]})
+
+
 class MergeIn(_Reasoned):
     model_config = ConfigDict(json_schema_extra={"examples": [{"into_work_id": "3a1f0e2d-4c5b-4a69-8d7e-6f5a4b3c2d10", "reason": "Same book, two Open Library records.", "confirm": False}]})
 
@@ -114,3 +118,4 @@ class MergePreviewOut(BaseModel):
     threads: int
     shelves: int
     editions: int
+    genre_votes: int = 0

@@ -8,6 +8,8 @@ from sqlalchemy.pool import NullPool
 from app.models import Genre, User, Work, WorkKind
 from app.services import genres as genres_service
 from app.services.genres import GenreRefused, MAX_GENRES_PER_READER, unvote, vote
+from app.services.librarian import revert, veto_genre
+from app.services.librarian.errors import Conflict
 from tests.conftest import TEST_DB_URL
 from tests.genre_factories import add_veto, effective, make_genre, summary
 from tests.librarian_factories import make_user, make_work
@@ -96,6 +98,7 @@ async def test_drift_guard_incremental_equals_rebuild(db_session, taxonomy):
     readers = [await make_user(db_session) for _ in range(3)]
     works = [await make_work(db_session, title) for title in ("Alpha", "Beta", "Gamma")]
     pool = [taxonomy[s] for s in ("fantasy", "epic-fantasy", "grimdark", "mystery", "noir", "horror")]
+    lib, vetoes = await make_user(db_session, librarian=True), []
     for _ in range(60):
         r, w, g = rng.choice(readers), rng.choice(works), rng.choice(pool)
         roll = rng.random()
@@ -106,9 +109,16 @@ async def test_drift_guard_incremental_equals_rebuild(db_session, taxonomy):
                 pass
         elif roll < 0.8:
             await unvote(db_session, r, w, g)
-        else:
+        elif roll < 0.9:
             await genres_service.set_inferences(
                 db_session, w, {x.slug for x in rng.sample(pool, 2)}, rng.choice(["open_library", "google"]))
+        elif vetoes and rng.random() < 0.5:
+            await revert(db_session, lib, vetoes.pop(rng.randrange(len(vetoes))))
+        else:
+            try:
+                vetoes.append(await veto_genre(db_session, lib, w, g, reason="r"))
+            except Conflict:
+                pass
     incremental = await summary(db_session)
     await genres_service.recompute(db_session, None)
     assert await summary(db_session) == incremental
