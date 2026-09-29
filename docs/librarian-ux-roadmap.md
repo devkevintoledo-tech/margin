@@ -272,3 +272,12 @@ _(Add dated notes here as items land: surprises, changed names, follow-ups.)_
   (default `lib-reason`); a new kind adds its presets to `REASONS` in
   `components/librarian/reasons.js`; a chip with typed text yields
   `<preset>: <text>`, and a bare `<preset>:` still counts as that preset.
+- **2026-09-29 — 03:** `WorkPicker` shows `in <series>` for hits in a real
+  series, and both pickers name their results radiogroup `` `${label}: results` ``
+  (label-derived, so two pickers never share a name). That name contains the
+  label, so in Playwright every picker lookup must be exact —
+  `getByLabel('Find a series', { exact: true })` — as with `Reason`. The "already
+  in another series" check reads `WorkOut.series` from `/works/search`; no
+  endpoint was added. `LibrarianPanel`'s float now scrolls within the viewport
+  (`max-h-full overflow-y-auto`): a long result list had pushed its submit
+  button off screen.
