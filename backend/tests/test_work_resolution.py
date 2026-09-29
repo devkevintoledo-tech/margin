@@ -158,22 +158,6 @@ async def test_a_heuristic_work_is_absorbed_when_open_library_answers_later(db_s
     assert first.work_id == ol_work.id
 
 
-@respx.mock
-async def test_genre_comes_from_the_hint_not_from_the_edition(db_session):
-    from app.models import Genre
-
-    respx.get(SEARCH_URL).mock(return_value=Response(200, json={"docs": [RED_RISING_DOC]}))
-    genre = Genre(name="Science Fiction", slug="science-fiction")
-    edition = make_edition(isbn_13="9780345539809")
-    db_session.add_all([genre, edition])
-    await db_session.flush()
-
-    resolved = await works_service.resolve_editions(
-        db_session, [edition], genre_hints={edition.id: genre.id}
-    )
-    assert resolved[edition.id].genre_id == genre.id
-
-
 async def test_merge_moves_threads_and_shelves(db_session):
     source = Work(
         source=WorkSource.heuristic,
@@ -439,7 +423,8 @@ async def test_upsert_assigns_a_genre_from_the_open_library_subject_tag(db_sessi
     db_session.add(genre)
     await db_session.flush()
     work = await upsert_work_from_ol(db_session, ol_work())
-    assert work.genre_id == genre.id
+    from app.models import GenreInference
+    assert (await db_session.execute(select(GenreInference.genre_id).where(GenreInference.work_id == work.id))).scalars().all() == [genre.id]
 
 
 async def test_upsert_absorbs_a_matching_heuristic_work(db_session):

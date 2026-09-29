@@ -43,7 +43,7 @@ async def enrich_work(db: AsyncSession, work: Work) -> None:
     # module scope would close an import cycle through the router.
     from app.api.works import _upsert_editions
 
-    editions, _ = await _upsert_editions(db, results)
+    editions = await _upsert_editions(db, results)
 
     # Google answers `intitle:/inauthor:` with everything the author wrote
     # under that phrase — Iron Gold, the Sons of Ares graphic novels — so an

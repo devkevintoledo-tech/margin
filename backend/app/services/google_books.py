@@ -11,35 +11,6 @@ from app.config import settings
 # Re-exported: search, open_library and SearchQuery import it from here.
 from app.services.text import normalize  # noqa: F401
 
-# Maps a substring (checked against the lowercased category string) to a seeded
-# Genre slug. Order matters — more specific terms first; generic "fiction" last.
-_CATEGORY_SLUGS: list[tuple[str, str]] = [
-    ("science fiction", "science-fiction"),
-    ("fantasy", "fantasy"),
-    ("biography", "biography"),
-    ("autobiography", "biography"),
-    ("history", "history"),
-    ("philosophy", "philosophy"),
-    ("poetry", "poetry"),
-    ("mystery", "mystery"),
-    ("detective", "mystery"),
-    ("crime", "mystery"),
-    ("literary", "literary-fiction"),
-    ("fiction", "literary-fiction"),  # generic fiction fallback (last)
-]
-
-
-
-def _category_to_slug(categories: list[str] | None) -> str | None:
-    if not categories:
-        return None
-    blob = " ".join(categories).lower()
-    for needle, slug in _CATEGORY_SLUGS:
-        if needle in blob:
-            return slug
-    return None
-
-
 def _parse_year(published_date: str | None) -> int | None:
     if not published_date:
         return None
@@ -126,7 +97,6 @@ def _map_volume(volume: dict[str, Any]) -> dict[str, Any]:
         "info_link": info.get("infoLink"),
         "preview_link": info.get("previewLink"),
         "cover_url": _cover_url(info.get("imageLinks")),
-        "genre_slug": _category_to_slug(categories),
     }
 
 

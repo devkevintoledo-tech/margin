@@ -210,18 +210,6 @@ def test_cover_url_builds_an_open_library_url():
     assert ol.cover_url(None) is None
 
 
-def test_genre_slug_prefers_an_explicit_genre_tag():
-    assert ol.genre_slug(["Fiction", "genre:science fiction"]) == "science-fiction"
-
-
-def test_genre_slug_falls_back_to_a_plain_subject():
-    assert ol.genre_slug(["Fantasy", "Dragons"]) == "fantasy"
-
-
-def test_genre_slug_returns_none_when_nothing_matches():
-    assert ol.genre_slug(["Dragons", "Swords"]) is None
-
-
 WORK_URL = "https://openlibrary.org/works/OL17076473W.json"
 
 

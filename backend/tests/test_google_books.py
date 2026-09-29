@@ -45,7 +45,6 @@ def test_map_volume_extracts_all_fields():
     assert m["ratings_count"] == 42
     assert m["language"] == "en"
     assert m["categories"] == ["Fiction / Fantasy / Epic"]
-    assert m["genre_slug"] == "fantasy"
     assert m["cover_url"].startswith("https://")  # http upgraded
 
 
@@ -56,30 +55,11 @@ def test_map_volume_handles_missing_optional_fields():
     assert m["author"] == "Unknown"  # NOT NULL fallback
     assert m["cover_url"] is None
     assert m["published_year"] is None
-    assert m["genre_slug"] is None
 
 
 def test_parse_year_from_year_only_date():
     assert gb._parse_year("1998") == 1998
     assert gb._parse_year(None) is None
-
-
-@pytest.mark.parametrize(
-    "category,slug",
-    [
-        ("Science Fiction", "science-fiction"),
-        ("Fiction / Fantasy / Epic", "fantasy"),
-        ("Biography & Autobiography", "biography"),
-        ("History / Europe", "history"),
-        ("Philosophy", "philosophy"),
-        ("Poetry", "poetry"),
-        ("True Crime / Murder", "mystery"),
-        ("Fiction / Literary", "literary-fiction"),
-        ("Cooking", None),
-    ],
-)
-def test_category_to_slug(category, slug):
-    assert gb._category_to_slug([category]) == slug
 
 
 @respx.mock

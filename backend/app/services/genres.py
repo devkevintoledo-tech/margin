@@ -125,3 +125,25 @@ async def infer_from_categories(db: AsyncSession, work: Work, categories: Sequen
     if has_ol is not None:
         return
     await set_inferences(db, work, infer_genres(categories, shipped_taxonomy()), "google")
+
+
+async def absorb(db: AsyncSession, source: Work, target: Work) -> None:
+    """``merge_works``' genre half: votes (deduped per reader and genre),
+    inferences (union) and vetoes follow the book; the tombstone keeps no summary."""
+    # Imported here: the librarian package imports works.py, which imports this module.
+    from app.services.librarian.genres import repoint_vetoes
+
+    params = {"src": source.id, "dst": target.id}
+    await db.flush()
+    await db.execute(text("""
+        DELETE FROM genre_votes s USING genre_votes t
+        WHERE s.work_id = :src AND t.work_id = :dst AND t.user_id = s.user_id AND t.genre_id = s.genre_id"""), params)
+    await db.execute(text("UPDATE genre_votes SET work_id = :dst WHERE work_id = :src"), params)
+    await db.execute(text("""
+        INSERT INTO genre_inferences (work_id, genre_id, source)
+        SELECT :dst, genre_id, source FROM genre_inferences WHERE work_id = :src
+        ON CONFLICT DO NOTHING"""), params)
+    await db.execute(text("DELETE FROM genre_inferences WHERE work_id = :src"), params)
+    await repoint_vetoes(db, source.id, target.id)
+    await db.execute(text("DELETE FROM work_genres WHERE work_id = :src"), params)
+    await recompute(db, [target.id])

@@ -96,9 +96,6 @@ class Work(Base):
         ),
         nullable=True,
     )
-    genre_id: Mapped[uuid.UUID | None] = mapped_column(
-        ForeignKey("genres.id", ondelete="SET NULL"), nullable=True, index=True
-    )
     # The book's room. Every work has one — a singleton of its own when no
     # series is known — so a work page, a search card and a thread all resolve
     # to exactly one place. `services/series.py` fills it on flush.
@@ -180,7 +177,6 @@ class Work(Base):
     representative: Mapped["Book | None"] = relationship(  # noqa: F821
         "Book", foreign_keys=[representative_book_id], post_update=True
     )
-    genre: Mapped["Genre | None"] = relationship("Genre", back_populates="works")  # noqa: F821
     series: Mapped["Series"] = relationship(  # noqa: F821
         "Series", back_populates="works", foreign_keys=[series_id]
     )

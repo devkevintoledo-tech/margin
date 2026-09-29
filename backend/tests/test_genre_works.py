@@ -1,6 +1,7 @@
 import uuid
 
 from app.models import Book, Genre, Work, WorkKind, WorkProvenance, WorkSource
+from app.services import genres as genres_service
 
 
 async def seed_work(db_session, genre, title, kind=WorkKind.single):
@@ -12,10 +13,10 @@ async def seed_work(db_session, genre, title, kind=WorkKind.single):
         author="Author",
         kind=kind,
         identity_provenance=WorkProvenance.isbn,
-        genre_id=genre.id,
     )
     db_session.add(work)
     await db_session.flush()
+    await genres_service.set_inferences(db_session, work, {genre.slug}, "open_library")
     edition = Book(
         source="google_books",
         external_id=uuid.uuid4().hex[:12],

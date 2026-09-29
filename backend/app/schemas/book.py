@@ -39,7 +39,6 @@ class BookOut(BaseModel):
     maturity_rating: str | None = None
     info_link: str | None = None
     preview_link: str | None = None
-    genre_id: UUID | None
     shelf_status: ShelfStatus | None = None
 
 
@@ -56,7 +55,6 @@ class WorkOut(BaseModel):
     author: str
     first_publish_year: int | None = None
     kind: WorkKind
-    genre_id: UUID | None = None
     cover_url: str | None = None
     description: str | None = None
     edition_count: int = 0
@@ -77,7 +75,6 @@ def work_out(
         author=work.author,
         first_publish_year=work.first_publish_year,
         kind=work.kind,
-        genre_id=work.genre_id,
         cover_url=presentation.cover_url if presentation else None,
         description=presentation.description if presentation else None,
         edition_count=presentation.edition_count if presentation else 0,

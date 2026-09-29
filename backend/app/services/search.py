@@ -111,8 +111,8 @@ async def _ingest_from_google(db: AsyncSession, query: str) -> None:
         results = await google_books.search_books(query)
     except (httpx.HTTPStatusError, httpx.RequestError):
         return
-    editions, hints = await _upsert_editions(db, results)
-    await resolve_editions(db, editions, hints)
+    editions = await _upsert_editions(db, results)
+    await resolve_editions(db, editions)
 
 
 async def search(db: AsyncSession, query: str, limit: int = _DEFAULT_LIMIT) -> list[Work]:

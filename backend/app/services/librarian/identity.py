@@ -129,7 +129,7 @@ async def split(db: AsyncSession, user: User, work: Work, edition_ids: list[UUID
     room = await db.get(Series, work.series_id)
     new = Work(
         source=source, external_id=external_id, canonical_key=key, title=title, author=work.author,
-        kind=work.kind, identity_provenance=provenance, genre_id=work.genre_id,
+        kind=work.kind, identity_provenance=provenance,
         # A singleton is one book's page: the new book gets its own (flush listener).
         series_id=room.id if room.kind is SeriesKind.series else None,
     )

@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.schemas.book import GenreOut, WorkOut, work_out
 from app.schemas.thread import ThreadSummary
+from app.models import effective_work_genres
 from app.models.genre import Genre  # type: ignore[import]
 from app.models.thread import Thread  # type: ignore[import]
 from app.models.work import Work, WorkKind  # type: ignore[import]
@@ -46,8 +47,9 @@ async def get_genre_works(
     genre = await _get_genre_or_404(slug, db)
     stmt = (
         select(Work)
+        .join(effective_work_genres, effective_work_genres.c.work_id == Work.id)
         .where(
-            Work.genre_id == genre.id,
+            effective_work_genres.c.genre_id == genre.id,
             Work.kind == WorkKind.single,
             Work.merged_into_id.is_(None),  # tombstones are reachable, not listed
         )

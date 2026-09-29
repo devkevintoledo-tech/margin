@@ -10,7 +10,7 @@ from app.database import get_db
 # Through the package, per CLAUDE.md: app.models.__init__ imports every model,
 # so Base.metadata is complete without importing Base directly for its side
 # effect.
-from app.models import Book, Genre, Shelf, Work
+from app.models import Book, Shelf, Work
 from app.schemas.book import ShelfIn, ShelfOut, WorkOut, work_out
 from app.services import search
 from app.services.auth import get_current_user, get_current_user_optional
@@ -34,23 +34,9 @@ async def _get_work_or_404(work_id: UUID, db: AsyncSession) -> Work:
     return await canonical_work(db, work)
 
 
-async def _upsert_editions(
-    db: AsyncSession, results: list[dict]
-) -> tuple[list[Book], dict[UUID, UUID]]:
-    """Upsert every volume as an edition; return them in relevance order.
-
-    The second return value maps ``Book.id`` to the genre its categories imply.
-    Genre belongs to the work, so the hint is passed through rather than stored
-    on the edition.
-    """
-    slugs = {r["genre_slug"] for r in results if r.get("genre_slug")}
-    genre_ids: dict[str, UUID] = {}
-    if slugs:
-        rows = (await db.execute(select(Genre.slug, Genre.id).where(Genre.slug.in_(slugs)))).all()
-        genre_ids = {slug: gid for slug, gid in rows}
-
+async def _upsert_editions(db: AsyncSession, results: list[dict]) -> list[Book]:
+    """Upsert every volume as an edition; return them in relevance order."""
     editions: list[Book] = []
-    hints: dict[UUID, UUID] = {}
     for item in results:
         ext_id = item.get("external_id")
         if not ext_id:
@@ -75,10 +61,8 @@ async def _upsert_editions(
 
         await db.flush()  # get generated id
         editions.append(edition)
-        if item.get("genre_slug") in genre_ids:
-            hints[edition.id] = genre_ids[item["genre_slug"]]
 
-    return editions, hints
+    return editions
 
 
 async def _to_work_outs(

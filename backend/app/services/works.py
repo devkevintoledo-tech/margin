@@ -8,14 +8,13 @@ search never dies because Open Library did.
 
 from __future__ import annotations
 
-from typing import Mapping, NamedTuple, Sequence
+from typing import NamedTuple, Sequence
 from uuid import UUID
 
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.book import Book
-from app.models.genre import Genre
 from app.models.shelf import Shelf
 from app.models.thread import Thread
 from app.models.series import Series
@@ -23,11 +22,11 @@ from app.models.catalog import WorkAlias
 from app.models.work import Work, WorkKind, WorkProvenance, WorkSource
 from app.schemas.series import SeriesRef
 from app.services import open_library
+from app.services import genres as genres_service
 from app.services import series as series_service
 from app.services.open_library import (
     OLWork,
     cover_url as ol_cover_url,
-    genre_slug as ol_genre_slug,
 )
 from app.services.series_identity import join_subjects
 from app.services.work_identity import (
@@ -125,17 +124,12 @@ async def canonical_work(db: AsyncSession, work: Work) -> Work:
 async def resolve_editions(
     db: AsyncSession,
     editions: Sequence[Book],
-    genre_hints: Mapping[UUID, UUID] | None = None,
 ) -> dict[UUID, Work]:
     """Attach every edition to a work, creating works as needed.
 
     Returns ``{book_id: work}`` with canonical (post-merge) works. Editions that
     already carry a ``work_id`` are returned as-is without any upstream call —
     an edition is resolved exactly once, ever.
-
-    ``genre_hints`` maps ``Book.id`` to a ``Genre.id`` derived from the search
-    payload's categories. Genre lives on the work, and ``books.genre_id`` is
-    dropped, so this is the only path by which a work acquires one.
     """
     resolved: dict[UUID, Work] = {}
     pending: list[Book] = []
@@ -167,7 +161,7 @@ async def resolve_editions(
     for work_id in touched:
         work = await db.get(Work, work_id)
         if work is not None:
-            await _refresh_work(db, work, genre_hints)
+            await _refresh_work(db, work)
     await db.flush()
 
     # An edition resolved early in the batch may have been recorded against a
@@ -371,12 +365,9 @@ async def upsert_work_from_ol(db: AsyncSession, ol: OLWork) -> Work:
     # New tags on a re-ingest can promote a singleton into its series.
     await series_service.assign_series(db, work)
 
-    if work.genre_id is None and ol.subjects:
-        slug = ol_genre_slug(ol.subjects)
-        if slug:
-            work.genre_id = (
-                await db.execute(select(Genre.id).where(Genre.slug == slug))
-            ).scalar_one_or_none()
+    # A release work's genres are the catalog's, as its subjects are.
+    if work.catalog_release is None:
+        await genres_service.infer_from_subjects(db, work, ol.subjects or (), "open_library")
 
     await db.flush()
     return work
@@ -402,9 +393,7 @@ async def _absorb_heuristic_twin(db: AsyncSession, work: Work) -> None:
         await merge_works(db, twin, work)
 
 
-async def _refresh_work(
-    db: AsyncSession, work: Work, genre_hints: Mapping[UUID, UUID] | None = None
-) -> None:
+async def _refresh_work(db: AsyncSession, work: Work) -> None:
     """Recompute the derived fields that depend on the work's editions."""
     editions = (
         await db.execute(select(Book).where(Book.work_id == work.id))
@@ -415,10 +404,9 @@ async def _refresh_work(
     best = max(editions, key=edition_rank)
     work.representative_book_id = best.id
 
-    if work.genre_id is None and genre_hints:
-        work.genre_id = next(
-            (genre_hints[e.id] for e in editions if e.id in genre_hints), None
-        )
+    categories = [c for e in editions for c in (e.categories or [])]
+    if categories:
+        await genres_service.infer_from_categories(db, work, categories)
 
 
 async def merge_works(db: AsyncSession, source: Work, target: Work) -> Work:
@@ -451,6 +439,7 @@ async def merge_works(db: AsyncSession, source: Work, target: Work) -> Work:
     # Threads change rooms before their book tag is rewritten below: the tag
     # is how the ones about `source` are found.
     await series_service.absorb_series(db, source, target)
+    await genres_service.absorb(db, source, target)
     await db.execute(
         update(Book).where(Book.work_id == source.id).values(work_id=target.id)
     )
@@ -468,7 +457,6 @@ async def merge_works(db: AsyncSession, source: Work, target: Work) -> Work:
     # left alone, load_work_presentation renders it with another work's cover
     # and an edition count of zero.
     source.representative_book_id = None
-    source.genre_id = None
     await db.flush()
     await _refresh_work(db, target)
     await db.flush()

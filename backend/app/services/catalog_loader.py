@@ -31,7 +31,8 @@ from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import CatalogRelease, Work
-from app.services.open_library import genre_slug
+from app.services import genres as genres_service
+from app.services.genre_inference import infer_genres, shipped_taxonomy
 from app.services.series_identity import SUBJECT_SEPARATOR
 from app.services.works import merge_works
 
@@ -132,8 +133,9 @@ async def _stage(db: AsyncSession, release: Release) -> dict[str, int]:
     connection = await db.connection()
     raw = (await connection.get_raw_connection()).driver_connection
     counts = {}
+    taxonomy = shipped_taxonomy()
     for name, columns in COLUMNS.items():
-        extra = [("genre_slug", "text")] if name == "works" else []
+        extra = [("genre_slugs", "text[]")] if name == "works" else []
         ddl = ", ".join(f"{c} {t}" for c, t in columns + extra)
         await db.execute(text(f"DROP TABLE IF EXISTS stage_{name}"))
         await db.execute(text(f"CREATE TEMP TABLE stage_{name} ({ddl}) ON COMMIT DROP"))
@@ -144,7 +146,7 @@ async def _stage(db: AsyncSession, release: Release) -> dict[str, int]:
                 record = [_convert(t, row[c]) for c, t in columns]
                 if name == "works":
                     subjects = (row["subjects"] or "").split(SUBJECT_SEPARATOR)
-                    record.append(genre_slug([s for s in subjects if s]))
+                    record.append(sorted(infer_genres([s for s in subjects if s], taxonomy)))
                 records.append(tuple(record))
             await raw.copy_records_to_table(
                 f"stage_{name}", records=records, columns=[c for c, _ in columns + extra])
@@ -209,17 +211,17 @@ _UPSERTS = (
            merged_into_id = NULL, updated_at = now()""",
     """INSERT INTO works (id, source, external_id, canonical_key, title, subtitle, author, first_publish_year,
                           kind, identity_provenance, series_id, ol_cover_id, ol_edition_count, readinglog_count,
-                          ratings_count, subjects, genre_id, catalog_release)
+                          ratings_count, subjects, catalog_release)
        SELECT t.id, 'openlibrary', t.ol_work_id, t.canonical_key, t.title, t.subtitle, t.author,
               t.first_publish_year, t.kind::work_kind_enum, 'isbn', t.series_id, t.ol_cover_id,
-              t.ol_edition_count, t.readinglog_count, t.ratings_count, t.subjects, g.id, :version
-       FROM stage_works t LEFT JOIN genres g ON g.slug = t.genre_slug
+              t.ol_edition_count, t.readinglog_count, t.ratings_count, t.subjects, :version
+       FROM stage_works t
        ON CONFLICT (id) DO UPDATE SET external_id = EXCLUDED.external_id, canonical_key = EXCLUDED.canonical_key,
            title = EXCLUDED.title, subtitle = EXCLUDED.subtitle, author = EXCLUDED.author,
            first_publish_year = EXCLUDED.first_publish_year, kind = EXCLUDED.kind, series_id = EXCLUDED.series_id,
            ol_cover_id = EXCLUDED.ol_cover_id, ol_edition_count = EXCLUDED.ol_edition_count,
            readinglog_count = EXCLUDED.readinglog_count, ratings_count = EXCLUDED.ratings_count,
-           subjects = EXCLUDED.subjects, genre_id = coalesce(works.genre_id, EXCLUDED.genre_id),
+           subjects = EXCLUDED.subjects,
            catalog_release = EXCLUDED.catalog_release, merged_into_id = NULL, updated_at = now()""",
     """INSERT INTO books (id, source, external_id, title, subtitle, author, cover_url, publisher,
                           published_year, isbn_13, page_count, language, work_id)
@@ -384,6 +386,9 @@ async def load_release(db: AsyncSession, release: Release, *, force: bool = Fals
     stats.retired_series += retired
     stats.moved_threads += moved
     await _settle_absent(db, release.version, stats, old_rooms)
+    # Genres last: adoption merges have already carried runtime votes onto release works.
+    rows = (await db.execute(text("SELECT id, genre_slugs FROM stage_works"))).all()
+    await genres_service.set_inferences_bulk(db, {wid: slugs or [] for wid, slugs in rows}, "catalog")
     await db.flush()
     for table in ("works", "series", "books", "series_members", "work_aliases"):
         await db.execute(text(f"ANALYZE {table}"))

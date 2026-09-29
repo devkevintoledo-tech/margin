@@ -1,5 +1,6 @@
 import respx
 from httpx import Response
+from sqlalchemy import select
 from app.models import Series
 
 GOOGLE_URL = "https://www.googleapis.com/books/v1/volumes"
@@ -149,8 +150,10 @@ async def test_search_maps_a_genre_onto_the_work(client, db_session):
     # not from guessing at Google's free-text categories.
     respx.get(OL_URL).mock(return_value=Response(200, json={"docs": [OL_RED_RISING]}))
 
-    body = (await client.get("/api/works/search", params={"q": "red rising"})).json()
-    assert body[0]["genre_id"] is not None
+    await client.get("/api/works/search", params={"q": "red rising"})
+    from app.models import GenreInference
+    rows = (await db_session.execute(select(GenreInference.source))).scalars().all()
+    assert rows == ["open_library"]
 
 
 async def test_get_work_includes_shelf_status_for_owner(client, auth_headers, work):

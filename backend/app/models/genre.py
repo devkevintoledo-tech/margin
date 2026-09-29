@@ -32,7 +32,6 @@ class Genre(Base):
     retired_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # Relationships
-    works: Mapped[list["Work"]] = relationship("Work", back_populates="genre")  # noqa: F821
     threads: Mapped[list["Thread"]] = relationship("Thread", back_populates="genre")  # noqa: F821
 
 

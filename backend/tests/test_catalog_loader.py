@@ -76,7 +76,9 @@ async def test_loads_every_table_and_stamps_the_release(db_session, write_releas
     red = await db_session.get(Work, RED)
     assert (red.catalog_release, red.series_id, red.external_id) == ("2026.10.1", RR, "OL30W")
     assert red.representative_book_id == ED_RED
-    assert red.genre_id is not None
+    from app.models import GenreInference
+    inferred = (await db_session.execute(select(GenreInference.source).where(GenreInference.work_id == RED))).scalars().all()
+    assert inferred == ["catalog"]
     asoiaf = await db_session.get(Series, ASOIAF)
     assert (asoiaf.source, asoiaf.provenance, asoiaf.external_id) == (
         SeriesSource.wikidata, SeriesProvenance.wikidata, "wd:Q45875")
