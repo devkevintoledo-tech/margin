@@ -11,7 +11,14 @@ import { SeriesPicker, WorkPicker } from './librarian/pickers'
  */
 const TITLES = {
   move: 'Move', position: 'Set position', remove: 'Remove from series', merge: 'Merge',
-  split: 'Split', rename: 'Rename', dissolve: 'Dissolve',
+  split: 'Split', rename: 'Rename', dissolve: 'Dissolve', add: 'Add book',
+}
+
+/** Where the picked book lives now, relative to this series. */
+function placeOf(pick, series) {
+  if (!pick?.series) return 'own'
+  if (pick.series.slug === series.slug) return 'here'
+  return pick.series.kind === 'series' ? 'elsewhere' : 'own'
 }
 const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`
 
@@ -24,6 +31,10 @@ function request(action, f, confirm) {
       return { path: `works/${work.id}/move`, body: {
         reason, ...(f.target?.id ? { series_id: f.target.id } : { new_series_name: f.target?.name }),
         ...(position === null ? {} : { position }) } }
+    case 'add':
+      // The v1 move, pointed at this series: the picked book is the subject.
+      return { path: `works/${f.pick.id}/move`, body: {
+        reason, series_id: series.id, ...(position === null ? {} : { position }) } }
     case 'position':
       return { path: `series/${series.id}/position`, body: { reason, work_id: work.id, position } }
     case 'remove':
@@ -39,8 +50,9 @@ function request(action, f, confirm) {
   }
 }
 
-function ready(kind, f, editions) {
+function ready(kind, f, editions, series) {
   if (!f.reason.trim()) return false
+  if (kind === 'add') return !!f.pick && placeOf(f.pick, series) !== 'here'
   if (kind === 'move') return !!f.target
   if (kind === 'merge') return !!f.into
   if (kind === 'split') return f.editions.length > 0 && f.editions.length < editions.length
@@ -88,10 +100,30 @@ function Consequences({ action, fields, counts }) {
   )
 }
 
+function AddNotice({ pick, series }) {
+  const place = placeOf(pick, series)
+  if (place === 'here') {
+    return (
+      <p className="alert-muted">
+        <span className="font-serif italic">{pick.title}</span> is already in{' '}
+        <span className="font-serif">{series.name}</span>.
+      </p>
+    )
+  }
+  if (place !== 'elsewhere') return null
+  return (
+    <p className="text-warning text-sm">
+      <span className="font-serif italic">{pick.title}</span> is in{' '}
+      <span className="font-serif">{pick.series.name}</span> now. Adding it here takes it out of{' '}
+      <span className="font-serif">{pick.series.name}</span>, with the threads tagged with it.
+    </p>
+  )
+}
+
 function LibrarianPanel({ action, onClose, onDone }) {
   const { kind, work, series } = action
   const [fields, setFields] = useState({
-    reason: '', name: '', target: null, into: null, editions: [],
+    reason: '', name: '', target: null, into: null, editions: [], pick: null,
     // Only a reorder starts from the current place; a move names its own.
     position: kind === 'position' && work?.position != null ? String(work.position) : '',
   })
@@ -121,7 +153,9 @@ function LibrarianPanel({ action, onClose, onDone }) {
     if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus() }
     else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus() }
   }
-  const title = `${TITLES[kind]}${work ? ` ${work.title}` : ` ${series.name}`}`
+  const title = kind === 'add'
+    ? `Add a book to ${series.name}`
+    : `${TITLES[kind]}${work ? ` ${work.title}` : ` ${series.name}`}`
 
   const submit = (confirm) => {
     mutation.mutate(request(action, fields, confirm), {
@@ -153,10 +187,16 @@ function LibrarianPanel({ action, onClose, onDone }) {
           </div>
         ) : (
           <form className="flex flex-col gap-3" onSubmit={(e) => { e.preventDefault(); submit(false) }}>
+            {kind === 'add' && (
+              <>
+                <WorkPicker label="Find the book to add" value={fields.pick} onChange={set('pick')} />
+                {fields.pick && <AddNotice pick={fields.pick} series={series} />}
+              </>
+            )}
             {kind === 'move' && <SeriesPicker value={fields.target} onChange={set('target')} />}
-            {(kind === 'move' || kind === 'position') && (
+            {(kind === 'move' || kind === 'position' || kind === 'add') && (
               <div>
-                <label className="label" htmlFor="lib-position">{kind === 'move' ? 'Position (optional)' : 'Position (blank clears)'}</label>
+                <label className="label" htmlFor="lib-position">{kind === 'position' ? 'Position (blank clears)' : 'Position (optional)'}</label>
                 <input id="lib-position" type="number" step="any" className="input" value={fields.position}
                        onChange={(e) => set('position')(e.target.value)} />
               </div>
@@ -176,7 +216,7 @@ function LibrarianPanel({ action, onClose, onDone }) {
               <p className="alert-danger">{errorMessage(mutation.error)}</p>
             )}
             <button type="submit" className="btn-primary text-xs self-start"
-                    disabled={!ready(kind, fields, editions) || mutation.isPending}>
+                    disabled={!ready(kind, fields, editions, series) || mutation.isPending}>
               {TITLES[kind]}
             </button>
           </form>

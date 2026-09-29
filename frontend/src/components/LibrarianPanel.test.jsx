@@ -220,4 +220,76 @@ describe('LibrarianPanel', () => {
     await userEvent.click(screen.getByRole('button', { name: 'official series name' }))
     expect(screen.queryByText('It is already called Dune.')).toBeNull()
   })
+
+  it('adds the picked book as a move into this series', async () => {
+    client.get.mockResolvedValue({ data: [
+      { id: 'w9', title: 'Dune Messiah', author: 'Frank Herbert', series: { slug: 'dune-messiah-x', name: 'Dune Messiah', kind: 'singleton' } },
+    ] })
+    client.post.mockResolvedValue({ data: CORRECTION })
+    const onDone = renderPanel({ kind: 'add' })
+    expect(screen.getByRole('dialog', { name: 'Add a book to Dune' })).toBeInTheDocument()
+    const submit = screen.getByRole('button', { name: 'Add book' })
+    expect(submit).toBeDisabled()
+
+    await userEvent.type(screen.getByLabelText('Find the book to add'), 'messiah')
+    await userEvent.click(await screen.findByRole('radio', { name: /Dune Messiah/ }))
+    await userEvent.type(screen.getByLabelText('Position (optional)'), '2')
+    expect(submit).toBeDisabled() // still no reason
+    await userEvent.type(screen.getByLabelText('Reason'), 'book two')
+    await userEvent.click(submit)
+
+    await waitFor(() => expect(onDone).toHaveBeenCalledWith(CORRECTION))
+    expect(client.post).toHaveBeenCalledWith('/librarian/works/w9/move',
+      { reason: 'book two', series_id: 's1', position: 2 })
+  })
+
+  it('leaves the position out when none is given', async () => {
+    client.get.mockResolvedValue({ data: [{ id: 'w9', title: 'Dune Messiah', author: 'Frank Herbert', series: null }] })
+    client.post.mockResolvedValue({ data: CORRECTION })
+    renderPanel({ kind: 'add' })
+    await userEvent.type(screen.getByLabelText('Find the book to add'), 'messiah')
+    await userEvent.click(await screen.findByRole('radio', { name: /Dune Messiah/ }))
+    await userEvent.type(screen.getByLabelText('Reason'), 'book two')
+    await userEvent.click(screen.getByRole('button', { name: 'Add book' }))
+    await waitFor(() => expect(client.post).toHaveBeenCalledWith('/librarian/works/w9/move',
+      { reason: 'book two', series_id: 's1' }))
+  })
+
+  it('warns before taking a book out of another real series', async () => {
+    client.get.mockResolvedValue({ data: [
+      { id: 'w7', title: 'Hunters of Dune', author: 'Brian Herbert',
+        series: { slug: 'dune-chronicles', name: 'Dune Chronicles', kind: 'series' } },
+    ] })
+    renderPanel({ kind: 'add' })
+    await userEvent.type(screen.getByLabelText('Find the book to add'), 'hunters')
+    await userEvent.click(await screen.findByRole('radio', { name: /Hunters of Dune/ }))
+    const warning = screen.getByText(/Adding it here takes it out of/)
+    expect(warning).toHaveTextContent('Hunters of Dune is in Dune Chronicles now.')
+    expect(warning).toHaveTextContent('with the threads tagged with it')
+    await userEvent.type(screen.getByLabelText('Reason'), 'belongs here')
+    expect(screen.getByRole('button', { name: 'Add book' })).toBeEnabled() // a warning, not a refusal
+  })
+
+  it('says nothing extra for a book on its own page', async () => {
+    client.get.mockResolvedValue({ data: [
+      { id: 'w9', title: 'Dune Messiah', author: 'Frank Herbert', series: { slug: 'dune-messiah-x', name: 'Dune Messiah', kind: 'singleton' } },
+    ] })
+    renderPanel({ kind: 'add' })
+    await userEvent.type(screen.getByLabelText('Find the book to add'), 'messiah')
+    await userEvent.click(await screen.findByRole('radio', { name: /Dune Messiah/ }))
+    expect(screen.queryByText(/takes it out of/)).toBeNull()
+    expect(screen.queryByText(/already in/)).toBeNull()
+  })
+
+  it('will not add a book that is already here', async () => {
+    client.get.mockResolvedValue({ data: [
+      { id: 'w1', title: 'Dune', author: 'Frank Herbert', series: { slug: 'dune', name: 'Dune', kind: 'series' } },
+    ] })
+    renderPanel({ kind: 'add' })
+    await userEvent.type(screen.getByLabelText('Find the book to add'), 'dune')
+    await userEvent.click(await screen.findByRole('radio', { name: /Frank Herbert/ }))
+    await userEvent.type(screen.getByLabelText('Reason'), 'r')
+    expect(screen.getByText(/is already in/)).toHaveTextContent('Dune is already in Dune.')
+    expect(screen.getByRole('button', { name: 'Add book' })).toBeDisabled()
+  })
 })
