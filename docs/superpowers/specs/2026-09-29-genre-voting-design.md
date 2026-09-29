@@ -1,6 +1,6 @@
 # Genre voting and search filters — design
 
-**Status:** approved design, not yet planned
+**Status:** implemented (plan: docs/superpowers/plans/2026-09-29-genre-voting.md)
 **Date:** 2026-09-29
 **Follows:** `ROADMAP.md` Phase 3 ("Search filters — book search by
 genre/author/year") and Phase 5 ("Genre CRUD"), which this partly absorbs.

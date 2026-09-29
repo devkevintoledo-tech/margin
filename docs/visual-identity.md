@@ -137,6 +137,13 @@ and why the original reasoning no longer applies:
 | Playfair for book **and** thread titles | Playfair for book titles only | A thread is structure, not a work. The single serif moment is what keeps the UI from reading as a recolored hacker toy. |
 | `ink-muted` at 3.3:1 for metadata | `ink-dim` at 8.10:1 for metadata | The muted tier splits three ways so no informational text sits below AA. Stricter than what this record originally allowed. |
 
+**Literal glyphs are a closed set.** Frames and rails are CSS borders; the only
+characters drawn as structure are the tree elbows (`├─`, `└─`), sort carets
+(`▾`/`▴`), the float marker (`■`), and — added with genre voting (2026-09-29) —
+`●`, marking a genre the reader tagged, and `×`, removing a search filter. Each
+is `aria-hidden` and paired with sr-only text ("you tagged this") or an
+`aria-label` ("remove genre space-opera").
+
 **Unchanged and still binding:** no star ratings or reviews (§1), covers stay
 large and undimmed (§2 §13), voting stays de-emphasised (§24), square corners,
 and the §36 "does it look like Goodreads" test.
