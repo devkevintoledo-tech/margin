@@ -293,3 +293,10 @@ _(Add dated notes here as items land: surprises, changed names, follow-ups.)_
   swapped pair loads, so focus stays on `swap`; the panel holds `Merge` while
   `isPlaceholderData`. The panel's merge fields carry `swapped`, reset when
   `into` changes; 05 presets `into` and relies on that.
+- **2026-09-29 — 05:** `LibrarianPanel` accepts `action.into` to preset the book
+  to keep (the picker is then hidden) and needs no `action.series` for a merge.
+  `WorkCard` takes optional `selected`/`onSelect`; with `onSelect` it is a
+  label+checkbox, never a link. `components/librarian/SelectionBar.jsx` is
+  search-only; item 08's series-page bar is separate. Search keeps the selection
+  across queries and clears it on leaving select mode or after a merge, which
+  navigates to the survivor's page with `location.state.correction`.

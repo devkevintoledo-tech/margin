@@ -312,7 +312,7 @@ settings, HTTP and ORM imports (`tests/test_pure_imports.py` enforces it).
 ## Known remaining gaps
 
 - **No token revocation**: `POST /auth/logout` is a stateless no-op — the frontend just clears the persisted JWT, and a stolen token stays valid until expiry. A password reset does not invalidate existing sessions either. Anything relying on server-side session invalidation needs a refresh/denylist design first.
-- Librarian tools cover merge/split/move/reorder/rename/remove/dissolve in-app (a series page can also add a book, as a move);
+- Librarian tools cover merge/split/move/reorder/rename/remove/dissolve in-app (from the series page in edit mode, which can also add a book, as a move; merge also from search results via `select`);
   `python -m scripts.export_overrides` writes them to
   `pipeline/overrides/z-librarian.yaml`, which a person reviews and commits.
   Librarians are granted with `python -m scripts.grant_librarian`. Merge and
