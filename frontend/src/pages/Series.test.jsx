@@ -310,6 +310,55 @@ describe('Series page', () => {
     await screen.findByRole('heading', { level: 1, name: 'Elsewhere' })
     expect(screen.queryByRole('group', { name: 'Librarian fix result' })).toBeNull()
   })
+
+  it('adds a book from the series header as a move into this series', async () => {
+    useAuthStore.setState({ token: 't', user: { id: 'u1', username: 'lib', is_librarian: true } })
+    client.get.mockImplementation((url) => {
+      if (url.endsWith('/threads')) return Promise.resolve({ data: [] })
+      if (url === '/works/search') {
+        return Promise.resolve({ data: [{ id: 'b3', title: 'Morning Star', author: 'Pierce Brown',
+          series: { slug: 'morning-star-x1', name: 'Morning Star', kind: 'singleton' } }] })
+      }
+      return Promise.resolve({ data: { ...SAGA, id: 's1' } })
+    })
+    client.post.mockResolvedValueOnce({ data: { id: 'c9', op: 'set_series', exportable: true, undoable: true, room_slug: 'red-rising' } })
+    renderPage('/series/red-rising?edit=1')
+
+    await userEvent.click(await screen.findByRole('button', { name: 'add a book' }))
+    await userEvent.type(screen.getByLabelText('Find the book to add'), 'morning star')
+    await userEvent.click(await screen.findByRole('radio', { name: /Morning Star/ }))
+    await userEvent.type(screen.getByLabelText('Position (optional)'), '3')
+    await userEvent.type(screen.getByLabelText('Reason'), 'book three')
+    await userEvent.click(screen.getByRole('button', { name: 'Add book' }))
+
+    await waitFor(() => expect(client.post).toHaveBeenCalledWith('/librarian/works/b3/move',
+      { reason: 'book three', series_id: 's1', position: 3 }))
+    const status = await screen.findByRole('group', { name: 'Librarian fix result' })
+    expect(within(status).getByText('exported')).toBeInTheDocument()
+    // The book now lives here, so there is no other page to go to.
+    expect(within(status).queryByRole('link', { name: /go to its page/ })).toBeNull()
+  })
+
+  it('offers add a book only on a live real series', async () => {
+    useAuthStore.setState({ token: 't', user: { id: 'u1', username: 'lib', is_librarian: true } })
+    mockApi({ ...SINGLE, id: 's9' }, [])
+    const { unmount } = renderPage('/series/the-hobbit-a1b2c3?edit=1')
+    await screen.findByRole('heading', { level: 1, name: 'The Hobbit' })
+    expect(screen.queryByRole('button', { name: 'add a book' })).toBeNull()
+    unmount()
+
+    mockApi({ ...SAGA, id: 's1', dissolved: true, works: [] })
+    renderPage('/series/red-rising?edit=1')
+    await screen.findByText(/This series was dissolved/)
+    expect(screen.queryByRole('button', { name: 'add a book' })).toBeNull()
+  })
+
+  it('never shows add a book to a reader, even with ?edit=1', async () => {
+    mockApi(SAGA)
+    renderPage('/series/red-rising?edit=1')
+    await screen.findByRole('list', { name: 'Books in this series' })
+    expect(screen.queryByRole('button', { name: 'add a book' })).toBeNull()
+  })
 })
 
 describe('Sticky edit mode', () => {

@@ -275,6 +275,7 @@ function Series() {
         )}
         {editing && isSeries && !series.dissolved && (
           <div className="flex gap-3 text-xs">
+            <button type="button" className="btn-ghost text-xs" onClick={() => setAction({ kind: 'add' })}>add a book</button>
             <button type="button" className="btn-ghost text-xs" onClick={() => setAction({ kind: 'rename' })}>rename series</button>
             <button type="button" className="btn-ghost text-xs" onClick={() => setAction({ kind: 'dissolve' })}>dissolve series</button>
           </div>
