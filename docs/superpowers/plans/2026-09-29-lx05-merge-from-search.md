@@ -12,7 +12,7 @@
 
 **Roadmap item:** 05 — tick in docs/librarian-ux-roadmap.md when merged
 
-- [ ] **Merged** (PR: ____, date: ____)
+- [x] **Merged** (PR: #19, date: 2026-09-29)
 
 **Depends on:** item 04 merged into `main` first (`useMergePreview`, `components/librarian/MergePreview.jsx`, the panel's `swapped` field and its `Merge preview` group).
 
