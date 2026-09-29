@@ -31,7 +31,7 @@ Status: ⬜ not started · 🟡 in progress · ✅ done · ⏸ parked
 |---|---|---|---|---|---|---|---|
 | 01 | Sticky edit mode | [plan](superpowers/plans/2026-09-29-lx01-sticky-edit-mode.md) | — | ✅ | feat/librarian-lx01-sticky-edit-mode | 2026-09-29 | #15 |
 | 02 | Quick reasons | [plan](superpowers/plans/2026-09-29-lx02-quick-reasons.md) | — | ✅ | feat/librarian-lx02-quick-reasons | 2026-09-29 | #16 |
-| 03 | Add a book from the series page | [plan](superpowers/plans/2026-09-29-lx03-add-book-to-series.md) | — | 🟡 | feat/librarian-lx03-add-book | | |
+| 03 | Add a book from the series page | [plan](superpowers/plans/2026-09-29-lx03-add-book-to-series.md) | — | ✅ | feat/librarian-lx03-add-book | 2026-09-29 | #17 |
 | 04 | Side-by-side merge preview | [plan](superpowers/plans/2026-09-29-lx04-merge-preview.md) | — | ⬜ | | | |
 | 05 | Merge from search results | [plan](superpowers/plans/2026-09-29-lx05-merge-from-search.md) | 04 | ⬜ | | | |
 | 06 | Cover picker | [plan](superpowers/plans/2026-09-29-lx06-cover-picker.md) | — | ⬜ | | | |
@@ -272,7 +272,7 @@ _(Add dated notes here as items land: surprises, changed names, follow-ups.)_
   (default `lib-reason`); a new kind adds its presets to `REASONS` in
   `components/librarian/reasons.js`; a chip with typed text yields
   `<preset>: <text>`, and a bare `<preset>:` still counts as that preset.
-- **2026-09-29 — 03:** `WorkPicker` shows `in <series>` for hits in a real
+- **2026-09-29 — 03 done (#17):** `WorkPicker` shows `in <series>` for hits in a real
   series, and both pickers name their results radiogroup `` `${label}: results` ``
   (label-derived, so two pickers never share a name). That name contains the
   label, so in Playwright every picker lookup must be exact —
