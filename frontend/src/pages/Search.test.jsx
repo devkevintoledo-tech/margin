@@ -26,6 +26,7 @@ const CORRECTION = { id: 'c1', op: 'merge_works', exportable: true, undoable: fa
 function mockApi() {
   client.get.mockImplementation((url, config) => {
     if (url === '/works/search') return Promise.resolve({ data: RESULTS[config.params.q] ?? [] })
+    if (url === '/genres/') return Promise.resolve({ data: [] })
     const preview = url.match(/^\/librarian\/works\/(\w+)\/merge-preview$/)
     if (preview) {
       const [from, to] = [BY_ID[preview[1]], BY_ID[config.params.into]]
@@ -46,12 +47,18 @@ function Where() {
   )
 }
 
+function LocationProbe() {
+  const location = useLocation()
+  return <p data-testid="search">{location.search}</p>
+}
+
 function renderPage(entry = '/search?q=dune') {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
     <QueryClientProvider client={qc}>
       <MemoryRouter initialEntries={[entry]}>
         <Where />
+        <LocationProbe />
         <Routes>
           <Route path="/search" element={<Search />} />
           <Route path="/series/:slug" element={<p>series page</p>} />
@@ -168,5 +175,19 @@ describe('Search page', () => {
     await waitFor(() => expect(screen.getByTestId('where')).toHaveTextContent('/series/dune fixed c1'))
     expect(client.post).toHaveBeenLastCalledWith('/librarian/works/w1/merge',
       { reason: 'duplicate record', into_work_id: 'w2', confirm: true })
+  })
+
+  it('reads filters from the URL and writes changes back', async () => {
+    renderPage('/search?q=dune&genre=space-opera&year_from=1960')
+    await waitFor(() => expect(client.get).toHaveBeenCalledWith('/works/search', expect.objectContaining({
+      params: { q: 'dune', genre: ['space-opera'], year_from: '1960' } })))
+    await userEvent.click(screen.getByRole('button', { name: 'remove genre space-opera' }))
+    expect(screen.getByTestId('search')).toHaveTextContent('?q=dune&year_from=1960')
+  })
+
+  it('browses with filters and no query', async () => {
+    renderPage('/search?genre=space-opera')
+    await waitFor(() => expect(client.get).toHaveBeenCalledWith('/works/search', expect.objectContaining({
+      params: { genre: ['space-opera'] } })))
   })
 })

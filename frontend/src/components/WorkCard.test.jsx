@@ -115,4 +115,9 @@ describe('WorkCard', () => {
     expect(screen.getByText('selected')).toBeInTheDocument()
     expect(screen.getByRole('img', { name: 'Red Rising' }).parentElement).toHaveClass('border-accent')
   })
+
+  it('names the top genres as text', () => {
+    renderCard({ ...work, top_genres: [{ slug: 'space-opera', name: 'Space Opera' }, { slug: 'science-fiction', name: 'Science Fiction' }] })
+    expect(screen.getByText('space-opera · science-fiction')).toHaveClass('text-path')
+  })
 })

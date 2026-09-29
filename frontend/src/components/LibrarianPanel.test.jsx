@@ -130,7 +130,7 @@ describe('LibrarianPanel', () => {
     client.get.mockResolvedValue({ data: [] })
     renderPanel({ kind: 'merge', work: BOOK })
     await userEvent.type(screen.getByLabelText('Find the book to keep'), 'dune messiah')
-    await waitFor(() => expect(client.get).toHaveBeenCalledWith('/works/search', { params: { q: 'dune messiah' } }))
+    await waitFor(() => expect(client.get).toHaveBeenCalledWith('/works/search', expect.objectContaining({ params: { q: 'dune messiah' } })))
     const searches = client.get.mock.calls.filter(([url]) => url === '/works/search')
     expect(searches).toHaveLength(1)
   })
