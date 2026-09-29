@@ -139,3 +139,29 @@ async def test_undo_reject_brings_every_book_back(db_session):
     for w, pos in ((x, 1.0), (y, 2.0)):
         assert await fresh(db_session, Work.series_id, w.id) == a.id
         assert await members_of(db_session, w) == {(a.id, pos, SeriesProvenance.ol_tag)}
+
+
+async def test_a_series_name_reused_after_an_undo_is_a_live_series_again(db_session):
+    from app.services.series_identity import release_series_id
+    lib, a, _, x, y = await two_room_saga(db_session)
+    first = await set_series(db_session, lib, x, new_series_name="Robots", reason="r")
+    await revert(db_session, lib, first)
+    robots = release_series_id("ol:robots")
+    assert await fresh(db_session, Series.merged_into_id, robots) == a.id  # tombstoned by the undo
+
+    again = await set_series(db_session, lib, y, new_series_name="Robots", reason="r")
+
+    assert again.series_id == robots and await fresh(db_session, Work.series_id, y.id) == robots
+    assert await fresh(db_session, Series.merged_into_id, robots) is None
+    assert again.snapshot["created_series"] == str(robots)  # undo tombstones it again
+    await revert(db_session, lib, again)
+    assert await fresh(db_session, Work.series_id, y.id) == a.id
+
+
+async def test_undo_move_refuses_when_the_new_room_gained_a_thread_about_the_book(db_session):
+    lib, a, b, x, _ = await two_room_saga(db_session)
+    c = await set_series(db_session, lib, x, series=b, reason="r")
+    await make_thread(db_session, lib, b, x)  # a reader talks about it in its new room
+    with pytest.raises(Conflict, match="since"):
+        await revert(db_session, lib, c)
+    assert await fresh(db_session, Work.series_id, x.id) == b.id

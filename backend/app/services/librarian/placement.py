@@ -42,8 +42,16 @@ async def _target_for_name(db: AsyncSession, name: str | None) -> tuple[Series, 
     name = (name or "").strip()
     if not name:
         raise Invalid("A new series needs a name.")
+    if not series_key(name):
+        raise Invalid("A series name needs letters or digits.")
     key = new_series_key(name)
     found = await db.get(Series, release_series_id(key))
+    if found is not None and found.merged_into_id is not None and found.provenance is SeriesProvenance.override:
+        # An undo tombstoned the series an earlier move created. Following the
+        # tombstone would land the book in that move's old room; revive it.
+        found.merged_into_id, found.name = None, name
+        await db.flush()
+        return found, True
     if found is None:
         found = (await db.execute(select(Series).where(
             Series.external_id == key, Series.kind == SeriesKind.series))).scalars().first()
@@ -57,6 +65,20 @@ async def _target_for_name(db: AsyncSession, name: str | None) -> tuple[Series, 
     db.add(series)
     await db.flush()
     return series, True
+
+
+async def _exported_memberships(db: AsyncSession) -> set[tuple[str, str]]:
+    """(work key, series key) pairs an unreverted exported fix put in the
+    overrides file. The pipeline knows those memberships even for a series no
+    release holds, so leaving one can be exported as a remove."""
+    rows = (await db.execute(select(CatalogCorrection.override).where(
+        CatalogCorrection.reverted_at.is_(None), CatalogCorrection.override.is_not(None)))).scalars().all()
+    return {(e["set_series"]["work"], e["set_series"]["series"])
+            for entries in rows for e in entries if "set_series" in e}
+
+
+def _removable(series: Series, wk: str, exported: set[tuple[str, str]]) -> bool:
+    return series.catalog_release is not None or (wk, series_key_of(series)) in exported
 
 
 async def _ids_where(db: AsyncSession, column, *conditions) -> list[str]:
@@ -120,10 +142,12 @@ async def set_series(db: AsyncSession, user: User, work: Work, *, reason: str, s
     await db.flush()
     snapshot["retired"] = await _retire_if_empty(db, old_room, target, work)
 
+    exported_members = await _exported_memberships(db)
+
     def build():
         wk = work_key(work)
-        removes = [{"remove_from_series": {"work": wk, "series": release_series_key(s)}}
-                   for s in sorted(old_series, key=lambda s: s.external_id) if s.catalog_release is not None]
+        removes = [{"remove_from_series": {"work": wk, "series": series_key_of(s)}}
+                   for s in sorted(old_series, key=lambda s: s.external_id) if _removable(s, wk, exported_members)]
         entry = {"work": wk, "series": series_key_of(target)}
         if position is not None:
             entry["position"] = position
@@ -243,11 +267,14 @@ async def remove_from_series(db: AsyncSession, user: User, room: Series, work: W
         raise Invalid(f"{work.title} is not in {room.name}.")
     member_series = [await db.get(Series, m.series_id) for m in await tree_memberships(db, room, work.id)]
 
+    exported_members = await _exported_memberships(db)
+
     def build():
         wk = work_key(work)
-        release_series_key(room)  # a room the build does not hold cannot be named
-        entries = [{"remove_from_series": {"work": wk, "series": release_series_key(s)}}
-                   for s in sorted(member_series, key=lambda s: s.external_id) if s.catalog_release is not None]
+        if not _removable(room, wk, exported_members):
+            release_series_key(room)  # a room the build does not hold cannot be named
+        entries = [{"remove_from_series": {"work": wk, "series": series_key_of(s)}}
+                   for s in sorted(member_series, key=lambda s: s.external_id) if _removable(s, wk, exported_members)]
         if not entries:
             raise MissingKey(f"{work.title} has no catalog membership in {room.name}")
         return entries

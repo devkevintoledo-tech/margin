@@ -55,6 +55,11 @@ async def _undo_set_series(db: AsyncSession, c: CatalogCorrection) -> None:
         raise Conflict(_STALE)
     moved = uuids(s["moved_threads"])
     await _require_threads_in(db, moved, target.id)
+    known = moved + (uuids(s["retired"]["threads"]) if s["retired"] else [])
+    started_since = await db.scalar(select(func.count()).select_from(Thread).where(
+        Thread.series_id == target.id, Thread.work_id == work.id, Thread.id.not_in(known)))
+    if started_since:
+        raise Conflict(f"New discussion about {work.title} started in {target.name} since; undoing would strand it.")
     old_room = await db.get(Series, UUID(s["old_room"]))
     if old_room is None:
         raise Conflict(_STALE)

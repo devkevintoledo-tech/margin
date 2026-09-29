@@ -251,3 +251,31 @@ async def test_reject_dissolves_and_every_member_gets_its_own_page(db_session):
     assert len(c.snapshot["members"]) == 3 and c.work_id is None and c.series_id == imprint.id
     with pytest.raises(Conflict, match="already dissolved"):
         await reject_series(db_session, lib, imprint, reason="again")
+
+
+async def test_leaving_a_librarian_made_series_exports_the_remove(db_session):
+    lib = await make_user(db_session, librarian=True)
+    a = await make_series(db_session, "Alpha", release=R)
+    x = await make_work(db_session, "Book X", series=a, ol_id="OL1W")
+    await make_work(db_session, "Book Y", series=a, ol_id="OL2W")
+    await make_member(db_session, a, x, 1.0)
+    await set_series(db_session, lib, x, new_series_name="Tee", reason="r")
+    tee = await db_session.get(Series, x.series_id)
+    await make_work(db_session, "Book Z", series=tee, ol_id="OL3W")  # keeps Tee alive when X leaves
+
+    back = await set_series(db_session, lib, x, series=a, reason="r")
+
+    assert back.override == [
+        {"remove_from_series": {"work": "OL1W", "series": "ol:tee"}},
+        {"set_series": {"work": "OL1W", "series": "ol:alpha"}},
+    ]
+    await set_series(db_session, lib, x, series=tee, reason="r")
+    out = await remove_from_series(db_session, lib, tee, x, reason="r")
+    assert out.override == [{"remove_from_series": {"work": "OL1W", "series": "ol:tee"}}]
+
+
+async def test_a_series_name_with_no_letters_is_refused(db_session):
+    lib = await make_user(db_session, librarian=True)
+    x = await make_work(db_session, "Book X", ol_id="OL1W")
+    with pytest.raises(Invalid, match="letters"):
+        await set_series(db_session, lib, x, new_series_name="???", reason="r")
