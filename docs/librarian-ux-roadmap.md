@@ -33,7 +33,7 @@ Status: ⬜ not started · 🟡 in progress · ✅ done · ⏸ parked
 | 02 | Quick reasons | [plan](superpowers/plans/2026-09-29-lx02-quick-reasons.md) | — | ✅ | feat/librarian-lx02-quick-reasons | 2026-09-29 | #16 |
 | 03 | Add a book from the series page | [plan](superpowers/plans/2026-09-29-lx03-add-book-to-series.md) | — | ✅ | feat/librarian-lx03-add-book | 2026-09-29 | #17 |
 | 04 | Side-by-side merge preview | [plan](superpowers/plans/2026-09-29-lx04-merge-preview.md) | — | ✅ | feat/librarian-lx04-merge-preview | 2026-09-29 | #18 |
-| 05 | Merge from search results | [plan](superpowers/plans/2026-09-29-lx05-merge-from-search.md) | 04 | ⬜ | | | |
+| 05 | Merge from search results | [plan](superpowers/plans/2026-09-29-lx05-merge-from-search.md) | 04 | 🟡 | feat/librarian-lx05-merge-from-search | | |
 | 06 | Cover picker | [plan](superpowers/plans/2026-09-29-lx06-cover-picker.md) | — | ⬜ | | | |
 | 07 | Keep the best of both on merge | [plan](superpowers/plans/2026-09-29-lx07-merge-keep-best.md) | 04, 06 | ⬜ | | | |
 | 08 | Batch actions | [plan](superpowers/plans/2026-09-29-lx08-batch-actions.md) | 02 | ⬜ | | | |
@@ -293,3 +293,10 @@ _(Add dated notes here as items land: surprises, changed names, follow-ups.)_
   swapped pair loads, so focus stays on `swap`; the panel holds `Merge` while
   `isPlaceholderData`. The panel's merge fields carry `swapped`, reset when
   `into` changes; 05 presets `into` and relies on that.
+- **2026-09-29 — 05:** `LibrarianPanel` accepts `action.into` to preset the book
+  to keep (the picker is then hidden) and needs no `action.series` for a merge.
+  `WorkCard` takes optional `selected`/`onSelect`; with `onSelect` it is a
+  label+checkbox, never a link. `components/librarian/SelectionBar.jsx` is
+  search-only; item 08's series-page bar is separate. Search keeps the selection
+  across queries and clears it on leaving select mode or after a merge, which
+  navigates to the survivor's page with `location.state.correction`.

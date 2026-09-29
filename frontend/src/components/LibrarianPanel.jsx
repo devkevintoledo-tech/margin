@@ -143,7 +143,7 @@ function PreviewSlot({ query, onSwap, swapDisabled }) {
 function LibrarianPanel({ action, onClose, onDone }) {
   const { kind, work, series } = action
   const [fields, setFields] = useState({
-    reason: '', name: '', target: null, into: null, editions: [], pick: null, swapped: false,
+    reason: '', name: '', target: null, into: action.into ?? null, editions: [], pick: null, swapped: false,
     // Only a reorder starts from the current place; a move names its own.
     position: kind === 'position' && work?.position != null ? String(work.position) : '',
   })
@@ -243,7 +243,8 @@ function LibrarianPanel({ action, onClose, onDone }) {
                        onChange={(e) => set('position')(e.target.value)} />
               </div>
             )}
-            {kind === 'merge' && (
+            {/* From search both books arrive preset; only the series page asks for one. */}
+            {kind === 'merge' && !action.into && (
               <WorkPicker label="Find the book to keep" exclude={work.id} value={fields.into}
                           onChange={(w) => patch({ into: w, swapped: false })} />
             )}

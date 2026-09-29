@@ -470,4 +470,30 @@ describe('LibrarianPanel', () => {
     expect(screen.queryByRole('button', { name: 'Confirm merge' })).toBeNull()
     expect(screen.getByRole('radio', { name: /Kevin J. Anderson/ })).toBeChecked()
   })
+
+  it('takes both books preset: no picker, preview at once, and the usual confirm', async () => {
+    mockGets()
+    client.post
+      .mockRejectedValueOnce({ response: { status: 422, data: { detail: {
+        message: 'm', consequences: { threads: 3, shelves: 0, editions: 1 } } } } })
+      .mockResolvedValueOnce({ data: CORRECTION })
+    const onDone = vi.fn()
+    render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <LibrarianPanel action={{ kind: 'merge', work: BOOK, into: OTHER }} onClose={vi.fn()} onDone={onDone} />
+      </QueryClientProvider>,
+    )
+    expect(screen.queryByLabelText('Find the book to keep')).toBeNull()
+    const preview = await screen.findByRole('group', { name: 'Merge preview' })
+    expect(within(preview).getByRole('region', { name: /^survives/ })).toHaveTextContent('Frank Herbert')
+    expect(client.get).toHaveBeenCalledWith('/librarian/works/w1/merge-preview', { params: { into: 'w2' } })
+    expect(client.get).not.toHaveBeenCalledWith('/works/search', expect.anything())
+
+    await userEvent.type(screen.getByLabelText('Reason'), 'duplicate record')
+    await userEvent.click(screen.getByRole('button', { name: 'Merge' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Confirm merge' }))
+    await waitFor(() => expect(onDone).toHaveBeenCalledWith(CORRECTION))
+    expect(client.post).toHaveBeenLastCalledWith('/librarian/works/w1/merge',
+      { reason: 'duplicate record', into_work_id: 'w2', confirm: true })
+  })
 })

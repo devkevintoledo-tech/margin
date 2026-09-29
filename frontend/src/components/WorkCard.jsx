@@ -2,19 +2,25 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { seriesHref } from '../api/series'
 
-function WorkCard({ work }) {
+/**
+ * A search result. A link to the book's page, or, when ``onSelect`` is given
+ * (librarian select mode), a checkable card: a label around a checkbox, so a
+ * click anywhere toggles it and nothing navigates.
+ */
+function WorkCard({ work, selected = false, onSelect }) {
   const { title, author, cover_url, edition_count, series } = work
   // A cover URL can 404 or be pulled upstream. Falling back to the same
   // placeholder the no-cover case uses keeps one visual answer for "no art"
   // rather than a broken-image glyph.
   const [coverFailed, setCoverFailed] = useState(false)
   const showCover = cover_url && !coverFailed
+  const frame = selected ? 'border-accent' : 'border-line group-hover:border-accent'
 
-  return (
-    <Link to={seriesHref(work)} className="group flex flex-col">
+  const body = (
+    <>
       {/* Covers carry most of the color in the UI (§13), so they stay large and
           unobstructed — the frame reacts on hover, the art never dims. */}
-      <div className="aspect-[2/3] bg-panel border border-line group-hover:border-accent transition-colors duration-base overflow-hidden">
+      <div className={`aspect-[2/3] bg-panel border ${frame} transition-colors duration-base overflow-hidden`}>
         {showCover ? (
           <img
             src={cover_url}
@@ -48,7 +54,21 @@ function WorkCard({ work }) {
           <p className="text-ink-dim text-xs tabular-nums">{edition_count} editions</p>
         )}
       </div>
-    </Link>
+    </>
+  )
+
+  if (!onSelect) {
+    return <Link to={seriesHref(work)} className="group flex flex-col">{body}</Link>
+  }
+  return (
+    <label className="group flex flex-col cursor-pointer">
+      <span className="flex items-center gap-2 pb-2 text-xs">
+        <input type="checkbox" checked={selected} onChange={() => onSelect(work)}
+               aria-label={`select ${title} by ${author}`} className="accent-accent" />
+        <span className={selected ? 'text-accent' : 'text-ink-dim'}>{selected ? 'selected' : 'select'}</span>
+      </span>
+      {body}
+    </label>
   )
 }
 
