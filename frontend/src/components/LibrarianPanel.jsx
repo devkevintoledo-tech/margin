@@ -130,12 +130,12 @@ function AddNotice({ pick, series }) {
 }
 
 /** The preview, or why there is none. A refusal here is final for this pair. */
-function PreviewSlot({ query, onSwap }) {
+function PreviewSlot({ query, onSwap, swapDisabled }) {
   if (query.isError) return <p className="alert-danger">{errorMessage(query.error)}</p>
   if (!query.data) return <p className="text-ink-dim text-xs">loading preview</p>
   return (
     <div aria-busy={query.isPlaceholderData}>
-      <MergePreview preview={query.data} onSwap={onSwap} />
+      <MergePreview preview={query.data} onSwap={onSwap} swapDisabled={swapDisabled} />
     </div>
   )
 }
@@ -147,7 +147,8 @@ function LibrarianPanel({ action, onClose, onDone }) {
     // Only a reorder starts from the current place; a move names its own.
     position: kind === 'position' && work?.position != null ? String(work.position) : '',
   })
-  const [counts, setCounts] = useState(null)
+  // The server's counts, stamped with the merge pair they answered.
+  const [answer, setAnswer] = useState(null)
   const mutation = useLibrarianAction()
   const editionsQuery = useWorkEditions(kind === 'split' ? work.id : null)
   const editions = editionsQuery.data ?? []
@@ -158,6 +159,10 @@ function LibrarianPanel({ action, onClose, onDone }) {
   const set = (key) => (value) => patch({ [key]: value })
   const [from, to] = kind === 'merge' && fields.into ? mergeSides(work, fields) : [null, null]
   const preview = useMergePreview(from?.id, to?.id)
+  const pair = from && `${from.id}>${to.id}`
+  // Counts for any other pair (the pick changed while the request was out) are not these.
+  const counts = answer && answer.pair === pair ? answer.counts : null
+  const setCounts = (c) => setAnswer(c && { counts: c, pair })
   // Counts from the server described the other direction; ask again.
   const refocusSwap = useRef(false)
   const swap = () => {
@@ -196,7 +201,7 @@ function LibrarianPanel({ action, onClose, onDone }) {
   const submit = (confirm) => {
     mutation.mutate(request(action, fields, confirm), {
       onSuccess: (correction) => onDone(correction),
-      onError: (error) => setCounts(confirmationOf(error)),
+      onError: (error) => setCounts(confirmationOf(error)), // stamped with the pair submitted
     })
   }
 
@@ -213,7 +218,7 @@ function LibrarianPanel({ action, onClose, onDone }) {
 
         {counts ? (
           <div className="flex flex-col gap-3">
-            {kind === 'merge' && <PreviewSlot query={preview} onSwap={swap} />}
+            {kind === 'merge' && <PreviewSlot query={preview} onSwap={swap} swapDisabled={mutation.isPending} />}
             <Consequences action={action} fields={fields} counts={counts} />
             <div className="flex gap-3">
               <button type="button" className="btn-primary text-xs" onClick={() => submit(true)} disabled={mutation.isPending}>
@@ -242,7 +247,7 @@ function LibrarianPanel({ action, onClose, onDone }) {
               <WorkPicker label="Find the book to keep" exclude={work.id} value={fields.into}
                           onChange={(w) => patch({ into: w, swapped: false })} />
             )}
-            {kind === 'merge' && fields.into && <PreviewSlot query={preview} onSwap={swap} />}
+            {kind === 'merge' && fields.into && <PreviewSlot query={preview} onSwap={swap} swapDisabled={mutation.isPending} />}
             {kind === 'split' && <EditionPicker editions={editions} loaded={editionsQuery.isSuccess} value={fields.editions} onChange={set('editions')} />}
             {kind === 'rename' && (
               <div>

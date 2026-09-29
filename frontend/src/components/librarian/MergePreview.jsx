@@ -50,9 +50,10 @@ function Side({ side, label, tone }) {
 /**
  * Two books about to become one, side by side. The left merges away; the
  * right survives. ``onSwap`` flips them (the caller owns which id is which);
- * without it the preview is read-only.
+ * without it the preview is read-only. ``swapDisabled`` holds it while a
+ * request about the current pair is in flight.
  */
-function MergePreview({ preview, onSwap }) {
+function MergePreview({ preview, onSwap, swapDisabled = false }) {
   const { source, target, threads, shelves, editions } = preview
   return (
     <div role="group" aria-label="Merge preview" className="flex flex-col gap-3">
@@ -67,7 +68,8 @@ function MergePreview({ preview, onSwap }) {
           {plural(editions, 'edition')} move to the survivor.
         </p>
         {onSwap && (
-          <button type="button" className="btn-ghost text-xs" onClick={onSwap} aria-label="swap which book survives">
+          <button type="button" className="btn-ghost text-xs" onClick={onSwap} disabled={swapDisabled}
+                  aria-label="swap which book survives">
             swap
           </button>
         )}

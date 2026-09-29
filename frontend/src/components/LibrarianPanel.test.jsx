@@ -438,4 +438,36 @@ describe('LibrarianPanel', () => {
     expect(screen.queryByRole('button', { name: 'Confirm merge' })).toBeNull()
     expect(document.activeElement).toBe(screen.getByRole('button', { name: 'swap which book survives' }))
   })
+
+  it('cannot swap while a merge request is in flight', async () => {
+    mockGets()
+    let refuse
+    client.post.mockImplementationOnce(() => new Promise((_, reject) => { refuse = reject }))
+    renderPanel({ kind: 'merge', work: BOOK })
+    await pickToKeep(/Frank Herbert/)
+    await screen.findByRole('group', { name: 'Merge preview' })
+    await userEvent.type(screen.getByLabelText('Reason'), 'same book')
+    await userEvent.click(screen.getByRole('button', { name: 'Merge' }))
+    expect(screen.getByRole('button', { name: 'swap which book survives' })).toBeDisabled()
+    refuse({ response: { status: 422, data: { detail: { message: 'm', consequences: { threads: 3, shelves: 0, editions: 1 } } } } })
+    expect(await screen.findByRole('button', { name: 'Confirm merge' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'swap which book survives' })).toBeEnabled()
+  })
+
+  it('drops counts that answered a pair the form no longer shows', async () => {
+    mockGets()
+    let refuse
+    client.post.mockImplementationOnce(() => new Promise((_, reject) => { refuse = reject }))
+    renderPanel({ kind: 'merge', work: BOOK })
+    await pickToKeep(/Frank Herbert/)
+    await screen.findByRole('group', { name: 'Merge preview' })
+    await userEvent.type(screen.getByLabelText('Reason'), 'same book')
+    await userEvent.click(screen.getByRole('button', { name: 'Merge' }))
+    await userEvent.click(screen.getByRole('radio', { name: /Kevin J. Anderson/ }))
+    refuse({ response: { status: 422, data: { detail: { message: 'm', consequences: { threads: 3, shelves: 0, editions: 1 } } } } })
+    await waitFor(() => expect(client.post).toHaveBeenCalledTimes(1))
+    await new Promise((r) => setTimeout(r, 0))
+    expect(screen.queryByRole('button', { name: 'Confirm merge' })).toBeNull()
+    expect(screen.getByRole('radio', { name: /Kevin J. Anderson/ })).toBeChecked()
+  })
 })
