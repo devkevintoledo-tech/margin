@@ -64,6 +64,12 @@ class WorkOut(BaseModel):
     top_genres: list[GenreRef] = []
 
 
+class GenreWorkOut(WorkOut):
+    """A book on a genre page; ``inferred`` when no reader has voted its genres yet."""
+
+    inferred: bool = False
+
+
 def work_out(
     work: Work,
     presentation: "WorkPresentation | None" = None,
@@ -84,15 +90,6 @@ def work_out(
         series=presentation.series if presentation else None,
         top_genres=list(presentation.top_genres) if presentation else [],
     )
-
-
-class GenreOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: UUID
-    name: str
-    slug: str
-    description: str | None
 
 
 class ShelfIn(BaseModel):

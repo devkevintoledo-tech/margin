@@ -37,16 +37,21 @@ async def create_thread(
     current_user: User = Depends(get_current_user),
 ) -> ThreadOut:
     # ThreadCreate validator already enforces work XOR genre target.
-    genre_id = payload.genre_id
-    if payload.genre_slug and genre_id is None:
-        genre = (
-            await db.execute(select(Genre).where(Genre.slug == payload.genre_slug))
-        ).scalar_one_or_none()
-        if genre is None:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="Genre not found"
-            )
-        genre_id = genre.id
+    genre = None
+    if payload.genre_slug and payload.genre_id is None:
+        genre = (await db.execute(select(Genre).where(Genre.slug == payload.genre_slug))).scalars().first()
+    elif payload.genre_id is not None:
+        genre = await db.get(Genre, payload.genre_id)
+    if (payload.genre_slug or payload.genre_id) and genre is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Genre not found")
+    if genre is not None:
+        # Rooms are parents only (spec D9); a subgenre's discussion is its parent's.
+        if genre.parent_id is not None:
+            parent = await db.get(Genre, genre.parent_id)
+            raise HTTPException(status_code=422, detail=f"Discussion about {genre.name} happens in {parent.name}.")
+        if genre.retired_at is not None:
+            raise HTTPException(status_code=422, detail=f"{genre.name} is no longer in the genre list.")
+    genre_id = genre.id if genre is not None else None
 
     # Resolve the work the same way every read path does. A stale client can
     # hold a merged work's id — tombstones exist precisely so those keep

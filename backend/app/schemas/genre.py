@@ -24,3 +24,28 @@ class WorkGenresOut(BaseModel):
     source: Literal["readers", "inferred", "none"]
     genres: list[WorkGenreOut]
     my_vote_count: int | None = None
+
+
+class GenreChild(GenreRef):
+    book_count: int = 0
+
+
+class GenreNode(BaseModel):
+    """A top-level genre on the home page, with its subgenres."""
+
+    id: UUID
+    slug: str
+    name: str
+    description: str | None = None
+    children: list[GenreRef] = []
+
+
+class GenreOut(BaseModel):
+    id: UUID
+    slug: str
+    name: str
+    description: str | None = None
+    parent: GenreRef | None = None
+    children: list[GenreChild] = []
+    retired: bool = False
+    room_slug: str  # where this genre's discussion lives: itself, or its parent
