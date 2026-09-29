@@ -133,7 +133,11 @@ function AddNotice({ pick, series }) {
 function PreviewSlot({ query, onSwap }) {
   if (query.isError) return <p className="alert-danger">{errorMessage(query.error)}</p>
   if (!query.data) return <p className="text-ink-dim text-xs">loading preview</p>
-  return <MergePreview preview={query.data} onSwap={onSwap} />
+  return (
+    <div aria-busy={query.isPlaceholderData}>
+      <MergePreview preview={query.data} onSwap={onSwap} />
+    </div>
+  )
 }
 
 function LibrarianPanel({ action, onClose, onDone }) {
@@ -155,8 +159,18 @@ function LibrarianPanel({ action, onClose, onDone }) {
   const [from, to] = kind === 'merge' && fields.into ? mergeSides(work, fields) : [null, null]
   const preview = useMergePreview(from?.id, to?.id)
   // Counts from the server described the other direction; ask again.
-  const swap = () => { patch({ swapped: !fields.swapped }); setCounts(null) }
+  const refocusSwap = useRef(false)
+  const swap = () => {
+    patch({ swapped: !fields.swapped })
+    if (counts) { refocusSwap.current = true; setCounts(null) }
+  }
   const dialogRef = useRef(null)
+  useEffect(() => {
+    // Leaving the confirm step remounts the preview; keep focus on its swap.
+    if (!refocusSwap.current || counts) return
+    refocusSwap.current = false
+    dialogRef.current?.querySelector('[aria-label="swap which book survives"]')?.focus()
+  }, [counts])
   useEffect(() => {
     const opener = document.activeElement
     dialogRef.current?.querySelector('input, textarea')?.focus()
@@ -242,7 +256,7 @@ function LibrarianPanel({ action, onClose, onDone }) {
             )}
             <button type="submit" className="btn-primary text-xs self-start"
                     disabled={!ready(kind, fields, editions, series) || mutation.isPending
-                              || (kind === 'merge' && !preview.isSuccess)}>
+                              || (kind === 'merge' && (!preview.isSuccess || preview.isPlaceholderData))}>
               {TITLES[kind]}
             </button>
           </form>
