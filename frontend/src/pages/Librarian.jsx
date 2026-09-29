@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useCorrections, useRevertCorrection } from '../api/librarian'
+import { errorMessage } from '../api/errors'
 import DataTable from '../components/DataTable'
 import DiagnosticFloat from '../components/DiagnosticFloat'
 import PathHeader from '../components/PathHeader'
@@ -47,6 +48,7 @@ function Log() {
           runtime-only only
         </button>
       </div>
+      {revert.isError && <p className="alert-danger text-xs">{errorMessage(revert.error)}</p>}
       {isLoading
         ? <div className="h-8 border border-line bg-panel animate-pulse" />
         : <DataTable columns={columns} rows={rows} caption="Catalog fixes" emptyMessage="No fixes yet." />}

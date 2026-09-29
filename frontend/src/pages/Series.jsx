@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'reac
 import { useSeries, useSeriesThreads } from '../api/series'
 import { useVoteThread } from '../api/threads'
 import { useRevertCorrection } from '../api/librarian'
+import { errorMessage } from '../api/errors'
 import ShelfButton from '../components/ShelfButton'
 import PathHeader from '../components/PathHeader'
 import DataTable from '../components/DataTable'
@@ -89,24 +90,28 @@ function ResultLine({ correction, currentSlug, onUndone }) {
   const revert = useRevertCorrection()
   const [state, setState] = useState(correction)
   return (
-    <p role="status" className="text-xs flex flex-wrap items-center gap-3 border-b border-line pb-3">
-      {state.exportable
-        ? <span className="text-ok">exported</span>
-        : <span className="text-warning">runtime-only: {state.runtime_only_reason}</span>}
-      {state.reverted_at ? (
-        <span className="text-ink-dim">undone</span>
-      ) : state.undoable && (
-        <button type="button" className="btn-ghost text-xs" disabled={revert.isPending}
-                onClick={() => revert.mutate(state.id, { onSuccess: (c) => { setState({ ...state, ...c }); onUndone?.() } })}>
-          undo
-        </button>
-      )}
-      {state.room_slug && state.room_slug !== currentSlug && !state.reverted_at && (
-        <Link to={`/series/${state.room_slug}?edit=1`} state={{ correction: state }} className="text-path hover:text-accent">
-          go to its page
-        </Link>
-      )}
-    </p>
+    <div className="flex flex-col gap-2 border-b border-line pb-3">
+      <p role="status" aria-label="Librarian fix result" className="text-xs flex flex-wrap items-center gap-3">
+        {state.exportable
+          ? <span className="text-ok">exported</span>
+          : <span className="text-warning">runtime-only: {state.runtime_only_reason}</span>}
+        {state.reverted_at ? (
+          <span className="text-ink-dim">undone</span>
+        ) : state.undoable && (
+          <button type="button" className="btn-ghost text-xs" disabled={revert.isPending}
+                  onClick={() => revert.mutate(state.id, { onSuccess: (c) => { setState({ ...state, ...c }); onUndone?.() } })}>
+            undo
+          </button>
+        )}
+        {state.room_slug && state.room_slug !== currentSlug && !state.reverted_at && (
+          <Link to={`/series/${state.room_slug}?edit=1`} state={{ correction: state }} className="text-path hover:text-accent">
+            go to its page
+          </Link>
+        )}
+      </p>
+      {/* The server re-checks undo: a newer fix or a changed catalog refuses it. */}
+      {revert.isError && <p className="alert-danger text-xs">{errorMessage(revert.error)}</p>}
+    </div>
   )
 }
 
@@ -133,7 +138,9 @@ function Series() {
   })()
 
   const { data: series, isLoading, isError } = useSeries(slug)
-  const { data: threads, isLoading: threadsLoading } = useSeriesThreads(series?.slug, filter)
+  // A fix can take the filtered book out of the room; the filter goes with it.
+  const bookFilter = series?.works.some((w) => w.id === filter) ? filter : null
+  const { data: threads, isLoading: threadsLoading } = useSeriesThreads(series?.slug, bookFilter)
 
   // A promoted singleton's old slug answers with its survivor.
   useEffect(() => {
@@ -213,11 +220,11 @@ function Series() {
     <button
       key={id ?? 'all'}
       type="button"
-      aria-pressed={filter === id}
+      aria-pressed={bookFilter === id}
       onClick={() => setFilter(id)}
       className={`text-xs px-1 transition-colors duration-fast ${
         // Underlined as well as coloured: nothing means anything by colour alone.
-        filter === id ? 'text-accent underline underline-offset-4' : 'text-ink-dim hover:text-accent'
+        bookFilter === id ? 'text-accent underline underline-offset-4' : 'text-ink-dim hover:text-accent'
       }`}
     >
       {label}
@@ -323,7 +330,7 @@ function Series() {
         <ThreadModal
           seriesSlug={series.slug}
           books={isSeries ? series.works.map((w) => ({ id: w.id, title: w.title })) : []}
-          defaultBookId={filter ?? currentId ?? ''}
+          defaultBookId={bookFilter ?? currentId ?? ''}
           onClose={() => setShowModal(false)}
           onCreated={(thread) => navigate(`/series/${series.slug}/threads/${thread.id}`)}
         />

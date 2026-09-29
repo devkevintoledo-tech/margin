@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { confirmationOf, useLibrarianAction, useSeriesSearch, useWorkEditions } from '../api/librarian'
 import { useSearchWorks } from '../api/works'
 import { errorMessage } from '../api/errors'
@@ -13,6 +13,16 @@ const TITLES = {
   split: 'Split', rename: 'Rename', dissolve: 'Dissolve',
 }
 const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`
+
+/** ``value`` once it has stopped changing for ``ms``. */
+function useDebounced(value, ms = 300) {
+  const [settled, setSettled] = useState(value)
+  useEffect(() => {
+    const timer = setTimeout(() => setSettled(value), ms)
+    return () => clearTimeout(timer)
+  }, [value, ms])
+  return settled
+}
 
 function request(action, f, confirm) {
   const { kind, work, series } = action
@@ -77,7 +87,8 @@ function SeriesPicker({ value, onChange }) {
 
 function WorkPicker({ exclude, value, onChange }) {
   const [q, setQ] = useState('')
-  const { data: works = [] } = useSearchWorks(q)
+  // A cold search reaches Open Library and ingests what it finds: never per keystroke.
+  const { data: works = [] } = useSearchWorks(useDebounced(q.trim()))
   return (
     <div className="flex flex-col gap-2">
       <label className="label" htmlFor="lib-work">Find the book to keep</label>
@@ -136,11 +147,16 @@ function LibrarianPanel({ action, onClose, onDone }) {
   const { kind, work, series } = action
   const [fields, setFields] = useState({
     reason: '', name: '', target: null, into: null, editions: [],
-    position: work?.position == null ? '' : String(work.position),
+    // Only a reorder starts from the current place; a move names its own.
+    position: kind === 'position' && work?.position != null ? String(work.position) : '',
   })
   const [counts, setCounts] = useState(null)
   const mutation = useLibrarianAction()
   const set = (key) => (value) => setFields((f) => ({ ...f, [key]: value }))
+  const dialogRef = useRef(null)
+  useEffect(() => {
+    dialogRef.current?.querySelector('input, textarea')?.focus()
+  }, [])
   const title = `${TITLES[kind]}${work ? ` ${work.title}` : ` ${series.name}`}`
 
   const submit = (confirm) => {
@@ -152,7 +168,8 @@ function LibrarianPanel({ action, onClose, onDone }) {
 
   return (
     <div className="fixed inset-0 bg-bg/90 flex items-center justify-center z-50 p-4">
-      <div role="dialog" aria-modal="true" aria-label={title} className="float w-full max-w-lg flex flex-col gap-4 p-5">
+      <div ref={dialogRef} role="dialog" aria-modal="true" aria-label={title}
+           onKeyDown={(e) => { if (e.key === 'Escape') onClose() }} className="float w-full max-w-lg flex flex-col gap-4 p-5">
         <div className="flex items-center justify-between">
           <h2 className="text-sm uppercase tracking-eyebrow text-ink">{title}</h2>
           <button type="button" onClick={onClose} aria-label="Close" className="text-ink-dim hover:text-danger">

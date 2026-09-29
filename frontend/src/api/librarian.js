@@ -11,9 +11,10 @@ export function confirmationOf(error) {
 function useInvalidateCatalog() {
   const queryClient = useQueryClient()
   return () => {
-    // A fix can move a book between rooms, so every series page may be stale.
-    queryClient.invalidateQueries({ queryKey: ['series'] })
-    queryClient.invalidateQueries({ queryKey: ['librarian'] })
+    // A fix can move or merge a book anywhere: series pages, search results,
+    // shelves and thread tags may all name its old room. Fixes are rare, so
+    // everything is marked stale rather than guessing which keys.
+    queryClient.invalidateQueries()
   }
 }
 

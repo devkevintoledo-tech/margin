@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
@@ -13,11 +13,10 @@ const SERIES = { id: 's1', name: 'Dune', slug: 'dune', kind: 'series' }
 const BOOK = { id: 'w1', title: 'Dune', author: 'Brian Herbert', position: null }
 const CORRECTION = { id: 'c1', op: 'set_series', exportable: true, undoable: true, room_slug: 'dune' }
 
-function renderPanel(action, onDone = vi.fn()) {
-  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+function renderPanel(action, onDone = vi.fn(), { qc = new QueryClient({ defaultOptions: { queries: { retry: false } } }), onClose = vi.fn() } = {}) {
   render(
     <QueryClientProvider client={qc}>
-      <LibrarianPanel action={{ series: SERIES, ...action }} onClose={vi.fn()} onDone={onDone} />
+      <LibrarianPanel action={{ series: SERIES, ...action }} onClose={onClose} onDone={onDone} />
     </QueryClientProvider>,
   )
   return onDone
@@ -89,5 +88,40 @@ describe('LibrarianPanel', () => {
 
   it('reads a message out of an object detail', () => {
     expect(errorMessage({ response: { data: { detail: { message: 'Nope.', consequences: {} } } } })).toBe('Nope.')
+  })
+
+  it('does not carry the old position into a move', async () => {
+    client.get.mockResolvedValue({ data: [] })
+    renderPanel({ kind: 'move', work: { ...BOOK, position: 3 } })
+    expect(screen.getByLabelText('Position (optional)')).toHaveValue(null)
+  })
+
+  it('searches for the book to keep once typing pauses, not on every keystroke', async () => {
+    client.get.mockResolvedValue({ data: [] })
+    renderPanel({ kind: 'merge', work: BOOK })
+    await userEvent.type(screen.getByLabelText('Find the book to keep'), 'dune messiah')
+    await waitFor(() => expect(client.get).toHaveBeenCalledWith('/works/search', { params: { q: 'dune messiah' } }))
+    const searches = client.get.mock.calls.filter(([url]) => url === '/works/search')
+    expect(searches).toHaveLength(1)
+  })
+
+  it('closes on Escape and starts with focus inside the dialog', async () => {
+    const onClose = vi.fn()
+    renderPanel({ kind: 'dissolve' }, vi.fn(), { onClose })
+    expect(screen.getByRole('dialog').contains(document.activeElement)).toBe(true)
+    fireEvent.keyDown(document.activeElement, { key: 'Escape' })
+    expect(onClose).toHaveBeenCalled()
+  })
+
+  it('marks every cached query stale after a fix, since a fix can move a book anywhere', async () => {
+    client.post.mockResolvedValue({ data: CORRECTION })
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    qc.setQueryData(['works', 'search', 'dune'], [])
+    qc.setQueryData(['threads', 't1'], {})
+    renderPanel({ kind: 'dissolve' }, vi.fn(), { qc })
+    await userEvent.type(screen.getByLabelText('Reason'), 'an imprint')
+    await userEvent.click(screen.getByRole('button', { name: 'Dissolve' }))
+    await waitFor(() => expect(qc.getQueryState(['works', 'search', 'dune']).isInvalidated).toBe(true))
+    expect(qc.getQueryState(['threads', 't1']).isInvalidated).toBe(true)
   })
 })

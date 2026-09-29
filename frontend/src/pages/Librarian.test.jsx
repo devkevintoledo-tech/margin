@@ -56,4 +56,12 @@ describe('Librarian log', () => {
     await userEvent.click(screen.getByRole('button', { name: 'runtime-only only' }))
     expect(client.get).toHaveBeenLastCalledWith('/librarian/corrections', { params: { runtime_only: true } })
   })
+
+  it('says why an undo was refused', async () => {
+    useAuthStore.setState({ token: 't', user: { id: 'u', username: 'ada', is_librarian: true } })
+    client.post.mockRejectedValue({ response: { status: 409, data: { detail: 'The book or series changed since this fix.' } } })
+    renderPage()
+    await userEvent.click(await screen.findByRole('button', { name: 'undo Iron Gold' }))
+    expect(await screen.findByText(/changed since this fix/)).toBeInTheDocument()
+  })
 })
