@@ -1624,7 +1624,7 @@ export async function moveFirstResultInto(page, query, saga, { create = false, p
     : page.getByRole('radio', { name: new RegExp(`^${saga}`) })
   await radio.check()
   if (position != null) await page.getByLabel('Position (optional)').fill(String(position))
-  await page.getByLabel('Reason').fill('e2e: building a series')
+  await page.getByLabel('Reason', { exact: true }).fill('e2e: building a series')
   await page.getByRole('button', { name: 'Move', exact: true }).click()
   const status = page.getByRole('group', { name: 'Librarian fix result' })
   await expect(status).toBeVisible()
@@ -1658,7 +1658,7 @@ test('a librarian numbers two books in one batch and undoes the batch', async ({
   const books = page.getByRole('list', { name: 'Books in this series' })
   for (const box of await books.getByRole('checkbox', { name: /^select / }).all()) await box.check()
   await page.getByRole('button', { name: 'number 1…n', exact: true }).click()
-  await page.getByLabel('Reason').fill('e2e: numbering in one batch')
+  await page.getByLabel('Reason', { exact: true }).fill('e2e: numbering in one batch')
   await page.getByRole('button', { name: 'Number books', exact: true }).click()
 
   const status = page.getByRole('group', { name: 'Librarian batch result' })

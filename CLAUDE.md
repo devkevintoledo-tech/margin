@@ -255,6 +255,13 @@ Read those before changing anything visual.
   `.alert-muted`) rather than re-deriving them. Shared shells live in
   `components/` (`AuthLayout`, `VoteControl`, `PathHeader`, `StatusBar`,
   `DiagnosticFloat`, `DataTable`, `ThreadModal`).
+- **Librarian components** live in `components/librarian/` (`LibrarianPanel.jsx`
+  itself stays in `components/`). Any librarian surface that asks for a reason
+  uses `ReasonField` (`<ReasonField kind value onChange />`): preset chips from
+  `components/librarian/reasons.js` above a required textarea. A chip only
+  writes text (keeping typed words as its detail); add a new action kind's
+  presets to `REASONS`. In Playwright, find the field with
+  `getByLabel('Reason', { exact: true })` — the `Quick reasons` group matches too.
 - **Box-drawing frames and rails are CSS borders, not characters.** Only tree
   elbows (`├─`, `└─`), sort carets (`▾`/`▴`) and the float marker (`■`) are
   literal glyphs, and every one is `aria-hidden`.

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
@@ -184,5 +184,40 @@ describe('LibrarianPanel', () => {
     unmount()
     expect(document.activeElement).toBe(opener)
     opener.remove()
+  })
+
+  it('sends a one-click reason as the text it shows', async () => {
+    client.post.mockResolvedValue({ data: CORRECTION })
+    const onDone = renderPanel({ kind: 'dissolve' })
+    const submit = screen.getByRole('button', { name: 'Dissolve' })
+    expect(submit).toBeDisabled()
+    await userEvent.click(screen.getByRole('button', { name: 'publisher imprint' }))
+    expect(submit).toBeEnabled()
+    await userEvent.click(submit)
+    await waitFor(() => expect(onDone).toHaveBeenCalledWith(CORRECTION))
+    expect(client.post).toHaveBeenCalledWith('/librarian/series/s1/dissolve', { reason: 'publisher imprint' })
+  })
+
+  it('offers the presets of the action it is doing', () => {
+    renderPanel({ kind: 'remove', work: BOOK })
+    const group = screen.getByRole('group', { name: 'Quick reasons' })
+    expect(within(group).getByRole('button', { name: 'not part of this series' })).toBeInTheDocument()
+    expect(within(group).queryByRole('button', { name: 'duplicate record' })).toBeNull()
+  })
+
+  it('still starts with focus in a field, not on a chip', () => {
+    renderPanel({ kind: 'dissolve' })
+    expect(document.activeElement).toBe(screen.getByLabelText('Reason'))
+  })
+
+  it('a chip clears a refusal like typing does', async () => {
+    client.post.mockRejectedValueOnce({ response: { status: 422, data: { detail: 'It is already called Dune.' } } })
+    renderPanel({ kind: 'rename' })
+    await userEvent.type(screen.getByLabelText('New name'), 'Dune')
+    await userEvent.click(screen.getByRole('button', { name: 'fix spelling' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Rename' }))
+    expect(await screen.findByText('It is already called Dune.')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'official series name' }))
+    expect(screen.queryByText('It is already called Dune.')).toBeNull()
   })
 })

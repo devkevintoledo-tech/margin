@@ -706,7 +706,7 @@ export async function moveFirstResultInto(page, query, saga, { create = false, p
     : page.getByRole('radio', { name: new RegExp(`^${saga}`) })
   await radio.check()
   if (position != null) await page.getByLabel('Position (optional)').fill(String(position))
-  await page.getByLabel('Reason').fill('e2e: building a series')
+  await page.getByLabel('Reason', { exact: true }).fill('e2e: building a series')
   await page.getByRole('button', { name: 'Move', exact: true }).click()
   const status = page.getByRole('group', { name: 'Librarian fix result' })
   await expect(status).toBeVisible()
@@ -742,7 +742,7 @@ test('a librarian adds a book from the series page and undoes it', async ({ page
   await page.getByLabel('Find the book to add').fill('the dispossessed')
   const hit = page.getByRole('radio', { name: /Dispossessed/ }).first()
   await hit.check()
-  await page.getByLabel('Reason').fill('e2e: checking add a book')
+  await page.getByLabel('Reason', { exact: true }).fill('e2e: checking add a book')
   await page.getByRole('button', { name: 'Add book' }).click()
 
   const status = page.getByRole('group', { name: 'Librarian fix result' })

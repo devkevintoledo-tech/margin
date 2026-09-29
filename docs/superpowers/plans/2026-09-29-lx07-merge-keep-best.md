@@ -1266,7 +1266,7 @@ test('a librarian keeps the merging-away title on merge', async ({ page }) => {
   const keepTitle = page.getByRole('radiogroup', { name: 'Keep title' })
   await keepTitle.getByRole('radio', { name: /merging away/ }).check()
   await expect(page.getByRole('radiogroup', { name: 'Keep cover' }).getByRole('radio', { name: /merging away/ })).toBeDisabled()
-  await page.getByLabel('Reason').fill('e2e: same book, better title')
+  await page.getByLabel('Reason', { exact: true }).fill('e2e: same book, better title')
   await page.getByRole('button', { name: 'Merge', exact: true }).click()
   await expect(page.getByText(/Keeps the merging-away book's title/)).toBeVisible()
   await page.getByRole('button', { name: 'Confirm merge' }).click()

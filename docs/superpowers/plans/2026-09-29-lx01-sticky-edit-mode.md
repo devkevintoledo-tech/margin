@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-- [ ] **Roadmap item:** 01 — tick in docs/librarian-ux-roadmap.md when merged
+- [x] **Roadmap item:** 01 — tick in docs/librarian-ux-roadmap.md when merged
 
 **Goal:** A librarian turns edit mode on once and it follows them from book to book (and across reloads) until they press `[done]`; `?edit=1` deep links still turn it on; readers never see any of it.
 

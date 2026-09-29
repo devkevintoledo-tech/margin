@@ -17,7 +17,7 @@ test('a librarian moves a book into a new series and undoes it', async ({ page }
   const saga = `E2E Saga ${Date.now()}`
   await page.getByLabel('Find a series').fill(saga)
   await page.getByRole('radio', { name: `new series: ${saga}` }).check()
-  await page.getByLabel('Reason').fill('e2e: checking the move flow')
+  await page.getByLabel('Reason', { exact: true }).fill('e2e: checking the move flow')
   await page.getByRole('button', { name: 'Move', exact: true }).click()
 
   const status = page.getByRole('group', { name: 'Librarian fix result' })
@@ -59,4 +59,34 @@ test("a librarian's edit mode follows them to the next book", async ({ page }) =
   await page.getByRole('button', { name: '[done editing]' }).click()
   await expect(books.getByRole('button', { name: /^move / })).toHaveCount(0)
   await expect(page.getByRole('button', { name: '[edit]' })).toBeVisible()
+})
+
+// A preset reason is one click, lands in the log as its text, and the fix
+// undoes from the log. Needs the full stack and live Open Library.
+test('a librarian gives a reason with one click', async ({ page }) => {
+  const user = await registerViaUi(page)
+  grantLibrarian(user)
+  await page.reload() // useMe refreshes the stored user, now a librarian
+
+  await openFirstSearchResult(page, 'the lathe of heaven')
+  await page.getByRole('button', { name: '[edit]' }).click()
+  const books = page.getByRole('list', { name: 'Books in this series' })
+  const title = await books.getByRole('heading').first().textContent()
+
+  await books.getByRole('button', { name: `move ${title}`, exact: true }).click()
+  const saga = `E2E Reasons ${Date.now()}`
+  await page.getByLabel('Find a series').fill(saga)
+  await page.getByRole('radio', { name: `new series: ${saga}` }).check()
+  const chip = page.getByRole('group', { name: 'Quick reasons' }).getByRole('button', { name: 'belongs to this series' })
+  await chip.click()
+  await expect(chip).toHaveAttribute('aria-pressed', 'true')
+  await expect(page.getByLabel('Reason', { exact: true })).toHaveValue('belongs to this series')
+  await page.getByRole('button', { name: 'Move', exact: true }).click()
+  await expect(page.getByRole('group', { name: 'Librarian fix result' })).toBeVisible()
+
+  await page.goto('/librarian')
+  const table = page.getByRole('table', { name: 'Catalog fixes' })
+  await expect(table.getByText('belongs to this series').first()).toBeVisible()
+  await table.getByRole('button', { name: `undo ${title}` }).first().click()
+  await expect(table.getByText('undone').first()).toBeVisible()
 })

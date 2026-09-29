@@ -1402,7 +1402,7 @@ test('a librarian undoes a fix from a book history and finds it in the filtered 
   const saga = `E2E Log ${Date.now()}`
   await page.getByLabel('Find a series').fill(saga)
   await page.getByRole('radio', { name: `new series: ${saga}` }).check()
-  await page.getByLabel('Reason').fill('e2e: log move')
+  await page.getByLabel('Reason', { exact: true }).fill('e2e: log move')
   await page.getByRole('button', { name: 'Move', exact: true }).click()
   const status = page.getByRole('group', { name: 'Librarian fix result' })
   const follow = status.getByRole('link', { name: /go to its page/ })
@@ -1414,7 +1414,7 @@ test('a librarian undoes a fix from a book history and finds it in the filtered 
 
   await books.getByRole('button', { name: `position ${title}`, exact: true }).click()
   await page.getByLabel('Position (blank clears)').fill('1')
-  await page.getByLabel('Reason').fill('e2e: log position')
+  await page.getByLabel('Reason', { exact: true }).fill('e2e: log position')
   await page.getByRole('button', { name: 'Set position', exact: true }).click()
   await expect(status).toBeVisible()
 

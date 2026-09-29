@@ -1503,7 +1503,7 @@ test('a librarian merges two books and undoes it', async ({ page }) => {
   await books.getByRole('button', { name: `merge into… ${loser}`, exact: true }).click()
   await page.getByLabel('Find the book to keep').fill(keeper)
   await page.getByRole('radio', { name: new RegExp(escapeRegExp(keeper)) }).first().check()
-  await page.getByLabel('Reason').fill('e2e: checking merge undo')
+  await page.getByLabel('Reason', { exact: true }).fill('e2e: checking merge undo')
   await page.getByRole('button', { name: 'Merge', exact: true }).click()
   await expect(page.getByText(/Undo stays in the fix log/)).toBeVisible()
   await page.getByRole('button', { name: 'Confirm merge' }).click()
