@@ -29,8 +29,8 @@ Status: ⬜ not started · 🟡 in progress · ✅ done · ⏸ parked
 
 | # | Item | Plan | Depends on | Status | Branch | Done | PR |
 |---|---|---|---|---|---|---|---|
-| 01 | Sticky edit mode | [plan](superpowers/plans/2026-09-29-lx01-sticky-edit-mode.md) | — | 🟡 | feat/librarian-lx01-sticky-edit-mode | | |
-| 02 | Quick reasons | [plan](superpowers/plans/2026-09-29-lx02-quick-reasons.md) | — | ⬜ | | | |
+| 01 | Sticky edit mode | [plan](superpowers/plans/2026-09-29-lx01-sticky-edit-mode.md) | — | ✅ | feat/librarian-lx01-sticky-edit-mode | 2026-09-29 | #15 |
+| 02 | Quick reasons | [plan](superpowers/plans/2026-09-29-lx02-quick-reasons.md) | — | 🟡 | feat/librarian-lx02-quick-reasons | | |
 | 03 | Add a book from the series page | [plan](superpowers/plans/2026-09-29-lx03-add-book-to-series.md) | — | ⬜ | | | |
 | 04 | Side-by-side merge preview | [plan](superpowers/plans/2026-09-29-lx04-merge-preview.md) | — | ⬜ | | | |
 | 05 | Merge from search results | [plan](superpowers/plans/2026-09-29-lx05-merge-from-search.md) | 04 | ⬜ | | | |
@@ -262,3 +262,5 @@ _(Add dated notes here as items land: surprises, changed names, follow-ups.)_
     `ReasonField` props `kind, value, onChange, id`.
   - 10: keys press the control carrying `aria-keyshortcuts`; row cursor is focus
     on `[data-work-row]`; `c` (cover) only when 06 has landed.
+- **2026-09-29 — 01 done (#15):** the `[edit]` toggle is a button now; e2e and
+  later plans must use `getByRole('button', { name: '[edit]' })`.
