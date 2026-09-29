@@ -48,11 +48,11 @@ function request(action, f, confirm) {
   }
 }
 
-function ready(kind, f) {
+function ready(kind, f, editions) {
   if (!f.reason.trim()) return false
   if (kind === 'move') return !!f.target
   if (kind === 'merge') return !!f.into
-  if (kind === 'split') return f.editions.length > 0
+  if (kind === 'split') return f.editions.length > 0 && f.editions.length < editions.length
   if (kind === 'rename') return !!f.name.trim()
   return true
 }
@@ -106,12 +106,14 @@ function WorkPicker({ exclude, value, onChange }) {
   )
 }
 
-function EditionPicker({ workId, value, onChange }) {
-  const { data: editions = [] } = useWorkEditions(workId)
+function EditionPicker({ editions, loaded, value, onChange }) {
   const toggle = (id) => onChange(value.includes(id) ? value.filter((v) => v !== id) : [...value, id])
   return (
     <fieldset className="flex flex-col gap-1 text-sm">
       <legend className="label">Editions to split off</legend>
+      {loaded && editions.length < 2 && (
+        <p className="alert-muted">A split needs at least two editions: one to move and one to stay.</p>
+      )}
       {editions.map((e) => (
         <label key={e.id} className="flex items-center gap-2">
           <input type="checkbox" checked={value.includes(e.id)} onChange={() => toggle(e.id)} />
@@ -137,8 +139,9 @@ function Consequences({ action, fields, counts }) {
   }
   return (
     <p className="text-sm text-ink">
-      {plural(counts.editions, 'edition')} of <span className="font-serif italic">{work.title}</span> become a
-      book of their own; {counts.remaining} stay. <span className="text-danger">This cannot be undone.</span>
+      {plural(counts.editions, 'edition')} of <span className="font-serif italic">{work.title}</span>{' '}
+      {counts.editions === 1 ? 'becomes a book of its own' : 'become a book of their own'};{' '}
+      {counts.remaining} {counts.remaining === 1 ? 'stays' : 'stay'}. <span className="text-danger">This cannot be undone.</span>
     </p>
   )
 }
@@ -152,11 +155,30 @@ function LibrarianPanel({ action, onClose, onDone }) {
   })
   const [counts, setCounts] = useState(null)
   const mutation = useLibrarianAction()
-  const set = (key) => (value) => setFields((f) => ({ ...f, [key]: value }))
+  const editionsQuery = useWorkEditions(kind === 'split' ? work.id : null)
+  const editions = editionsQuery.data ?? []
+  const set = (key) => (value) => {
+    if (mutation.isError) mutation.reset() // a refusal answered the old values, not these
+    setFields((f) => ({ ...f, [key]: value }))
+  }
   const dialogRef = useRef(null)
   useEffect(() => {
+    const opener = document.activeElement
     dialogRef.current?.querySelector('input, textarea')?.focus()
+    return () => opener?.focus?.() // back to the row button that opened it
   }, [])
+  // aria-modal promises the page behind is out of reach; Tab must not leave.
+  const trapTab = (e) => {
+    if (e.key === 'Escape') return onClose()
+    if (e.key !== 'Tab') return
+    const focusable = [...dialogRef.current.querySelectorAll('button, input, textarea, select, a[href]')]
+      .filter((el) => !el.disabled)
+    if (!focusable.length) return
+    const first = focusable[0]
+    const last = focusable[focusable.length - 1]
+    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus() }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus() }
+  }
   const title = `${TITLES[kind]}${work ? ` ${work.title}` : ` ${series.name}`}`
 
   const submit = (confirm) => {
@@ -169,7 +191,7 @@ function LibrarianPanel({ action, onClose, onDone }) {
   return (
     <div className="fixed inset-0 bg-bg/90 flex items-center justify-center z-50 p-4">
       <div ref={dialogRef} role="dialog" aria-modal="true" aria-label={title}
-           onKeyDown={(e) => { if (e.key === 'Escape') onClose() }} className="float w-full max-w-lg flex flex-col gap-4 p-5">
+           onKeyDown={trapTab} className="float w-full max-w-prose flex flex-col gap-4 p-5">
         <div className="flex items-center justify-between">
           <h2 className="text-sm uppercase tracking-eyebrow text-ink">{title}</h2>
           <button type="button" onClick={onClose} aria-label="Close" className="text-ink-dim hover:text-danger">
@@ -193,12 +215,12 @@ function LibrarianPanel({ action, onClose, onDone }) {
             {(kind === 'move' || kind === 'position') && (
               <div>
                 <label className="label" htmlFor="lib-position">{kind === 'move' ? 'Position (optional)' : 'Position (blank clears)'}</label>
-                <input id="lib-position" type="number" step="0.5" className="input" value={fields.position}
+                <input id="lib-position" type="number" step="any" className="input" value={fields.position}
                        onChange={(e) => set('position')(e.target.value)} />
               </div>
             )}
             {kind === 'merge' && <WorkPicker exclude={work.id} value={fields.into} onChange={set('into')} />}
-            {kind === 'split' && <EditionPicker workId={work.id} value={fields.editions} onChange={set('editions')} />}
+            {kind === 'split' && <EditionPicker editions={editions} loaded={editionsQuery.isSuccess} value={fields.editions} onChange={set('editions')} />}
             {kind === 'rename' && (
               <div>
                 <label className="label" htmlFor="lib-name">New name</label>
@@ -214,7 +236,7 @@ function LibrarianPanel({ action, onClose, onDone }) {
               <p className="alert-danger">{errorMessage(mutation.error)}</p>
             )}
             <button type="submit" className="btn-primary text-xs self-start"
-                    disabled={!ready(kind, fields) || mutation.isPending}>
+                    disabled={!ready(kind, fields, editions) || mutation.isPending}>
               {TITLES[kind]}
             </button>
           </form>

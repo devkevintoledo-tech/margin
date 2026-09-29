@@ -11,7 +11,7 @@ from app.models import (
 from app.services.librarian.errors import Conflict, Invalid, NeedsConfirmation, NotFound
 from app.services.librarian.keys import edition_key, exported, work_key
 from app.services.librarian.placement import _override_member
-from app.services.librarian.record import clean_reason, ids, live_work, record
+from app.services.librarian.record import clean_reason, ids, live_work, locked, record
 from app.services.work_identity import canonical_key, display_title, heuristic_external_id
 from app.services.works import _refresh_work, edition_rank, identity_keys, merge_works
 
@@ -25,6 +25,8 @@ async def merge(db: AsyncSession, user: User, source: Work, target: Work, *, rea
     reason = clean_reason(reason)
     if source is not None and target is not None and source.id == target.id:
         raise Invalid("A book cannot merge into itself.")
+    for work in sorted((w for w in (source, target) if w is not None), key=lambda w: w.id):
+        await locked(db, work)  # id order, so two opposite merges cannot deadlock
     source, target = live_work(source), live_work(target)
     room = await db.get(Series, source.series_id)
     moving_threads = await _count(db, Thread, Thread.work_id == source.id)
@@ -51,7 +53,7 @@ async def merge(db: AsyncSession, user: User, source: Work, target: Work, *, rea
 async def split(db: AsyncSession, user: User, work: Work, edition_ids: list[UUID], *, reason: str,
                 confirm: bool = False) -> CatalogCorrection:
     reason = clean_reason(reason)
-    work = live_work(work)
+    work = live_work(await locked(db, work))
     wanted = list(dict.fromkeys(edition_ids))
     if not wanted:
         raise Invalid("Pick at least one edition to split off.")

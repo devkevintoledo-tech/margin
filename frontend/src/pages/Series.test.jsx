@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom'
+import { MemoryRouter, Routes, Route, useLocation, useNavigate } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
 vi.mock('../api/client', () => ({ default: { get: vi.fn(), post: vi.fn(), put: vi.fn() } }))
@@ -44,7 +44,13 @@ function mockApi(series, threads = THREADS) {
 
 function Where() {
   const loc = useLocation()
-  return <p data-testid="where">{loc.pathname}</p>
+  const navigate = useNavigate()
+  return (
+    <>
+      <p data-testid="where">{loc.pathname}</p>
+      <button type="button" onClick={() => navigate('/series/elsewhere')}>go elsewhere</button>
+    </>
+  )
 }
 
 function renderPage(entry) {
@@ -213,7 +219,7 @@ describe('Series page', () => {
     await userEvent.type(screen.getByLabelText('Reason'), 'not a sequel')
     await userEvent.click(screen.getByRole('button', { name: 'Remove from series' }))
 
-    const status = await screen.findByRole('status')
+    const status = await screen.findByRole('group', { name: 'Librarian fix result' })
     expect(within(status).getByText(/runtime-only: Red Rising is not in a catalog release/)).toBeInTheDocument()
     expect(within(status).getByRole('link', { name: /go to its page/ })).toHaveAttribute('href', '/series/golden-son-abc?edit=1')
     await userEvent.click(within(status).getByRole('button', { name: 'undo' }))
@@ -239,7 +245,7 @@ describe('Series page', () => {
     await userEvent.click(within(list).getByRole('button', { name: 'remove Golden Son' }))
     await userEvent.type(screen.getByLabelText('Reason'), 'not a sequel')
     await userEvent.click(screen.getByRole('button', { name: 'Remove from series' }))
-    const status = await screen.findByRole('status', { name: 'Librarian fix result' })
+    const status = await screen.findByRole('group', { name: 'Librarian fix result' })
     await userEvent.click(within(status).getByRole('button', { name: 'undo' }))
     expect(await screen.findByText(/A later fix to the same book/)).toBeInTheDocument()
   })
@@ -266,5 +272,37 @@ describe('Series page', () => {
       const last = client.get.mock.calls.filter(([url]) => url.endsWith('/threads')).at(-1)
       expect(last[1]?.params?.work_id).toBeUndefined()
     })
+  })
+
+  it('announces only the outcome, not the controls beside it', async () => {
+    useAuthStore.setState({ token: 't', user: { id: 'u1', username: 'lib', is_librarian: true } })
+    mockApi({ ...SAGA, id: 's1' })
+    client.post.mockResolvedValueOnce({ data: { id: 'c1', op: 'remove_from_series', exportable: true, undoable: true, room_slug: 'red-rising' } })
+    renderPage('/series/red-rising?edit=1')
+    const list = await screen.findByRole('list', { name: 'Books in this series' })
+    await userEvent.click(within(list).getByRole('button', { name: 'remove Golden Son' }))
+    await userEvent.type(screen.getByLabelText('Reason'), 'not a sequel')
+    await userEvent.click(screen.getByRole('button', { name: 'Remove from series' }))
+    const line = await screen.findByRole('group', { name: 'Librarian fix result' })
+    const live = within(line).getByRole('status')
+    expect(live).toHaveTextContent('exported')
+    expect(within(live).queryByRole('button')).toBeNull()
+  })
+
+  it('does not carry a fix report onto an unrelated series', async () => {
+    useAuthStore.setState({ token: 't', user: { id: 'u1', username: 'lib', is_librarian: true } })
+    mockApi({ ...SAGA, id: 's1' })
+    client.post.mockResolvedValueOnce({ data: { id: 'c1', op: 'remove_from_series', exportable: true, undoable: true, room_slug: 'red-rising' } })
+    renderPage('/series/red-rising?edit=1')
+    const list = await screen.findByRole('list', { name: 'Books in this series' })
+    await userEvent.click(within(list).getByRole('button', { name: 'remove Golden Son' }))
+    await userEvent.type(screen.getByLabelText('Reason'), 'not a sequel')
+    await userEvent.click(screen.getByRole('button', { name: 'Remove from series' }))
+    await screen.findByRole('group', { name: 'Librarian fix result' })
+
+    mockApi({ ...SAGA, id: 's2', slug: 'elsewhere', name: 'Elsewhere' })
+    await userEvent.click(screen.getByRole('button', { name: 'go elsewhere' }))
+    await screen.findByRole('heading', { level: 1, name: 'Elsewhere' })
+    expect(screen.queryByRole('group', { name: 'Librarian fix result' })).toBeNull()
   })
 })

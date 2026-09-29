@@ -21,6 +21,17 @@ def clean_reason(reason: str | None) -> str:
     return cleaned
 
 
+async def locked(db: AsyncSession, row):
+    """Re-read ``row`` under ``FOR UPDATE``. Two fixes to one book or series
+    then run one after the other, and the second sees what the first did (a
+    tombstone, a new room) instead of racing it."""
+    if row is None:
+        return None
+    model = type(row)
+    return (await db.execute(select(model).where(model.id == row.id).with_for_update()
+                             .execution_options(populate_existing=True))).scalar_one()
+
+
 def live_work(work: Work | None) -> Work:
     if work is None:
         raise NotFound("Unknown book.")

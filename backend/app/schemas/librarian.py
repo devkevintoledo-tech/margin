@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.models import CorrectionOp
 
@@ -24,13 +24,13 @@ class SplitIn(_Reasoned):
 
 class MoveIn(_Reasoned):
     series_id: UUID | None = None
-    new_series_name: str | None = None
-    position: float | None = None
+    new_series_name: str | None = Field(default=None, max_length=500)  # series.name is String(500)
+    position: float | None = Field(default=None, allow_inf_nan=False)
 
 
 class PositionIn(_Reasoned):
     work_id: UUID
-    position: float | None = None
+    position: float | None = Field(default=None, allow_inf_nan=False)
 
 
 class RemoveIn(_Reasoned):
@@ -38,7 +38,7 @@ class RemoveIn(_Reasoned):
 
 
 class RenameIn(_Reasoned):
-    name: str
+    name: str = Field(max_length=500)
 
 
 class DissolveIn(_Reasoned):

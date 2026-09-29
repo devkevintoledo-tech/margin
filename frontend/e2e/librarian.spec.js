@@ -20,8 +20,7 @@ test('a librarian moves a book into a new series and undoes it', async ({ page }
   await page.getByLabel('Reason').fill('e2e: checking the move flow')
   await page.getByRole('button', { name: 'Move', exact: true }).click()
 
-  // The result line, not the StatusBar (also role="status").
-  const status = page.getByRole('status').filter({ hasText: /exported|runtime-only/ })
+  const status = page.getByRole('group', { name: 'Librarian fix result' })
   await expect(status).toBeVisible()
   // A singleton the move emptied redirects to the new room by itself; a book
   // moved out of a real series needs the link.

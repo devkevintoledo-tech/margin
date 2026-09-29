@@ -124,4 +124,65 @@ describe('LibrarianPanel', () => {
     await waitFor(() => expect(qc.getQueryState(['works', 'search', 'dune']).isInvalidated).toBe(true))
     expect(qc.getQueryState(['threads', 't1']).isInvalidated).toBe(true)
   })
+
+  it('accepts any catalog position, not only halves', () => {
+    renderPanel({ kind: 'position', work: { ...BOOK, position: 1.25 } })
+    expect(screen.getByLabelText('Position (blank clears)')).toHaveAttribute('step', 'any')
+  })
+
+  it('clears a refusal once the librarian edits the form', async () => {
+    client.post.mockRejectedValueOnce({ response: { status: 422, data: { detail: 'It is already called Dune.' } } })
+    renderPanel({ kind: 'rename' })
+    await userEvent.type(screen.getByLabelText('New name'), 'Dune')
+    await userEvent.type(screen.getByLabelText('Reason'), 'r')
+    await userEvent.click(screen.getByRole('button', { name: 'Rename' }))
+    expect(await screen.findByText('It is already called Dune.')).toBeInTheDocument()
+    await userEvent.type(screen.getByLabelText('New name'), ' Saga')
+    expect(screen.queryByText('It is already called Dune.')).toBeNull()
+  })
+
+  it('agrees with the number of editions it names', async () => {
+    client.get.mockResolvedValue({ data: [
+      { id: 'e1', title: 'Dune', source: 'openlibrary' },
+      { id: 'e2', title: 'Dune Messiah', source: 'openlibrary' },
+      { id: 'e3', title: 'Children of Dune', source: 'openlibrary' },
+    ] })
+    client.post.mockRejectedValueOnce({ response: { status: 422, data: { detail: {
+      message: 'm', consequences: { editions: 2, remaining: 1 } } } } })
+    renderPanel({ kind: 'split', work: BOOK })
+    await userEvent.click(await screen.findByRole('checkbox', { name: /Dune Messiah/ }))
+    await userEvent.click(screen.getByRole('checkbox', { name: /Children of Dune/ }))
+    await userEvent.type(screen.getByLabelText('Reason'), 'sequels')
+    await userEvent.click(screen.getByRole('button', { name: 'Split' }))
+    expect(await screen.findByText(/2 editions of/)).toHaveTextContent(/become a book of their own; 1 stays/)
+  })
+
+  it('explains why a book with one edition cannot be split', async () => {
+    client.get.mockResolvedValue({ data: [{ id: 'e1', title: 'Dune', source: 'openlibrary' }] })
+    renderPanel({ kind: 'split', work: BOOK })
+    expect(await screen.findByText(/needs at least two editions/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Split' })).toBeDisabled()
+  })
+
+  it('keeps Tab inside the dialog and gives focus back on close', async () => {
+    const opener = document.createElement('button')
+    document.body.appendChild(opener)
+    opener.focus()
+    const qc = new QueryClient()
+    const { unmount } = render(
+      <QueryClientProvider client={qc}>
+        <LibrarianPanel action={{ series: SERIES, kind: 'dissolve' }} onClose={vi.fn()} onDone={vi.fn()} />
+      </QueryClientProvider>,
+    )
+    const dialog = screen.getByRole('dialog')
+    for (let i = 0; i < 6; i++) {
+      await userEvent.tab()
+      expect(dialog.contains(document.activeElement)).toBe(true)
+    }
+    await userEvent.tab({ shift: true })
+    expect(dialog.contains(document.activeElement)).toBe(true)
+    unmount()
+    expect(document.activeElement).toBe(opener)
+    opener.remove()
+  })
 })
