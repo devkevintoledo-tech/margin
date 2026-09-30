@@ -38,7 +38,7 @@ function absoluteTime(dateStr) {
   })
 }
 
-function Post({ post, threadId, depth = 0 }) {
+function Post({ post, threadId, depth = 0, threadDeleted = false }) {
   const {
     id, content, score = 0, my_vote = 0, author, created_at, edited_at, deleted = false,
     replies = [],
@@ -162,7 +162,8 @@ function Post({ post, threadId, depth = 0 }) {
                 />
               ) : (
                 <>
-                  {user && (
+                  {/* A deleted thread refuses replies (409), so do not offer one. */}
+                  {user && !threadDeleted && (
                     <button
                       onClick={() => setShowReply((v) => !v)}
                       className="text-ink-dim hover:text-accent transition-colors duration-fast"
@@ -234,7 +235,7 @@ function Post({ post, threadId, depth = 0 }) {
                 >
                   {isLast ? '└─' : '├─'}
                 </span>
-                <Post post={reply} threadId={threadId} depth={depth + 1} />
+                <Post post={reply} threadId={threadId} depth={depth + 1} threadDeleted={threadDeleted} />
               </li>
             )
           })}

@@ -140,7 +140,13 @@ function Thread() {
           <p className="text-ink-dim text-sm py-4">No posts yet. Be the first to reply.</p>
         )}
         {topLevelPosts.map((post) => (
-          <Post key={post.id} post={post} threadId={resolvedId} depth={0} />
+          <Post
+            key={post.id}
+            post={post}
+            threadId={resolvedId}
+            depth={0}
+            threadDeleted={!!thread.deleted}
+          />
         ))}
       </div>
 

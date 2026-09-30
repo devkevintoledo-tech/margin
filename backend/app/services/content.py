@@ -8,7 +8,7 @@ so replies keep their place in the tree.
 
 from datetime import datetime, timezone
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Post, Thread, User
@@ -36,9 +36,21 @@ async def edit_post(db: AsyncSession, post: Post, user: User, content: str) -> P
         raise NotAuthor
     if post.deleted_at is not None:
         raise AlreadyDeleted
-    post.content = content
-    post.edited_at = _now()
-    await db.flush()
+    # Conditional, not an ORM flush of the loaded row: a delete that commits
+    # between our read and this write would otherwise get its erased text
+    # written back into the tombstone. Row locking makes a concurrent delete
+    # finish first; the WHERE then matches nothing.
+    edited = (
+        await db.execute(
+            update(Post)
+            .where(Post.id == post.id, Post.deleted_at.is_(None))
+            .values(content=content, edited_at=_now())
+            .returning(Post.id)
+            .execution_options(synchronize_session=False)
+        )
+    ).scalar_one_or_none()
+    if edited is None:
+        raise AlreadyDeleted
     await db.refresh(post)
     return post
 

@@ -137,6 +137,17 @@ describe('Thread deletion', () => {
     expect(screen.getByText('The Society, obviously.')).toBeInTheDocument()
   })
 
+  it('offers no reply on the surviving posts of a deleted thread', async () => {
+    useAuthStore.setState({ user: { id: 'u2', username: 'mustang' }, token: 't' })
+    client.get.mockResolvedValue({
+      data: { ...THREAD, deleted: true, title: '', author: null, user_id: null },
+    })
+    renderPage()
+
+    expect(await screen.findByText('The Society, obviously.')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'reply' })).not.toBeInTheDocument()
+  })
+
   it('does not count tombstones as posts', async () => {
     client.get.mockResolvedValue({
       data: {

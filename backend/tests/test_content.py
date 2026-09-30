@@ -336,3 +336,42 @@ async def test_voting_on_a_deleted_thread_is_409(client, auth_headers, other_hea
     await client.delete(f"/api/threads/{thread_id}", headers=auth_headers)
     resp = await client.put(f"/api/threads/{thread_id}/vote", json={"value": 1}, headers=other_headers)
     assert resp.status_code == 409
+
+
+# --- races -------------------------------------------------------------------
+
+
+async def test_an_edit_racing_a_delete_cannot_restore_the_text(client, auth_headers, thread_id, db_session):
+    from sqlalchemy import update
+    from sqlalchemy.ext.asyncio import create_async_engine
+    from sqlalchemy.pool import NullPool
+
+    from app.models import User
+    from app.services import content as content_service
+    from conftest import TEST_DB_URL
+
+    created = await _post(client, auth_headers, thread_id, "Soon erased.")
+    await db_session.commit()
+    # The PATCH has already loaded the post and seen it live...
+    stale = await db_session.get(Post, uuid.UUID(created["id"]))
+    author = await db_session.get(User, stale.user_id)
+
+    # ...when the DELETE, in its own transaction, tombstones it and commits.
+    engine = create_async_engine(TEST_DB_URL, poolclass=NullPool)
+    async with engine.begin() as conn:
+        await conn.execute(
+            update(Post).where(Post.id == stale.id)
+            .values(content="", deleted_at=datetime.now(timezone.utc))
+        )
+    await engine.dispose()
+
+    try:
+        await content_service.edit_post(db_session, stale, author, "Back from the dead.")
+    except content_service.AlreadyDeleted:
+        pass
+    await db_session.commit()
+
+    db_session.expire_all()
+    row = await db_session.get(Post, uuid.UUID(created["id"]))
+    assert row.deleted_at is not None
+    assert row.content == ""
