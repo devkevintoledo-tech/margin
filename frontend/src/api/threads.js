@@ -60,3 +60,37 @@ export function useVotePost() {
     },
   })
 }
+
+export function useEditPost() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, content }) =>
+      client.patch(`/posts/${id}`, { content }).then((r) => r.data),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['threads', String(data.thread_id)] })
+    },
+  })
+}
+
+export function useDeletePost() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id }) => client.delete(`/posts/${id}`),
+    onSuccess: (_, { threadId }) => {
+      queryClient.invalidateQueries({ queryKey: ['threads', String(threadId)] })
+    },
+  })
+}
+
+export function useDeleteThread() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id }) => client.delete(`/threads/${id}`),
+    // The thread leaves its room's listing, so that list must refetch too.
+    onSuccess: (_, { id, seriesSlug, genreSlug }) => {
+      queryClient.invalidateQueries({ queryKey: ['threads', String(id)] })
+      if (seriesSlug) queryClient.invalidateQueries({ queryKey: ['series', seriesSlug, 'threads'] })
+      if (genreSlug) queryClient.invalidateQueries({ queryKey: ['genres', genreSlug, 'threads'] })
+    },
+  })
+}

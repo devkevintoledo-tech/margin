@@ -1,6 +1,8 @@
 import { useState } from 'react'
-import { useVotePost } from '../api/threads'
+import { useDeletePost, useEditPost, useVotePost } from '../api/threads'
+import { errorMessage } from '../api/errors'
 import useAuthStore from '../store/auth'
+import ConfirmRemove from './ConfirmRemove'
 import PostComposer from './PostComposer'
 import VoteControl from './VoteControl'
 import DiagnosticFloat from './DiagnosticFloat'
@@ -37,13 +39,35 @@ function absoluteTime(dateStr) {
 }
 
 function Post({ post, threadId, depth = 0 }) {
-  const { id, content, score = 0, my_vote = 0, author, created_at, replies = [] } = post
+  const {
+    id, content, score = 0, my_vote = 0, author, created_at, edited_at, deleted = false,
+    replies = [],
+  } = post
   const [showReply, setShowReply] = useState(false)
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(content)
+  const [confirming, setConfirming] = useState(false)
   const user = useAuthStore((s) => s.user)
   const voteMutation = useVotePost()
+  const editMutation = useEditPost()
+  const deleteMutation = useDeletePost()
+  // Tombstones carry user_id null, so they never match.
+  const isOwner = !!user && !deleted && user.id === post.user_id
 
   const handleVote = (value) => {
-    if (user) voteMutation.mutate({ id, value, threadId })
+    if (user && !deleted) voteMutation.mutate({ id, value, threadId })
+  }
+
+  const startEdit = () => {
+    setDraft(content)
+    editMutation.reset()
+    setEditing(true)
+  }
+
+  const saveEdit = (e) => {
+    e.preventDefault()
+    if (!draft.trim()) return
+    editMutation.mutate({ id, content: draft.trim() }, { onSuccess: () => setEditing(false) })
   }
 
   return (
@@ -53,13 +77,17 @@ function Post({ post, threadId, depth = 0 }) {
           score={score}
           myVote={my_vote}
           onVote={handleVote}
-          disabled={!user}
+          disabled={!user || deleted}
           pending={voteMutation.isPending}
         />
 
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1.5 text-xs">
-            <span className="text-user font-medium">{author}</span>
+            {deleted ? (
+              <span className="text-ink-dim">[deleted]</span>
+            ) : (
+              <span className="text-user font-medium">{author}</span>
+            )}
             <span aria-hidden="true" className="text-ink-faint">·</span>
             <span className="text-ink-dim">
               <DiagnosticFloat
@@ -70,19 +98,100 @@ function Post({ post, threadId, depth = 0 }) {
                 {relativeTime(created_at)}
               </DiagnosticFloat>
             </span>
+            {edited_at && !deleted && (
+              <>
+                <span aria-hidden="true" className="text-ink-faint">·</span>
+                <span className="text-ink-dim">
+                  <DiagnosticFloat
+                    severity="hint"
+                    message={`edited ${absoluteTime(edited_at)}`}
+                    source={`post/${id}`}
+                  >
+                    edited
+                  </DiagnosticFloat>
+                </span>
+              </>
+            )}
           </div>
 
-          <p className="text-ink text-sm leading-relaxed whitespace-pre-wrap max-w-prose">
-            {content}
-          </p>
+          {deleted ? (
+            <p className="text-ink-dim text-sm">[deleted]</p>
+          ) : editing ? (
+            <form onSubmit={saveEdit} className="flex flex-col gap-2 max-w-prose">
+              <textarea
+                aria-label="Edit post"
+                className="input min-h-24"
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+              />
+              {editMutation.isError && (
+                <p className="alert-danger">{errorMessage(editMutation.error)}</p>
+              )}
+              <div className="flex gap-2">
+                <button
+                  type="submit"
+                  className="btn-primary"
+                  disabled={!draft.trim() || editMutation.isPending}
+                >
+                  save
+                </button>
+                <button type="button" className="btn-ghost" onClick={() => setEditing(false)}>
+                  cancel
+                </button>
+              </div>
+            </form>
+          ) : (
+            <p className="text-ink text-sm leading-relaxed whitespace-pre-wrap max-w-prose">
+              {content}
+            </p>
+          )}
 
-          {user && (
-            <button
-              onClick={() => setShowReply((v) => !v)}
-              className="mt-2 text-xs text-ink-dim hover:text-accent transition-colors duration-fast"
-            >
-              {showReply ? 'cancel' : 'reply'}
-            </button>
+          {!deleted && !editing && (
+            <div className="mt-2 flex items-center gap-3 text-xs">
+              {confirming ? (
+                <ConfirmRemove
+                  noun="post"
+                  pending={deleteMutation.isPending}
+                  onCancel={() => setConfirming(false)}
+                  onConfirm={() =>
+                    deleteMutation.mutate(
+                      { id, threadId },
+                      { onSuccess: () => setConfirming(false) },
+                    )
+                  }
+                />
+              ) : (
+                <>
+                  {user && (
+                    <button
+                      onClick={() => setShowReply((v) => !v)}
+                      className="text-ink-dim hover:text-accent transition-colors duration-fast"
+                    >
+                      {showReply ? 'cancel' : 'reply'}
+                    </button>
+                  )}
+                  {isOwner && (
+                    <>
+                      <button
+                        onClick={startEdit}
+                        className="text-ink-dim hover:text-accent transition-colors duration-fast"
+                      >
+                        edit
+                      </button>
+                      <button
+                        onClick={() => setConfirming(true)}
+                        className="text-ink-dim hover:text-accent transition-colors duration-fast"
+                      >
+                        delete
+                      </button>
+                    </>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+          {deleteMutation.isError && (
+            <p className="alert-danger mt-2">{errorMessage(deleteMutation.error)}</p>
           )}
 
           {showReply && (
