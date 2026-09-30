@@ -76,7 +76,7 @@
 **Interfaces:**
 - Produces: `Post.edited_at: Mapped[datetime | None]`, `Post.deleted_at: Mapped[datetime | None]`, `Thread.deleted_at: Mapped[datetime | None]`. Alembic revision `a4b6c8d0e2f1`, down_revision `d8e3f5a7b9c2` (the current head).
 
-- [ ] **Step 1: Move the scratch-database helpers into a shared module**
+- [x] **Step 1: Move the scratch-database helpers into a shared module**
 
 Create `backend/tests/migration_db.py` containing, verbatim, the `_plain`, `scratch_db` fixture and `alembic` helper currently at the top of `backend/tests/test_genre_migrations.py` (lines 1–43), with `_plain` renamed `plain_url`:
 
@@ -138,12 +138,12 @@ from migration_db import alembic, plain_url as _plain, scratch_db  # noqa: F401 
 
 (keep any other imports the remaining tests use).
 
-- [ ] **Step 2: Confirm the move broke nothing**
+- [x] **Step 2: Confirm the move broke nothing**
 
 Run: `DATABASE_URL=postgresql+asyncpg://margin:margin@localhost:5432/margin_test pytest tests/test_genre_migrations.py -v`
 Expected: PASS (same count as before).
 
-- [ ] **Step 3: Write the failing migration test**
+- [x] **Step 3: Write the failing migration test**
 
 Create `backend/tests/test_content_migration.py`:
 
@@ -178,12 +178,12 @@ async def test_content_columns_upgrade_and_downgrade(scratch_db):
         await conn.close()
 ```
 
-- [ ] **Step 4: Run it to verify it fails**
+- [x] **Step 4: Run it to verify it fails**
 
 Run: `DATABASE_URL=postgresql+asyncpg://margin:margin@localhost:5432/margin_test pytest tests/test_content_migration.py -v`
 Expected: FAIL — `rows == []` does not equal the three expected columns.
 
-- [ ] **Step 5: Add the model columns**
+- [x] **Step 5: Add the model columns**
 
 In `backend/app/models/post.py`, after `updated_at`:
 
@@ -203,7 +203,7 @@ In `backend/app/models/thread.py`, after `created_at`:
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 ```
 
-- [ ] **Step 6: Write the migration**
+- [x] **Step 6: Write the migration**
 
 Create `backend/alembic/versions/a4b6c8d0e2f1_content_edit_delete.py`:
 
@@ -236,12 +236,12 @@ def downgrade() -> None:
     op.drop_column("posts", "edited_at")
 ```
 
-- [ ] **Step 7: Run the migration test and the full suite**
+- [x] **Step 7: Run the migration test and the full suite**
 
 Run: `DATABASE_URL=postgresql+asyncpg://margin:margin@localhost:5432/margin_test pytest -q`
 Expected: all PASS, including `test_content_columns_upgrade_and_downgrade`.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add backend/app/models/post.py backend/app/models/thread.py \
@@ -269,7 +269,7 @@ git commit -m "feat(content): edited_at and deleted_at columns for posts and thr
   - `threads_service.thread_out(thread, *, author, my_vote=0, score=None) -> ThreadOut` masks a deleted thread the same way (title `""`).
   - `get_thread` builds `ThreadWithPosts` from `thread_out(...)`; a deleted post with no live replies is omitted.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `backend/tests/test_content.py`:
 
@@ -415,12 +415,12 @@ async def test_a_live_post_carries_its_author_and_no_edit(client, auth_headers, 
     assert post["user_id"] is not None
 ```
 
-- [ ] **Step 2: Run to verify they fail**
+- [x] **Step 2: Run to verify they fail**
 
 Run: `DATABASE_URL=postgresql+asyncpg://margin:margin@localhost:5432/margin_test pytest tests/test_content.py -v`
 Expected: FAIL — `KeyError: 'deleted'` / listing still returns the deleted thread.
 
-- [ ] **Step 3: Update the schemas and `post_out_from_orm`**
+- [x] **Step 3: Update the schemas and `post_out_from_orm`**
 
 In `backend/app/schemas/thread.py`:
 
@@ -464,7 +464,7 @@ Replace `post_out_from_orm`'s body:
 
 Add to its docstring: "A deleted post is masked here, so every route serializes tombstones the same way."
 
-- [ ] **Step 4: Mask in `thread_out` and filter the listing**
+- [x] **Step 4: Mask in `thread_out` and filter the listing**
 
 In `backend/app/services/threads.py`, `thread_out`:
 
@@ -501,7 +501,7 @@ In `thread_summaries`, change the post join and the where clause:
         .where(Thread.deleted_at.is_(None), *conditions)
 ```
 
-- [ ] **Step 5: Build `get_thread` from the maskers and prune the tree**
+- [x] **Step 5: Build `get_thread` from the maskers and prune the tree**
 
 In `backend/app/api/threads.py`, `get_thread`: replace the tree assembly and the `return ThreadWithPosts(...)` (from `nodes = {` to the end of the function) with:
 
@@ -542,12 +542,12 @@ In `backend/app/api/threads.py`, `get_thread`: replace the tree assembly and the
     )
 ```
 
-- [ ] **Step 6: Run the new tests and the whole suite**
+- [x] **Step 6: Run the new tests and the whole suite**
 
 Run: `DATABASE_URL=postgresql+asyncpg://margin:margin@localhost:5432/margin_test pytest -q`
 Expected: all PASS (including existing `test_threads.py`, `test_posts.py`, `test_votes.py`, `test_openapi.py`).
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add backend/app/schemas/thread.py backend/app/services/threads.py backend/app/api/threads.py backend/tests/test_content.py
@@ -575,7 +575,7 @@ git commit -m "feat(content): tombstones mask author and text; listings skip del
   - `PostUpdate` schema: `content: str`, stripped, min length 1.
   - Routes `PATCH /api/posts/{id}` → `PostOut`; `DELETE /api/posts/{id}` → 204; `DELETE /api/threads/{id}` → 204.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Append to `backend/tests/test_content.py`:
 
@@ -736,12 +736,12 @@ async def test_delete_missing_thread_is_404(client, auth_headers):
     assert (await client.delete(f"/api/threads/{uuid.uuid4()}", headers=auth_headers)).status_code == 404
 ```
 
-- [ ] **Step 2: Run to verify they fail**
+- [x] **Step 2: Run to verify they fail**
 
 Run: `DATABASE_URL=postgresql+asyncpg://margin:margin@localhost:5432/margin_test pytest tests/test_content.py -v`
 Expected: the new tests FAIL — 405 for `DELETE /api/threads/{id}` (its path already has a GET), 404 for `PATCH`/`DELETE /api/posts/{id}` (no route at that path yet). Three pass already and are kept as guards: `test_voting_does_not_mark_a_post_edited` (Task 2 exposed `edited_at`), and `test_edit_missing_post_is_404` / `test_delete_missing_post_is_404` (404 either way until the routes exist).
 
-- [ ] **Step 3: Write the service**
+- [x] **Step 3: Write the service**
 
 Create `backend/app/services/content.py`:
 
@@ -824,7 +824,7 @@ async def delete_thread(db: AsyncSession, thread: Thread, user: User) -> None:
     await db.flush()
 ```
 
-- [ ] **Step 4: Add `PostUpdate`**
+- [x] **Step 4: Add `PostUpdate`**
 
 In `backend/app/schemas/thread.py`, after `PostCreate` (add `Annotated` from `typing` and `StringConstraints` from `pydantic` to the imports):
 
@@ -838,7 +838,7 @@ class PostUpdate(BaseModel):
     content: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
 ```
 
-- [ ] **Step 5: Add the post routes**
+- [x] **Step 5: Add the post routes**
 
 In `backend/app/api/posts.py`, extend the imports:
 
@@ -896,7 +896,7 @@ async def delete_post(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 ```
 
-- [ ] **Step 6: Add the thread route**
+- [x] **Step 6: Add the thread route**
 
 In `backend/app/api/threads.py`, add `Response` to the `fastapi` import and `from app.services import content as content_service`, then append:
 
@@ -917,12 +917,12 @@ async def delete_thread(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 ```
 
-- [ ] **Step 7: Run the whole suite**
+- [x] **Step 7: Run the whole suite**
 
 Run: `DATABASE_URL=postgresql+asyncpg://margin:margin@localhost:5432/margin_test pytest -q`
 Expected: all PASS, including `test_openapi.py` (it requires `PostUpdate` to carry an example).
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add backend/app/services/content.py backend/app/schemas/thread.py backend/app/api/posts.py backend/app/api/threads.py backend/tests/test_content.py
@@ -942,7 +942,7 @@ git commit -m "feat(content): authors edit posts and delete posts and threads"
 - Consumes: Task 3 routes (tests delete through the API).
 - Produces: 409s for replying to a deleted post, posting in a deleted thread and voting on either; 404 for posting in a missing thread.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Append to `backend/tests/test_content.py`:
 
@@ -989,12 +989,12 @@ async def test_voting_on_a_deleted_thread_is_409(client, auth_headers, other_hea
     assert resp.status_code == 409
 ```
 
-- [ ] **Step 2: Run to verify they fail**
+- [x] **Step 2: Run to verify they fail**
 
 Run: `DATABASE_URL=postgresql+asyncpg://margin:margin@localhost:5432/margin_test pytest tests/test_content.py -k "409 or 404" -v`
 Expected: the five new tests FAIL (201/200 returned; the missing-thread post errors with an IntegrityError/500).
 
-- [ ] **Step 3: Guard `create_post`**
+- [x] **Step 3: Guard `create_post`**
 
 In `backend/app/api/posts.py`, add `from app.models.thread import Thread` and put this at the top of `create_post`, before the parent check:
 
@@ -1019,7 +1019,7 @@ and inside the existing parent block, after the `parent is None` check:
             )
 ```
 
-- [ ] **Step 4: Guard the votes**
+- [x] **Step 4: Guard the votes**
 
 In `vote_post` (`backend/app/api/posts.py`), replace the lookup with the Task 3 loader and add the guard:
 
@@ -1036,12 +1036,12 @@ In `vote_thread` (`backend/app/api/threads.py`), after the `thread is None` chec
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Deleted threads can't be voted on.")
 ```
 
-- [ ] **Step 5: Run the whole suite**
+- [x] **Step 5: Run the whole suite**
 
 Run: `DATABASE_URL=postgresql+asyncpg://margin:margin@localhost:5432/margin_test pytest -q`
 Expected: all PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add backend/app/api/posts.py backend/app/api/threads.py backend/tests/test_content.py
@@ -1066,7 +1066,7 @@ git commit -m "feat(content): refuse replies and votes on deleted content"
   - `useDeleteThread()` — `mutate({ id, seriesSlug, genreSlug })`, invalidates `['threads', String(id)]` and the room listing.
   - `<ConfirmRemove noun onConfirm onCancel pending />` — renders `rm {noun}? [y] [n]`; buttons named `yes, delete {noun}` and `no, keep it`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 In `frontend/src/components/Post.test.jsx`, mock the client at the top (after the vitest import) and import it, plus `userEvent`:
 
@@ -1209,12 +1209,12 @@ describe('Post ownership', () => {
 
 (`VoteControl`'s buttons are labelled `Upvote` and `Downvote`, which the `/vote/i` regex matches.)
 
-- [ ] **Step 2: Run to verify they fail**
+- [x] **Step 2: Run to verify they fail**
 
 Run (from `frontend/`): `npx vitest run src/components/Post.test.jsx`
 Expected: the new `Post ownership` tests FAIL (no `edit` button, no `[deleted]`); the existing tests PASS.
 
-- [ ] **Step 3: Add the hooks**
+- [x] **Step 3: Add the hooks**
 
 Append to `frontend/src/api/threads.js`:
 
@@ -1254,7 +1254,7 @@ export function useDeleteThread() {
 }
 ```
 
-- [ ] **Step 4: Create `ConfirmRemove`**
+- [x] **Step 4: Create `ConfirmRemove`**
 
 Create `frontend/src/components/ConfirmRemove.jsx`:
 
@@ -1307,7 +1307,7 @@ function ConfirmRemove({ noun, onConfirm, onCancel, pending = false }) {
 export default ConfirmRemove
 ```
 
-- [ ] **Step 5: Update `Post.jsx`**
+- [x] **Step 5: Update `Post.jsx`**
 
 Imports:
 
@@ -1484,12 +1484,12 @@ Keep the `showReply && <PostComposer …/>` block, and the replies list, unchang
 
 Note: the reply button in the existing test uses name `reply`; the edit form's `cancel` and the reply toggle's `cancel` never render together (the action row is hidden while editing), so `getByRole('button', { name: 'cancel' })` stays unambiguous.
 
-- [ ] **Step 6: Run the frontend suite**
+- [x] **Step 6: Run the frontend suite**
 
 Run (from `frontend/`): `npm test`
 Expected: all PASS.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add frontend/src/api/threads.js frontend/src/components/ConfirmRemove.jsx frontend/src/components/Post.jsx frontend/src/components/Post.test.jsx
@@ -1508,7 +1508,7 @@ git commit -m "feat(web): authors edit and delete their posts; tombstones keep r
 - Consumes: `useDeleteThread()` and `<ConfirmRemove>` from Task 5; `ThreadOut.deleted`, `.user_id`.
 - Produces: owner-only `delete thread` control; `[deleted]` thread rendering.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 In `frontend/src/pages/Thread.test.jsx`, extend the client mock to `{ get, put, post, patch: vi.fn(), delete: vi.fn() }`, add `user_id: 'u1'` and `deleted: false` to `THREAD`, import `userEvent`, and add a room route to `renderPage`'s `<Routes>`:
 
@@ -1573,12 +1573,12 @@ describe('Thread deletion', () => {
 })
 ```
 
-- [ ] **Step 2: Run to verify they fail**
+- [x] **Step 2: Run to verify they fail**
 
 Run (from `frontend/`): `npx vitest run src/pages/Thread.test.jsx`
 Expected: the four new tests FAIL.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 In `frontend/src/pages/Thread.jsx`:
 
@@ -1691,12 +1691,12 @@ Replace the bottom composer block with:
 
 The author span is already guarded by `thread.author &&`, and a tombstone's author is null.
 
-- [ ] **Step 4: Run the frontend suite**
+- [x] **Step 4: Run the frontend suite**
 
 Run (from `frontend/`): `npm test`
 Expected: all PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add frontend/src/pages/Thread.jsx frontend/src/pages/Thread.test.jsx
@@ -1714,7 +1714,7 @@ git commit -m "feat(web): authors delete their threads; deleted threads stay rea
 **Interfaces:**
 - Consumes: everything above, running in the full stack.
 
-- [ ] **Step 1: Write the e2e spec**
+- [x] **Step 1: Write the e2e spec**
 
 Create `frontend/e2e/edit-delete.spec.js`:
 
@@ -1769,12 +1769,12 @@ test.describe('editing and deleting', () => {
 })
 ```
 
-- [ ] **Step 2: Run it against the full stack**
+- [x] **Step 2: Run it against the full stack**
 
 Run: `docker compose up --build -d` (repo root; it runs `alembic upgrade head`), then from `frontend/`: `npx playwright test e2e/edit-delete.spec.js`
 Expected: PASS. If `Post` is ambiguous because the reply composer's button renders before the main composer's, scope with `page.locator('form').filter({ has: page.getByPlaceholder('Write a reply...') }).getByRole('button', { name: 'Post' })` instead of `.first()`.
 
-- [ ] **Step 3: Update the docs**
+- [x] **Step 3: Update the docs**
 
 `ROADMAP.md` line 44 becomes:
 
@@ -1790,12 +1790,12 @@ In `CLAUDE.md`, replace the Known-gaps bullet `- Content is immutable (no edit/d
 
 In the spec, change `**Status:** approved design, not yet planned` to `**Status:** implemented (plan: docs/superpowers/plans/2026-09-30-edit-delete-content.md)`.
 
-- [ ] **Step 4: Run every suite one last time**
+- [x] **Step 4: Run every suite one last time**
 
 Run: from `backend/`, `DATABASE_URL=postgresql+asyncpg://margin:margin@localhost:5432/margin_test pytest -q`; from `frontend/`, `npm test`.
 Expected: all PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add frontend/e2e/edit-delete.spec.js ROADMAP.md CLAUDE.md docs/superpowers/specs/2026-09-30-edit-delete-content-design.md
