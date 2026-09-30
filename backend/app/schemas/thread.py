@@ -67,7 +67,7 @@ class ThreadOut(BaseModel):
 
     id: UUID
     title: str
-    user_id: UUID
+    user_id: UUID | None
     series_id: UUID | None = None
     work_id: UUID | None
     genre_id: UUID | None
@@ -78,6 +78,9 @@ class ThreadOut(BaseModel):
     # the `Thread.user` relationship, and defaulted, so `model_validate` on an
     # ORM object never triggers a lazy load (MissingGreenlet).
     author: str | None = None
+    # A deleted thread keeps its URL and its replies, but not its words or its
+    # author: title is "" and user_id/author are null.
+    deleted: bool = False
 
 
 class ThreadSummary(BaseModel):
@@ -120,15 +123,19 @@ class PostOut(BaseModel):
 
     id: UUID
     thread_id: UUID
-    user_id: UUID
+    user_id: UUID | None
     parent_id: UUID | None
     content: str
     score: int
     my_vote: int = 0
     created_at: datetime
     updated_at: datetime
+    # When the author last changed the content. Not `updated_at`, which votes bump.
+    edited_at: datetime | None = None
     # See ThreadOut.author — same reasoning, resolved by the route.
     author: str | None = None
+    # A tombstone: content "", user_id/author null, replies and score kept.
+    deleted: bool = False
     replies: list["PostOut"] = []
 
 
@@ -141,18 +148,22 @@ def post_out_from_orm(post, my_vote: int = 0, author: str | None = None) -> "Pos
     Avoids `PostOut.model_validate(post)`, which would read the lazy
     `replies` relationship and trigger async IO outside the greenlet
     (MissingGreenlet). Callers assemble the reply tree themselves, and resolve
-    `author` themselves for the same reason.
+    `author` themselves for the same reason. A deleted post is masked here, so
+    every route serializes tombstones the same way.
     """
+    deleted = post.deleted_at is not None
     return PostOut(
         id=post.id,
         thread_id=post.thread_id,
-        user_id=post.user_id,
+        user_id=None if deleted else post.user_id,
         parent_id=post.parent_id,
-        content=post.content,
+        content="" if deleted else post.content,
         score=post.score,
         my_vote=my_vote,
         created_at=post.created_at,
         updated_at=post.updated_at,
-        author=author,
+        edited_at=post.edited_at,
+        author=None if deleted else author,
+        deleted=deleted,
         replies=[],
     )

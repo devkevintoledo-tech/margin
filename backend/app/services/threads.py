@@ -45,8 +45,10 @@ async def thread_summaries(
         )
         .join(User, Thread.user_id == User.id)
         .outerjoin(Genre, Thread.genre_id == Genre.id)
-        .outerjoin(Post, Post.thread_id == Thread.id)
-        .where(*conditions)
+        # Only live posts count; a tombstone is not a contribution.
+        .outerjoin(Post, (Post.thread_id == Thread.id) & Post.deleted_at.is_(None))
+        # A deleted thread keeps its URL but leaves every room listing.
+        .where(Thread.deleted_at.is_(None), *conditions)
         .group_by(Thread.id, User.username, Genre.slug)
         .order_by(Thread.score.desc())
         .limit(limit)
@@ -82,16 +84,21 @@ async def create_thread(
 def thread_out(
     thread: Thread, *, author: str | None, my_vote: int = 0, score: int | None = None
 ) -> ThreadOut:
-    """Build from scalar columns — model_validate would lazy-load relationships."""
+    """Build from scalar columns — model_validate would lazy-load relationships.
+
+    A deleted thread is masked here, so every route serializes it the same way.
+    """
+    deleted = thread.deleted_at is not None
     return ThreadOut(
         id=thread.id,
-        title=thread.title,
-        user_id=thread.user_id,
+        title="" if deleted else thread.title,
+        user_id=None if deleted else thread.user_id,
         series_id=thread.series_id,
         work_id=thread.work_id,
         genre_id=thread.genre_id,
         score=thread.score if score is None else score,
         my_vote=my_vote,
         created_at=thread.created_at,
-        author=author,
+        author=None if deleted else author,
+        deleted=deleted,
     )

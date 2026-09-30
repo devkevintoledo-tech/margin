@@ -184,17 +184,18 @@ async def get_thread(
         else:
             roots.append(node)
 
+    # A tombstone is only worth showing while it holds live replies up. Replies
+    # cannot nest further (2 levels), so pruning each root's replies first is
+    # enough.
+    for root in roots:
+        root.replies = [r for r in root.replies if not r.deleted]
+    roots = [r for r in roots if not r.deleted or r.replies]
+
+    base = threads_service.thread_out(
+        thread, author=usernames.get(thread.user_id), my_vote=my_vote
+    )
     return ThreadWithPosts(
-        id=thread.id,
-        title=thread.title,
-        user_id=thread.user_id,
-        series_id=thread.series_id,
-        work_id=thread.work_id,
-        genre_id=thread.genre_id,
-        score=thread.score,
-        my_vote=my_vote,
-        created_at=thread.created_at,
-        author=usernames.get(thread.user_id),
+        **base.model_dump(),
         posts=roots,
         work=work_ref,
         genre=genre_ref,
