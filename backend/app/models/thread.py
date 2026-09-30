@@ -48,6 +48,8 @@ class Thread(Base):
         server_default=text("now()"),
         nullable=False,
     )
+    # A deleted thread is a tombstone: title erased, other readers' posts kept.
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # Relationships
     user: Mapped["User"] = relationship("User", back_populates="threads")  # noqa: F821
