@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Annotated
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
 
 class ThreadCreate(BaseModel):
@@ -116,6 +117,15 @@ class PostCreate(BaseModel):
     thread_id: UUID
     content: str
     parent_id: UUID | None = None
+
+
+class PostUpdate(BaseModel):
+    model_config = ConfigDict(
+        json_schema_extra={"examples": [{"content": "The narrator is lying to himself, and to us."}]}
+    )
+
+    # Stripped before the length check, so whitespace-only content is a 422.
+    content: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
 
 
 class PostOut(BaseModel):

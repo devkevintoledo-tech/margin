@@ -137,3 +137,160 @@ async def test_a_live_post_carries_its_author_and_no_edit(client, auth_headers, 
     assert post["deleted"] is False
     assert post["edited_at"] is None
     assert post["user_id"] is not None
+
+
+# --- edit --------------------------------------------------------------------
+
+
+async def test_author_edits_a_post(client, auth_headers, thread_id):
+    post = await _post(client, auth_headers, thread_id, "Typo'd.")
+    resp = await client.patch(
+        f"/api/posts/{post['id']}", json={"content": "  Fixed.  "}, headers=auth_headers
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["content"] == "Fixed."
+    assert body["edited_at"] is not None
+    assert body["author"]
+
+
+async def test_non_author_cannot_edit(client, auth_headers, other_headers, thread_id):
+    post = await _post(client, auth_headers, thread_id, "Mine.")
+    resp = await client.patch(
+        f"/api/posts/{post['id']}", json={"content": "Yours now."}, headers=other_headers
+    )
+    assert resp.status_code == 403
+
+
+async def test_anonymous_cannot_edit(client, auth_headers, thread_id):
+    post = await _post(client, auth_headers, thread_id, "Mine.")
+    resp = await client.patch(f"/api/posts/{post['id']}", json={"content": "x"})
+    # HTTPBearer answers a missing header 403 on the pinned FastAPI, 401 on newer.
+    assert resp.status_code in (401, 403)
+
+
+async def test_edit_missing_post_is_404(client, auth_headers):
+    resp = await client.patch(
+        f"/api/posts/{uuid.uuid4()}", json={"content": "x"}, headers=auth_headers
+    )
+    assert resp.status_code == 404
+
+
+async def test_edit_to_whitespace_is_422(client, auth_headers, thread_id):
+    post = await _post(client, auth_headers, thread_id, "Mine.")
+    resp = await client.patch(
+        f"/api/posts/{post['id']}", json={"content": "   "}, headers=auth_headers
+    )
+    assert resp.status_code == 422
+
+
+async def test_editing_a_deleted_post_is_409(client, auth_headers, thread_id):
+    post = await _post(client, auth_headers, thread_id, "Mine.")
+    assert (await client.delete(f"/api/posts/{post['id']}", headers=auth_headers)).status_code == 204
+    resp = await client.patch(
+        f"/api/posts/{post['id']}", json={"content": "Back."}, headers=auth_headers
+    )
+    assert resp.status_code == 409
+
+
+async def test_voting_does_not_mark_a_post_edited(client, auth_headers, other_headers, thread_id):
+    post = await _post(client, auth_headers, thread_id, "Upvote me.")
+    resp = await client.put(f"/api/posts/{post['id']}/vote", json={"value": 1}, headers=other_headers)
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["edited_at"] is None
+
+
+# --- delete post ----------------------------------------------------------------
+
+
+async def test_author_deletes_a_post_and_its_text_is_erased(
+    client, auth_headers, other_headers, thread_id, db_session
+):
+    post = await _post(client, auth_headers, thread_id, "Regrettable.")
+    await _post(client, other_headers, thread_id, "A reply.", parent_id=post["id"])
+
+    resp = await client.delete(f"/api/posts/{post['id']}", headers=auth_headers)
+    assert resp.status_code == 204
+
+    row = await db_session.get(Post, uuid.UUID(post["id"]))
+    await db_session.refresh(row)
+    assert row.content == ""
+    assert row.deleted_at is not None
+    assert row.user_id is not None  # kept for moderation
+
+
+async def test_deleting_a_post_twice_is_204(client, auth_headers, thread_id):
+    post = await _post(client, auth_headers, thread_id, "Once.")
+    assert (await client.delete(f"/api/posts/{post['id']}", headers=auth_headers)).status_code == 204
+    assert (await client.delete(f"/api/posts/{post['id']}", headers=auth_headers)).status_code == 204
+
+
+async def test_non_author_cannot_delete_a_post(client, auth_headers, other_headers, thread_id):
+    post = await _post(client, auth_headers, thread_id, "Mine.")
+    assert (await client.delete(f"/api/posts/{post['id']}", headers=other_headers)).status_code == 403
+
+
+async def test_non_author_delete_of_deleted_post_is_403(
+    client, auth_headers, other_headers, thread_id
+):
+    post = await _post(client, auth_headers, thread_id, "Mine.")
+    await client.delete(f"/api/posts/{post['id']}", headers=auth_headers)
+    assert (await client.delete(f"/api/posts/{post['id']}", headers=other_headers)).status_code == 403
+
+
+async def test_anonymous_cannot_delete_a_post(client, auth_headers, thread_id):
+    post = await _post(client, auth_headers, thread_id, "Mine.")
+    assert (await client.delete(f"/api/posts/{post['id']}")).status_code in (401, 403)
+
+
+async def test_delete_missing_post_is_404(client, auth_headers):
+    assert (await client.delete(f"/api/posts/{uuid.uuid4()}", headers=auth_headers)).status_code == 404
+
+
+# --- delete thread --------------------------------------------------------------
+
+
+async def test_author_deletes_a_thread_and_its_opening_post(
+    client, auth_headers, other_headers, thread_id
+):
+    await _post(client, other_headers, thread_id, "Someone else's take.")
+
+    resp = await client.delete(f"/api/threads/{thread_id}", headers=auth_headers)
+    assert resp.status_code == 204
+
+    body = (await client.get(f"/api/threads/{thread_id}")).json()
+    assert body["deleted"] is True
+    contents = [p["content"] for p in body["posts"]]
+    # The author's opener had no replies, so its tombstone is omitted;
+    # the other reader's post survives untouched.
+    assert contents == ["Someone else's take."]
+
+
+async def test_thread_delete_leaves_an_opener_someone_else_wrote(
+    client, auth_headers, other_headers, work
+):
+    bare = (await client.post(
+        "/api/threads/", json={"title": "No body", "work_id": str(work.id)}, headers=auth_headers
+    )).json()
+    await _post(client, other_headers, bare["id"], "First word is mine.")
+
+    assert (await client.delete(f"/api/threads/{bare['id']}", headers=auth_headers)).status_code == 204
+    body = (await client.get(f"/api/threads/{bare['id']}")).json()
+    assert [p["content"] for p in body["posts"]] == ["First word is mine."]
+
+
+async def test_deleting_a_thread_twice_is_204(client, auth_headers, thread_id):
+    assert (await client.delete(f"/api/threads/{thread_id}", headers=auth_headers)).status_code == 204
+    assert (await client.delete(f"/api/threads/{thread_id}", headers=auth_headers)).status_code == 204
+
+
+async def test_non_author_cannot_delete_a_thread(client, other_headers, thread_id):
+    assert (await client.delete(f"/api/threads/{thread_id}", headers=other_headers)).status_code == 403
+
+
+async def test_anonymous_cannot_delete_a_thread(client, thread_id):
+    assert (await client.delete(f"/api/threads/{thread_id}")).status_code in (401, 403)
+
+
+async def test_delete_missing_thread_is_404(client, auth_headers):
+    assert (await client.delete(f"/api/threads/{uuid.uuid4()}", headers=auth_headers)).status_code == 404

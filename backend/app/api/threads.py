@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -13,6 +13,7 @@ from app.models.user import User
 from app.models.vote import Vote
 from app.models.work import Work
 from app.schemas.series import SeriesRef
+from app.services import content as content_service
 from app.services import threads as threads_service
 from app.services.works import canonical_work
 from app.schemas.thread import (
@@ -228,3 +229,19 @@ async def vote_thread(
         my_vote=payload.value,
         score=score,
     )
+
+
+@router.delete("/{id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_thread(
+    id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Response:
+    thread = (await db.execute(select(Thread).where(Thread.id == id))).scalar_one_or_none()
+    if thread is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Thread not found")
+    try:
+        await content_service.delete_thread(db, thread, current_user)
+    except content_service.NotAuthor:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You can only delete your own threads.")
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
