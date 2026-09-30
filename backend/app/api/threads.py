@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -13,6 +13,7 @@ from app.models.user import User
 from app.models.vote import Vote
 from app.models.work import Work
 from app.schemas.series import SeriesRef
+from app.services import content as content_service
 from app.services import threads as threads_service
 from app.services.works import canonical_work
 from app.schemas.thread import (
@@ -184,17 +185,18 @@ async def get_thread(
         else:
             roots.append(node)
 
+    # A tombstone is only worth showing while it holds live replies up. Replies
+    # cannot nest further (2 levels), so pruning each root's replies first is
+    # enough.
+    for root in roots:
+        root.replies = [r for r in root.replies if not r.deleted]
+    roots = [r for r in roots if not r.deleted or r.replies]
+
+    base = threads_service.thread_out(
+        thread, author=usernames.get(thread.user_id), my_vote=my_vote
+    )
     return ThreadWithPosts(
-        id=thread.id,
-        title=thread.title,
-        user_id=thread.user_id,
-        series_id=thread.series_id,
-        work_id=thread.work_id,
-        genre_id=thread.genre_id,
-        score=thread.score,
-        my_vote=my_vote,
-        created_at=thread.created_at,
-        author=usernames.get(thread.user_id),
+        **base.model_dump(),
         posts=roots,
         work=work_ref,
         genre=genre_ref,
@@ -214,6 +216,8 @@ async def vote_thread(
     ).scalar_one_or_none()
     if thread is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Thread not found")
+    if thread.deleted_at is not None:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Deleted threads can't be voted on.")
 
     score = await set_vote(
         db, user_id=current_user.id, thread_id=id, value=payload.value
@@ -227,3 +231,19 @@ async def vote_thread(
         my_vote=payload.value,
         score=score,
     )
+
+
+@router.delete("/{id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_thread(
+    id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Response:
+    thread = (await db.execute(select(Thread).where(Thread.id == id))).scalar_one_or_none()
+    if thread is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Thread not found")
+    try:
+        await content_service.delete_thread(db, thread, current_user)
+    except content_service.NotAuthor:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You can only delete your own threads.")
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

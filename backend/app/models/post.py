@@ -39,6 +39,12 @@ class Post(Base):
         onupdate=datetime.utcnow,
         nullable=False,
     )
+    # Its own column, not `updated_at`: votes change `score` with a Core
+    # update, which fires `updated_at`'s onupdate — every voted post would
+    # look edited.
+    edited_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # A deleted post is a tombstone: content erased, row and replies kept.
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # Relationships
     thread: Mapped["Thread"] = relationship("Thread", back_populates="posts")  # noqa: F821
