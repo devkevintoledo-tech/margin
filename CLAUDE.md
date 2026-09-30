@@ -340,7 +340,7 @@ settings, HTTP and ORM imports (`tests/test_pure_imports.py` enforces it).
   split cannot be undone, and there is no role system beyond the flag. Genre
   vetoes are runtime-only (the pipeline has no genre overrides). The genre
   taxonomy has no in-app editor: the YAML file is the editor.
-- Content is immutable (no edit/delete for threads or posts). See `ROADMAP.md` for the tracked list.
+- Only authors can edit or delete content (`services/content.py`); there is no moderator removal yet (Phase 5). A deletion is a tombstone: `deleted_at` set, text erased, `user_id` kept in the row but masked in the API by `post_out_from_orm` / `threads.thread_out` — build every thread/post response through those. The edited marker reads `posts.edited_at`, never `updated_at`, which votes bump. Thread titles cannot be edited. See `ROADMAP.md` for the tracked list.
 
 ## Environment
 

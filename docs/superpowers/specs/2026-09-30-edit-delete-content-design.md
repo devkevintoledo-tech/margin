@@ -1,6 +1,6 @@
 # Edit and delete threads & posts — design
 
-**Status:** approved design, not yet planned
+**Status:** implemented (plan: docs/superpowers/plans/2026-09-30-edit-delete-content.md)
 **Date:** 2026-09-30
 **Follows:** `ROADMAP.md` Phase 1 ("Edit/delete threads & posts — no endpoints
 today; content is immutable").
