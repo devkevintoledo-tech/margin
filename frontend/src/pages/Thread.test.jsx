@@ -1,9 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
-vi.mock('../api/client', () => ({ default: { get: vi.fn(), put: vi.fn(), post: vi.fn() } }))
+vi.mock('../api/client', () => ({
+  default: { get: vi.fn(), put: vi.fn(), post: vi.fn(), patch: vi.fn(), delete: vi.fn() },
+}))
 
 import client from '../api/client'
 import useAuthStore from '../store/auth'
@@ -19,6 +22,8 @@ const THREAD = {
   id: 't1',
   title: 'Who is the real villain?',
   author: 'darrow',
+  user_id: 'u1',
+  deleted: false,
   score: 4,
   series: { slug: 'red-rising', name: 'Red Rising' },
   genre: null,
@@ -37,6 +42,7 @@ function renderPage(path = '/series/red-rising/threads/t1') {
         <Routes>
           <Route path="/series/:slug/threads/:threadId" element={<Thread />} />
           <Route path="/genres/:slug/threads/:threadId" element={<Thread />} />
+          <Route path="/series/:slug" element={<p>room page</p>} />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>,
@@ -87,5 +93,58 @@ describe('Thread', () => {
     renderPage()
 
     expect(await screen.findByText('Failed to load thread.')).toBeInTheDocument()
+  })
+})
+
+describe('Thread deletion', () => {
+  it('lets the author delete the thread and returns to its room', async () => {
+    useAuthStore.setState({ user: { id: 'u1', username: 'darrow' }, token: 't' })
+    client.get.mockResolvedValue({ data: THREAD })
+    client.delete.mockResolvedValue({})
+    renderPage()
+
+    await userEvent.click(await screen.findByRole('button', { name: 'delete thread' }))
+    expect(screen.getByRole('button', { name: 'no, keep it' })).toHaveFocus()
+    await userEvent.click(screen.getByRole('button', { name: 'yes, delete thread' }))
+
+    expect(client.delete).toHaveBeenCalledWith('/threads/t1')
+    expect(await screen.findByText('room page')).toBeInTheDocument()
+  })
+
+  it('offers no delete to other readers', async () => {
+    useAuthStore.setState({ user: { id: 'u2', username: 'mustang' }, token: 't' })
+    client.get.mockResolvedValue({ data: THREAD })
+    renderPage()
+    await screen.findByRole('heading', { name: 'Who is the real villain?' })
+    expect(screen.queryByRole('button', { name: 'delete thread' })).not.toBeInTheDocument()
+  })
+
+  it('renders a deleted thread without author, composer or delete', async () => {
+    useAuthStore.setState({ user: { id: 'u1', username: 'darrow' }, token: 't' })
+    client.get.mockResolvedValue({
+      data: { ...THREAD, deleted: true, title: '', author: null, user_id: null },
+    })
+    renderPage()
+
+    expect(await screen.findByRole('heading', { name: '[deleted]' })).toBeInTheDocument()
+    expect(screen.queryByText('darrow')).not.toBeInTheDocument()
+    expect(
+      screen.getByText('This thread was deleted and no longer accepts replies.'),
+    ).toBeInTheDocument()
+    expect(screen.queryByPlaceholderText('Join the discussion...')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'delete thread' })).not.toBeInTheDocument()
+    // The remaining discussion stays readable.
+    expect(screen.getByText('The Society, obviously.')).toBeInTheDocument()
+  })
+
+  it('does not count tombstones as posts', async () => {
+    client.get.mockResolvedValue({
+      data: {
+        ...THREAD,
+        posts: [{ ...THREAD.posts[0], deleted: true, content: '', author: null, user_id: null }],
+      },
+    })
+    renderPage()
+    expect(await screen.findByText('1 post')).toBeInTheDocument()
   })
 })

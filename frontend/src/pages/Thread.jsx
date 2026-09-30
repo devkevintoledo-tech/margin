@@ -1,5 +1,9 @@
-import { useParams } from 'react-router-dom'
-import { useThread } from '../api/threads'
+import { useState } from 'react'
+import { useNavigate, useParams } from 'react-router-dom'
+import { useDeleteThread, useThread } from '../api/threads'
+import { errorMessage } from '../api/errors'
+import useAuthStore from '../store/auth'
+import ConfirmRemove from '../components/ConfirmRemove'
 import Post from '../components/Post'
 import PostComposer from '../components/PostComposer'
 import PathHeader from '../components/PathHeader'
@@ -7,13 +11,17 @@ import { useStatusBar } from '../store/status'
 import { slug } from '../lib/slug'
 
 function countPosts(posts) {
-  return posts.reduce((n, p) => n + 1 + countPosts(p.replies || []), 0)
+  return posts.reduce((n, p) => n + (p.deleted ? 0 : 1) + countPosts(p.replies || []), 0)
 }
 
 function Thread() {
   const { id, threadId } = useParams()
   const resolvedId = threadId || id
   const { data: thread, isLoading, isError } = useThread(resolvedId)
+  const navigate = useNavigate()
+  const user = useAuthStore((s) => s.user)
+  const deleteThread = useDeleteThread()
+  const [confirming, setConfirming] = useState(false)
 
   const posts = thread?.posts || []
   const anchor = thread?.series?.name || thread?.genre?.name || ''
@@ -25,7 +33,10 @@ function Thread() {
   useStatusBar({
     mode: 'THREAD',
     path: anchor ? `~/${slug(anchor)}/threads/${resolvedId}` : `~/threads/${resolvedId}`,
-    facts: [`${totalPosts} ${totalPosts === 1 ? 'post' : 'posts'}`],
+    facts: [
+      `${totalPosts} ${totalPosts === 1 ? 'post' : 'posts'}`,
+      ...(thread?.deleted ? ['deleted'] : []),
+    ],
   })
 
   if (isLoading) {
@@ -50,6 +61,21 @@ function Thread() {
     )
   }
 
+  const title = thread.deleted ? '[deleted]' : thread.title
+  const isOwner = !!user && !thread.deleted && user.id === thread.user_id
+  const roomHref = thread.series
+    ? `/series/${thread.series.slug}`
+    : thread.genre
+      ? `/genres/${thread.genre.slug}`
+      : '/'
+
+  const confirmDelete = () =>
+    deleteThread.mutate(
+      { id: resolvedId, seriesSlug: thread.series?.slug, genreSlug: thread.genre?.slug },
+      // replace: Back must not land on the tombstone the reader just made.
+      { onSuccess: () => navigate(roomHref, { replace: true }) },
+    )
+
   const topLevelPosts = posts.filter((p) => !p.parent_id)
 
   const segments = []
@@ -62,7 +88,7 @@ function Thread() {
   }
   // The title, not the id: a path segment should say where you are, and a
   // truncated UUID says nothing.
-  segments.push({ label: thread.title })
+  segments.push({ label: title })
 
   return (
     <main className="max-w-shell mx-auto px-4 py-6 flex flex-col gap-6">
@@ -70,8 +96,10 @@ function Thread() {
 
       <header className="border-b border-line pb-4 flex flex-col gap-2">
         {/* Serif is reserved for BOOK titles. A thread is structure, so it is mono. */}
-        <h1 className="text-xl md:text-2xl text-ink leading-snug font-medium max-w-prose">
-          {thread.title}
+        <h1
+          className={`text-xl md:text-2xl leading-snug font-medium max-w-prose ${thread.deleted ? 'text-ink-dim' : 'text-ink'}`}
+        >
+          {title}
         </h1>
         <div className="flex items-center gap-3 text-xs">
           {thread.author && <span className="text-user">{thread.author}</span>}
@@ -83,7 +111,28 @@ function Thread() {
           <span className="text-ink-dim">
             {totalPosts} {totalPosts === 1 ? 'post' : 'posts'}
           </span>
+          {isOwner && (
+            <>
+              <span aria-hidden="true" className="text-ink-faint">·</span>
+              {confirming ? (
+                <ConfirmRemove
+                  noun="thread"
+                  pending={deleteThread.isPending}
+                  onCancel={() => setConfirming(false)}
+                  onConfirm={confirmDelete}
+                />
+              ) : (
+                <button
+                  onClick={() => setConfirming(true)}
+                  className="text-ink-dim hover:text-accent transition-colors duration-fast"
+                >
+                  delete thread
+                </button>
+              )}
+            </>
+          )}
         </div>
+        {deleteThread.isError && <p className="alert-danger">{errorMessage(deleteThread.error)}</p>}
       </header>
 
       <div className="flex flex-col divide-y divide-line">
@@ -96,8 +145,14 @@ function Thread() {
       </div>
 
       <div className="border-t border-line pt-5 flex flex-col gap-3">
-        <h2 className="text-xs uppercase tracking-eyebrow text-ink-dim">Add a reply</h2>
-        <PostComposer threadId={resolvedId} placeholder="Join the discussion..." />
+        {thread.deleted ? (
+          <p className="alert-muted">This thread was deleted and no longer accepts replies.</p>
+        ) : (
+          <>
+            <h2 className="text-xs uppercase tracking-eyebrow text-ink-dim">Add a reply</h2>
+            <PostComposer threadId={resolvedId} placeholder="Join the discussion..." />
+          </>
+        )}
       </div>
     </main>
   )
