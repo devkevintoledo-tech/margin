@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.models.post import Post
+from app.models.thread import Thread
 from app.models.user import User
 from app.models.vote import Vote
 from app.schemas.thread import PostCreate, PostOut, PostUpdate, VoteIn, post_out_from_orm
@@ -29,12 +30,25 @@ async def create_post(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> PostOut:
+    thread = await db.get(Thread, payload.thread_id)
+    if thread is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Thread not found")
+    if thread.deleted_at is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This thread was deleted and no longer accepts replies.",
+        )
     if payload.parent_id is not None:
         # Verify parent exists and is a top-level post (parent_id must be None)
         parent_result = await db.execute(select(Post).where(Post.id == payload.parent_id))
         parent = parent_result.scalar_one_or_none()
         if parent is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Parent post not found")
+        if parent.deleted_at is not None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="That post was deleted and can't be replied to.",
+            )
         if parent.parent_id is not None:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -96,9 +110,9 @@ async def vote_post(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> PostOut:
-    post = (await db.execute(select(Post).where(Post.id == id))).scalar_one_or_none()
-    if post is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Post not found")
+    post = await _post_or_404(db, id)
+    if post.deleted_at is not None:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Deleted posts can't be voted on.")
 
     await set_vote(db, user_id=current_user.id, post_id=id, value=payload.value)
     await db.refresh(post)

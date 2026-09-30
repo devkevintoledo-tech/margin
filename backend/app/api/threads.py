@@ -216,6 +216,8 @@ async def vote_thread(
     ).scalar_one_or_none()
     if thread is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Thread not found")
+    if thread.deleted_at is not None:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Deleted threads can't be voted on.")
 
     score = await set_vote(
         db, user_id=current_user.id, thread_id=id, value=payload.value

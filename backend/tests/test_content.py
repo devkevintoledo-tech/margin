@@ -294,3 +294,45 @@ async def test_anonymous_cannot_delete_a_thread(client, thread_id):
 
 async def test_delete_missing_thread_is_404(client, auth_headers):
     assert (await client.delete(f"/api/threads/{uuid.uuid4()}", headers=auth_headers)).status_code == 404
+
+
+# --- guards ------------------------------------------------------------------
+
+
+async def test_replying_to_a_deleted_post_is_409(client, auth_headers, other_headers, thread_id):
+    post = await _post(client, auth_headers, thread_id, "Soon gone.")
+    await client.delete(f"/api/posts/{post['id']}", headers=auth_headers)
+    resp = await client.post(
+        "/api/posts/",
+        json={"thread_id": thread_id, "content": "Too late.", "parent_id": post["id"]},
+        headers=other_headers,
+    )
+    assert resp.status_code == 409
+
+
+async def test_posting_in_a_deleted_thread_is_409(client, auth_headers, other_headers, thread_id):
+    await client.delete(f"/api/threads/{thread_id}", headers=auth_headers)
+    resp = await client.post(
+        "/api/posts/", json={"thread_id": thread_id, "content": "Hello?"}, headers=other_headers
+    )
+    assert resp.status_code == 409
+
+
+async def test_post_in_missing_thread_is_404(client, auth_headers):
+    resp = await client.post(
+        "/api/posts/", json={"thread_id": str(uuid.uuid4()), "content": "Anyone?"}, headers=auth_headers
+    )
+    assert resp.status_code == 404
+
+
+async def test_voting_on_a_deleted_post_is_409(client, auth_headers, other_headers, thread_id):
+    post = await _post(client, auth_headers, thread_id, "Soon gone.")
+    await client.delete(f"/api/posts/{post['id']}", headers=auth_headers)
+    resp = await client.put(f"/api/posts/{post['id']}/vote", json={"value": 1}, headers=other_headers)
+    assert resp.status_code == 409
+
+
+async def test_voting_on_a_deleted_thread_is_409(client, auth_headers, other_headers, thread_id):
+    await client.delete(f"/api/threads/{thread_id}", headers=auth_headers)
+    resp = await client.put(f"/api/threads/{thread_id}/vote", json={"value": 1}, headers=other_headers)
+    assert resp.status_code == 409
